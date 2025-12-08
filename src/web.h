@@ -993,6 +993,7 @@ function updateInputValue(id, value){
   const el = document.getElementById(id);
   if(!el || el.dataset.manual === '1') return;
   const text = String(value);
+  if(el.value !== text) el.value = text; //Динамическое обновление "Comment", "Start Time", "Enter Integer", "Enter Float"
   if(id==='LEDColor') refreshLedColorUI(text);
   else if(id==='ThemeColor') refreshThemeColorUI(text);
 }
