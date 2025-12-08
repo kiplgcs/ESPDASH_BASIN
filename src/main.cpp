@@ -35,7 +35,6 @@ void setup() {
   timeClient.begin();
 
   
-
   // ---------- Загрузка сохранённых значений ----------
   ThemeColor = loadValue<String>("ThemeColor","#1e1e1e");  // Цвет темы
   LEDColor = loadValue<String>("LEDColor","#00ff00");      // Цвет LED
@@ -52,11 +51,7 @@ void setup() {
 
   // ---------- Настройка графиков ----------
   loadGraph();
-  // registerGraphSource("Speed", [](){ return Speed; });          // Источник данных для графика скорости
-  // registerGraphSource("Temperatura", [](){ return Temperatura; }); // Источник данных для графика температуры
-  // registerGraphSource("SpeedTrend", [](){ return Speed; }, "Speed", 1000, 40);          // Источник данных для графика скорости
-  // registerGraphSource("FloatTrend", [](){ return Temperatura; }, "Temperatura", 1500, 30); // Источник данных для графика температуры
-  // registerGraphSource("FloatTrend1", [](){ return Temperatura; }, "Temperatura", 1500, 30); // Источник данных для дополнительного графика температуры
+
   dash.begin(); // Запуск дашборда
 
 }
@@ -95,20 +90,21 @@ void loop() {
 //   const char* modes[] = {"Normal","Eco","Turbo"};
 //   ModeSelect = String(modes[random(0,3)]);
 
-//   // ---------- Рандомный выбор дней недели ----------
-//   DaysSelect = ({ String out=""; String d[7]={"Mon","Tue","Wed","Thu","Fri","Sat","Sun"}; for(int i=0;i<7;i++) if(random(0,2)) out += (out==""?"":",") + d[i]; out == "" ? "Mon" : out; });
-//   // const char* weekDays[] = {"Mon","Tue","Wed","Thu","Fri","Sat","Sun"};
-//   // String selectedDays;
-//   // for(int i=0; i<7; i++){
-//   //   if(random(0,2)){
-//   //     if(selectedDays.length()) selectedDays += ",";
-//   //     selectedDays += weekDays[i];
-//   //   }
-//   // }
-//   // if(selectedDays.length() == 0){
-//   //   selectedDays = weekDays[random(0,7)]; // хотя бы один день
-//   // }
-//   // DaysSelect = selectedDays;
+  // ---------- Рандомный выбор дней недели ----------
+  DaysSelect = ({ String out=""; String d[7]={"Mon","Tue","Wed","Thu","Fri","Sat","Sun"}; 
+    for(int i=0;i<7;i++) if(random(0,2)) out += (out==""?"":",") + d[i]; out == "" ? "Mon" : out; });
+  // const char* weekDays[] = {"Mon","Tue","Wed","Thu","Fri","Sat","Sun"};
+  // String selectedDays;
+  // for(int i=0; i<7; i++){
+  //   if(random(0,2)){
+  //     if(selectedDays.length()) selectedDays += ",";
+  //     selectedDays += weekDays[i];
+  //   }
+  // }
+  // if(selectedDays.length() == 0){
+  //   selectedDays = weekDays[random(0,7)]; // хотя бы один день
+  // }
+  // DaysSelect = selectedDays;
 
 //   // ---------- Рандомные значения для элементов ----------
 //   IntInput = random(0,100);
@@ -134,13 +130,6 @@ void loop() {
 
 
   // ---------- Добавление точек в графики с интервалом ----------
-  // unsigned long now = millis();
-  // if(now - lastUpdate >= updateInterval){
-  //   lastUpdate = now;
-  //   addGraphPoint(CurrentTime, RandomVal); // Обновление графика RandomVal
-  //   for(auto &entry : graphValueProviders){
-  //     addSeriesPoint(entry.first, CurrentTime, entry.second()); // Обновление всех графиков
-  //   }
   addGraphPoint(CurrentTime, RandomVal); // Обновление графика RandomVal
   for(auto &entry : graphValueProviders){
     addSeriesPoint(entry.first, CurrentTime, entry.second()); // Обновление всех графиков
