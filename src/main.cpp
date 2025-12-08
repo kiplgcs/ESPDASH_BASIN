@@ -10,6 +10,7 @@
 #include "web.h"         // Функции работы Web-панели (ESP-DASH)
 #include "ui - JeeUI2.h"         // Построитель UI в стиле JeeUI2
 #include "interface - JeeUI2.h"  // Описание веб-интерфейса
+#include "settings_MQTT.h"       // Настройки и работа с MQTT
 
 
 
@@ -34,7 +35,12 @@ void setup() {
   // Запуск NTP-клиента
   timeClient.begin();
 
-  
+  // Загрузка и применение MQTT параметров
+  loadMqttSettings();
+  configureMqttServer();
+  connectMqtt();
+
+
   // ---------- Загрузка сохранённых значений ----------
   ThemeColor = loadValue<String>("ThemeColor","#1e1e1e");  // Цвет темы
   LEDColor = loadValue<String>("LEDColor","#00ff00");      // Цвет LED
@@ -134,6 +140,11 @@ void loop() {
   for(auto &entry : graphValueProviders){
     addSeriesPoint(entry.first, CurrentTime, entry.second()); // Обновление всех графиков
   }
+
+  // Обработка MQTT-клиента
+  handleMqttLoop();
+
+
 }
   
 
