@@ -1,0 +1,130 @@
+# ================================
+# ИНИЦИАЛИЗАЦИЯ НОВОГО ПРОЕКТА
+# ================================
+
+git init                 # создать локальный Git-репозиторий
+git add .                # добавить все файлы в отслеживание
+git commit -m "init"     # первый коммит (сохранение состояния)
+
+# ================================
+# ПРИВЯЗКА К GITHUB
+# ================================
+git remote add origin  https://github.com/kiplgcs/ESP-DASH_JeeUI/tree/cb657d9011f2ad32423c7ad6f0ee93c5684b52b9.git
+git remote add origin  https://github.com/kiplgcs/ESP-DASH_JeeUI/work.git
+git remote add origin https://github.com/USERNAME/REPO.git
+                        # связать локальный проект с удалённым репозиторием GitHub
+
+git remote -v           # проверить, к какому репозиторию подключён origin
+
+# ================================
+# ЕСЛИ НУЖНО УДАЛИТЬ НЕПРАВИЛЬНЫЙ ORIGIN
+# ================================
+
+git remote rm origin     # удалить старый/неверный origin (удалённый репозиторий)
+
+# ================================
+# ОТПРАВКА ПРОЕКТА НА GITHUB
+# ================================
+
+git push -u origin main  # отправить проект на GitHub впервые (создать main)
+git push                 # отправлять изменения в дальнейшем
+
+# ================================
+# ОСНОВНЫЕ КОМАНДЫ В РАБОТЕ
+# ================================
+
+git status               # показать текущее состояние (что изменено/готово к коммиту)
+git add .                # добавить все изменения
+git commit -m "msg"      # сохранить изменения с комментарием
+git push                 # отправить изменения в удалённый репозиторий
+git pull                 # получить последние изменения с GitHub
+
+# ================================
+# ИСТОРИЯ И ПРОСМОТР
+# ================================
+
+git log                  # показать историю коммитов
+git log --oneline        # краткая история
+git diff                 # показать изменения перед коммитом
+
+# ================================
+# РАБОТА С ВЕТКАМИ
+# ================================
+
+git checkout -b new_branch  # создать новую ветку и перейти в неё
+
+git checkout main        # переключиться обратно на основную ветку
+git checkout work    - переключиться обратно на основную ветку
+
+git branch               # показать список веток
+git branch work - создать новую ветку
+git push -u origin - work загрузить все файлы на GitHub В левом меню Git нажми на надпись "Publish Branch"
+
+# ================================
+# ПОЛЕЗНЫЕ КОМАНДЫ
+# ================================
+
+git clone URL            # клонировать чужой репозиторий
+git restore FILE         # отменить изменения в файле
+git reset HEAD FILE      # убрать файл из staged (после git add)
+git fetch                # получить свежие данные без слияния
+git merge BRANCH         # слить ветку с текущей
+
+# ================================
+# КОНЕЦ ШПАРГАЛКИ
+# ================================
+
+
+
+; Быстрая отправка проекта на GitHub через терминал VS Code
+
+; Открой терминал в VS Code (Ctrl+`) в папке проекта.
+
+; Выполни команды по порядку:
+
+; git init                         # инициализация Git (если ещё не делал)
+; git add .                         # добавить все файлы проекта
+; git commit -m "Initial commit"    # первый коммит
+; git remote add origin https://github.com/kiplgcs/ESP-DASH_JeeUI.git   # привязка к удалённому репозиторию
+; git branch -M main                # переименовать ветку в main (если нужно)
+; git push -u origin main           # отправка на GitHub
+
+git checkout main
+git checkout work - Перейди на ветку, которую хочешь обновить
+git push origin work - 	Локально → GitHub Отправить локальные изменения на GitHub	
+git pull origin work - GitHub → Локально Получить изменения с GitHub в проект		
+
+
+
+;https://github.com/kiplgcs/ESP-DASH_JeeUI 
+
+; git remote add origin https://github.com/kiplgcs/ESP-DASH_JeeUI.git
+; git branch -M main
+; git push -u origin main
+
+
+; https://github.com/kiplgcs/ESP-DASH_JeeUI
+
+; git push -u origin main - загрузить все файлы на GitHub
+
+; ✅ Всё! Теперь проект появится в твоём репозитории на GitHub.
+
+git commit -m "Написать что за изменения" - Сделать commit
+git push - Отправить изменения на GitHub (push)
+
+
+
+
+…or create a new repository on the command line
+echo "# ESPDASH_BASIN" >> README.md
+git init
+git add README.md
+git commit -m "first commit"
+git branch -M main
+git remote add origin https://github.com/kiplgcs/ESPDASH_BASIN.git
+git push -u origin main
+
+…or push an existing repository from the command line
+git remote add origin https://github.com/kiplgcs/ESPDASH_BASIN.git
+git branch -M main
+git push -u origin main
