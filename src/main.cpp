@@ -11,7 +11,7 @@
 #include "ui - JeeUI2.h"         // Построитель UI в стиле JeeUI2
 #include "interface - JeeUI2.h"  // Описание веб-интерфейса
 #include "settings_MQTT.h"       // Настройки и работа с MQTT
-
+#include "WebUpdate.h"    // OTA-обновление через AsyncOTA
 
 
 // ---------- NTP (синхронизация времени) ----------
@@ -40,6 +40,8 @@ void setup() {
   configureMqttServer();
   connectMqtt();
 
+  // Запуск OTA-обновлений на порту 8080
+  beginWebUpdate();
 
   // ---------- Загрузка сохранённых значений ----------
   ThemeColor = loadValue<String>("ThemeColor","#1e1e1e");  // Цвет темы
