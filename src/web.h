@@ -1057,15 +1057,11 @@ function toggleSidebar(){
       rebootBtn.disabled = true;
       rebootBtn.innerText = 'Перезагрузка...';
     }
-    fetch('/restart',{method:'POST'}).then(()=>{
-      setTimeout(()=>location.reload(), 4000);
-    }).catch(()=>{
-      if(rebootBtn){
-        rebootBtn.disabled = false;
-        rebootBtn.innerText = original || 'Перезагрузить ESP';
-      }
-      alert('Не удалось отправить команду перезагрузки');
-    });
+    fetch('/restart',{method:'POST'})
+      .catch(()=>{})
+      .finally(()=>{
+        setTimeout(()=>location.reload(), 4000);
+      });
   }
 
   const updateWifiStatus = (data)=>{
