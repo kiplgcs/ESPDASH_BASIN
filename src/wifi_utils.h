@@ -55,6 +55,7 @@ inline int loadButtonState(const char* key, int def = 0){
 }
 
 inline void setupWiFi(String &StoredAPSSID, String &StoredAPPASS, int &button1, int &button2){
+ // Приоритетно работаем в STA, точку доступа включаем только если подключение не удалось.
   WiFi.mode(WIFI_STA);
   prefs.begin("wifi", false);
   auto readStringWithDefault = [&](const char* key, const char* def)->String {
@@ -83,11 +84,17 @@ inline void setupWiFi(String &StoredAPSSID, String &StoredAPPASS, int &button1, 
     Serial.print(".");
     attempts++;
   }
-  if(WiFi.status() != WL_CONNECTED){
-    WiFi.softAP(StoredAPSSID.c_str(), StoredAPPASS.c_str());
-    Serial.println("AP mode started");
-  } else {
+
+  if(WiFi.status() == WL_CONNECTED){
+    // Убедимся, что режим AP выключен после успешного подключения к роутеру.
+    WiFi.softAPdisconnect(true);
+    WiFi.mode(WIFI_STA);
     Serial.print("Connected. IP: ");
     Serial.println(WiFi.localIP());
+  } else {
+    // Не удалось подключиться в STA — поднимем точку доступа для конфигурации.
+    WiFi.mode(WIFI_AP);
+    WiFi.softAP(StoredAPSSID.c_str(), StoredAPPASS.c_str());
+    Serial.println("AP mode started");
   }
 }

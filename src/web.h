@@ -1278,16 +1278,25 @@ function renderWifiScanList(networks){
   modal.onclick = (e)=>{ if(e.target === modal) closeWifiModal(); };
 }
 
+function showWifiScanPlaceholder(text){
+  const list = document.getElementById('wifi-scan-list');
+  const modal = document.getElementById('wifi-scan-modal');
+  if(!list || !modal) return;
+  list.innerHTML = `<div class="empty-row">${escapeHtml(text)}</div>`;
+  modal.classList.remove('hidden');
+}
+
 function scanWiFi(){
   const btn = document.getElementById('scan-btn');
   if(btn){ btn.disabled = true; btn.innerText = 'Scanning...'; }
-  fetch('/wifi/scan').then(r=>r.json()).then(data=>{
-    renderWifiScanList(data);
-  }).catch(()=>{
-    alert('Scan failed');
-  }).finally(()=>{
-    if(btn){ btn.disabled = false; btn.innerText = 'Scan WiFi'; }
-  });
+  showWifiScanPlaceholder('Идет сканирование...');
+  fetch('/wifi/scan')
+    .then(r=>r.json())
+    .then(data=>{ renderWifiScanList(Array.isArray(data) ? data : []); })
+    .catch(()=>{ renderWifiScanList([]); })
+    .finally(()=>{
+      if(btn){ btn.disabled = false; btn.innerText = 'Scan WiFi'; }
+    });
 }
 
 function saveWiFi(){
@@ -1683,7 +1692,36 @@ function setImg(x){
     });
 
     server.on("/wifi/scan", HTTP_GET, [](AsyncWebServerRequest *r){
-      int16_t n = WiFi.scanNetworks(/*async*/false, /*show_hidden*/false);
+      wifi_mode_t prevMode = WiFi.getMode();
+      bool staEnabled = (prevMode & WIFI_MODE_STA);
+      if(!staEnabled){
+        // Включаем STA временно для сканирования, если устройство было только в режиме AP
+        WiFi.mode((wifi_mode_t)(prevMode | WIFI_MODE_STA));
+        delay(50);
+      }
+
+      WiFi.scanDelete();
+      WiFi.scanComplete(); // очистим состояние предыдущих сканов
+      WiFi.scanNetworks(true /*async*/, false /*show_hidden*/);
+
+      unsigned long start = millis();
+      int16_t status = WIFI_SCAN_RUNNING;
+      while(status == WIFI_SCAN_RUNNING && (millis() - start) < 8000){
+        delay(50);
+        status = WiFi.scanComplete();
+      }
+
+      int16_t n = status;
+      if(n == WIFI_SCAN_RUNNING){
+        // Не дождались завершения, прервем и отдадим пустой список
+        WiFi.scanDelete();
+        n = 0;
+      } else if(n == WIFI_SCAN_FAILED || n < 0){
+        WiFi.scanDelete();
+        n = 0;
+      }
+
+
       String json = "[";
       for(int i=0;i<n;i++){
         String auth = "open";
@@ -1704,6 +1742,11 @@ function setImg(x){
       }
       json += "]";
       WiFi.scanDelete();
+
+      if(!staEnabled){
+        WiFi.mode(prevMode);
+      }
+
       r->send(200, "application/json", json);
     });
 
