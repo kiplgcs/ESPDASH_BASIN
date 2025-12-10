@@ -68,8 +68,11 @@ void setup() {
 
 /* ---------- Loop ---------- */
 void loop() {
+  wifiModuleLoop();
   // Обновление времени через NTP
-  timeClient.update();
+  if(wifiIsConnected()){
+    timeClient.update();
+  }
   CurrentTime = timeClient.getFormattedTime();  // Получение текущего времени
 
   // Генерация случайных значений для демонстрации
@@ -151,7 +154,6 @@ void loop() {
 
 }
   
-
 
 
 

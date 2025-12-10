@@ -36,19 +36,19 @@ inline int loadButtonState(const char *key, int def = 0) {
 }
 
 template <typename T> void saveValue(const char *key, T val);
-
+// Универсальная функция чтения значения из NVS с автоматической инициализацией
 template <typename T> T loadValue(const char *key, T def) {
   prefs.begin("MINIDASH", true);
   T val;
   if (prefs.isKey(key)) {
     if constexpr (std::is_same<T, float>::value)
-      val = prefs.getFloat(key, def);
+    val = prefs.getFloat(key, def);   // Сохраняем тип float
     else if constexpr (std::is_same<T, int>::value)
-      val = prefs.getInt(key, def);
+      val = prefs.getInt(key, def);     // Сохраняем тип int
     else if constexpr (std::is_same<T, String>::value)
       val = prefs.getString(key, def);
     else
-      val = def;
+      val = def;                        // Любой другой тип — возвращаем дефолт
     prefs.end();
     return val;
   }
@@ -57,7 +57,7 @@ template <typename T> T loadValue(const char *key, T def) {
   saveValue<T>(key, val);
   return val;
 }
-
+// Универсальная функция сохранения значения в NVS
 template <typename T> void saveValue(const char *key, T val) {
   prefs.begin("MINIDASH", false);
   if constexpr (std::is_same<T, float>::value)
@@ -70,18 +70,18 @@ template <typename T> void saveValue(const char *key, T val) {
 }
 
 namespace wifi_internal {
-inline String staSsid;
-inline String staPass;
-inline String apSsid;
-inline String apPass;
-inline String hostName;
-inline bool staAttemptInProgress = false;
-inline bool fallbackApActive = false;
-inline bool mdnsStarted = false;
-inline int attemptCount = 0;
-inline const int maxAttempts = 5;
-inline unsigned long lastAttemptStarted = 0;
-inline unsigned long lastStatusCheck = 0;
+inline String staSsid;    // SSID внешней сети
+inline String staPass;    // Пароль внешней сети
+inline String apSsid;     // Имя точки доступа устройства
+inline String apPass;     // Пароль точки доступа
+inline String hostName;   // Имя хоста для mDNS и DHCP
+inline bool staAttemptInProgress = false; // Флаг текущей попытки подключения к STA
+inline bool fallbackApActive = false;     // Флаг активного аварийного AP
+inline bool mdnsStarted = false;          // Указывает, что mDNS уже запущен
+inline int attemptCount = 0;              // Счетчик попыток подключения
+inline const int maxAttempts = 5;         // Максимум попыток перед переходом в AP
+inline unsigned long lastAttemptStarted = 0; // Когда стартовала текущая попытка
+inline unsigned long lastStatusCheck = 0;    // Когда последний раз проверяли статус
 inline unsigned long checkInterval = 1000;      // 1s until stable connection
 inline const unsigned long attemptInterval = 5000; // retry window while connecting
 
@@ -89,85 +89,85 @@ inline void beginMdns() {
   if (mdnsStarted)
     return;
   if (MDNS.begin(hostName.c_str())) {
-    MDNS.addService("http", "tcp", 80);
-    mdnsStarted = true;
+    MDNS.addService("http", "tcp", 80); // Регистрируем веб-сервис
+    mdnsStarted = true;                  // Больше не пытаемся запускать повторно
   }
 }
 
 inline void startHiddenApForSta() {
-  WiFi.softAP(apSsid.c_str(), apPass.c_str(), 1, true);
+  WiFi.softAP(apSsid.c_str(), apPass.c_str(), 1, true); // Поднимаем скрытый AP, чтобы устройство оставалось доступным
 }
 
 inline void startStaAttempt() {
-  WiFi.mode(WIFI_MODE_APSTA);
-  WiFi.setHostname(hostName.c_str());
-  startHiddenApForSta();
+  WiFi.mode(WIFI_MODE_APSTA);                 // Разрешаем одновременный STA и AP
+  WiFi.setHostname(hostName.c_str());         // Применяем имя хоста перед подключением
+  startHiddenApForSta();                      // Оставляем доступ через скрытый AP на время попытки
   WiFi.begin(staSsid.c_str(), staPass.c_str());
-  staAttemptInProgress = true;
-  lastAttemptStarted = millis();
-  attemptCount++;
+  staAttemptInProgress = true;                // Отмечаем, что попытка идет
+  lastAttemptStarted = millis();              // Запоминаем время старта
+  attemptCount++;                             // Увеличиваем счетчик попыток
 }
 
 inline void activateFallbackAp() {
   WiFi.disconnect(true);
   WiFi.mode(WIFI_AP);
-  WiFi.softAP(apSsid.c_str(), apPass.c_str());
-  fallbackApActive = true;
+  WiFi.softAP(apSsid.c_str(), apPass.c_str()); // Запускаем только AP, чтобы пользователь смог подключиться
+  fallbackApActive = true;                     // Запоминаем, что мы в аварийном режиме
   staAttemptInProgress = false;
   attemptCount = 0;
   checkInterval = 1000;
 }
 
 inline void onConnected() {
-  fallbackApActive = false;
+  fallbackApActive = false;    // AP больше не нужен
   staAttemptInProgress = false;
-  checkInterval = 120000; // 120 seconds
-  attemptCount = 0;
-  WiFi.mode(WIFI_STA);
-  beginMdns();
+  checkInterval = 120000;      // 120 seconds — замедляем проверки статуса при стабильной связи
+  attemptCount = 0;            // Сбрасываем счетчик
+  WiFi.mode(WIFI_STA);         // Оставляем только STA
+  beginMdns();                 // Стартуем mDNS для удобного доступа
 }
 
 inline String buildModeText() {
   wifi_mode_t mode = WiFi.getMode();
   switch (mode) {
   case WIFI_MODE_STA:
-    return "STA";
+    return "STA";    // Работаем только как клиент
   case WIFI_MODE_AP:
-    return "AP";
+    return "AP";     // Только точка доступа
   case WIFI_MODE_APSTA:
-    return "STA+AP";
+    return "STA+AP"; // Гибридный режим
   default:
-    return "Unknown";
+    return "Unknown"; // Непредвиденное состояние
   }
 }
 
 inline String buildStatusText() {
   if (WiFi.status() == WL_CONNECTED)
-    return "Connected";
+    return "Connected";          // Соединение установлено
   if (staAttemptInProgress && attemptCount <= maxAttempts)
-    return "Connecting";
+    return "Connecting";         // Идет попытка подключения
   if (fallbackApActive)
-    return "AP Only";
-  return "Disconnected";
+    return "AP Only";            // Мы в автономном AP режиме
+  return "Disconnected";         // Подключение отсутствует
 }
 
 inline void ensureConnection() {
   const unsigned long now = millis();
   if (now - lastStatusCheck < checkInterval)
-    return;
+    return; // Еще не время следующей проверки
   lastStatusCheck = now;
 
   wl_status_t status = WiFi.status();
   if (status == WL_CONNECTED) {
-    onConnected();
+    onConnected(); // Сбрасываем счетчики и отключаем AP
     return;
   }
 
   if (checkInterval != 1000)
-    checkInterval = 1000;
+    checkInterval = 1000; // Возвращаем быстрые проверки, если потеряли сеть
 
   if (fallbackApActive) {
-    return;
+    return; // Уже в режиме AP, дополнительных действий не требуется
   }
 
   if (staAttemptInProgress && (now - lastAttemptStarted) < attemptInterval) {
@@ -184,24 +184,24 @@ inline void ensureConnection() {
 
 inline void initWiFiModule() {
   using namespace wifi_internal;
-  staSsid = loadValue<String>("ssid", String(defaultSSID));
-  staPass = loadValue<String>("pass", String(defaultPASS));
-  apSsid = loadValue<String>("apSSID", String(::apSSID));
-  apPass = loadValue<String>("apPASS", String(::apPASS));
-  hostName = loadValue<String>("hostname", String(defaultHostname));
+  staSsid = loadValue<String>("ssid", String(defaultSSID));      // Читаем сохраненный SSID
+  staPass = loadValue<String>("pass", String(defaultPASS));      // Читаем пароль
+  apSsid = loadValue<String>("apSSID", String(::apSSID));        // Имя AP из NVS
+  apPass = loadValue<String>("apPASS", String(::apPASS));        // Пароль AP из NVS
+  hostName = loadValue<String>("hostname", String(defaultHostname)); // Имя хоста из NVS
 
-  WiFi.persistent(false);
-  WiFi.mode(WIFI_STA);
+  WiFi.persistent(false);        // Не сохраняем настройки Wi-Fi во флэш автоматически
+  WiFi.mode(WIFI_STA);           // Первичный режим — STA
   WiFi.setHostname(hostName.c_str());
-  startStaAttempt();
+  startStaAttempt();             // Запускаем первую попытку подключения
 }
 
 inline void wifiModuleLoop() { wifi_internal::ensureConnection(); }
 
 inline WifiStatusInfo getWifiStatus() {
   WifiStatusInfo info{};
-  info.modeText = wifi_internal::buildModeText();
-  info.statusText = wifi_internal::buildStatusText();
+  info.modeText = wifi_internal::buildModeText(); // STA / AP / STA+AP
+  info.statusText = wifi_internal::buildStatusText(); // Connected / Connecting / AP Only / Disconnected
   info.ssid = WiFi.SSID();
   info.ip = WiFi.localIP().toString();
   info.rssi = WiFi.isConnected() ? WiFi.RSSI() : 0;
@@ -209,16 +209,16 @@ inline WifiStatusInfo getWifiStatus() {
   return info;
 }
 
-inline String wifiHostName() { return wifi_internal::hostName; }
+inline String wifiHostName() { return wifi_internal::hostName; } // Текущее имя хоста
 
 inline String scanWifiNetworksJson() {
   wifi_mode_t prevMode = WiFi.getMode();
   bool apOnly = (prevMode == WIFI_MODE_AP);
   wifi_mode_t targetMode = prevMode;
   if (apOnly)
-    targetMode = WIFI_MODE_APSTA;
+    targetMode = WIFI_MODE_APSTA; // Для сканирования добавляем STA
   else if (prevMode == WIFI_MODE_NULL)
-    targetMode = WIFI_MODE_STA;
+    targetMode = WIFI_MODE_STA;   // Если Wi-Fi выключен — включаем STA
 
   if (targetMode != prevMode) {
     WiFi.mode(targetMode);
@@ -226,7 +226,7 @@ inline String scanWifiNetworksJson() {
   }
 
   WiFi.scanDelete();
-  int16_t n = WiFi.scanNetworks(false, true);
+  int16_t n = WiFi.scanNetworks(false, true); // Быстрое сканирование в текущем канале
   if (n < 0)
     n = 0;
 
@@ -270,31 +270,33 @@ inline String scanWifiNetworksJson() {
       json += ",";
   }
   json += "]";
-  WiFi.scanDelete();
+  WiFi.scanDelete(); // Очищаем результаты сканирования
 
   if (targetMode != prevMode) {
     WiFi.mode(prevMode);
   }
-  return json;
+  return json; // Готовый список сетей в JSON
 }
 
-inline bool saveWifiConfig(const String &ssid, const String &pass, const String &apSsidIn, const String &apPassIn) {
+inline bool saveWifiConfig(const String &ssid, const String &pass, const String &apSsidIn, const String &apPassIn, const String &hostNameIn) {
   using namespace wifi_internal;
-  staSsid = ssid.length() ? ssid : String(defaultSSID);
-  staPass = pass;
-  apSsid = apSsidIn.length() ? apSsidIn : String(::apSSID);
-  apPass = apPassIn;
+  staSsid = ssid.length() ? ssid : String(defaultSSID);        // Обновляем SSID
+  staPass = pass;                                               // Обновляем пароль
+  apSsid = apSsidIn.length() ? apSsidIn : String(::apSSID);     // Новое имя AP
+  apPass = apPassIn;                                            // Новый пароль AP
+  hostName = hostNameIn.length() ? hostNameIn : String(defaultHostname); // Новое имя хоста
 
   saveValue<String>("ssid", staSsid);
   saveValue<String>("pass", staPass);
   saveValue<String>("apSSID", apSsid);
   saveValue<String>("apPASS", apPass);
+  saveValue<String>("hostname", hostName);
 
   WiFi.disconnect(true);
   fallbackApActive = false;
   staAttemptInProgress = false;
-  attemptCount = 0;
-  checkInterval = 1000;
+  attemptCount = 0;                            // Сбрасываем счетчик — новые попытки возможны после изменения настроек
+  checkInterval = 1000;                        // Проверяем статус чаще, пока нет подключения
   startStaAttempt();
   return true;
 }

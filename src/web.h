@@ -778,6 +778,7 @@ else if(e.type=="range"){ // Этот блок создает HTML для диа
               "<input id='ssid' value='"+loadValue<String>("ssid",defaultSSID)+"'>"
               "<button class='btn-secondary' id='scan-btn' onclick='scanWiFi()'>Scan WiFi</button>"
               "</div></div>"
+              
               "<div class='wifi-field'><label>Password</label><input id='pass' type='password' value='"+loadValue<String>("pass",defaultPASS)+"'></div>"
               "</div>"
               "<h4 class='section-title'>AP Settings</h4>"
@@ -785,6 +786,9 @@ else if(e.type=="range"){ // Этот блок создает HTML для диа
               "<div class='wifi-field'><label>AP SSID</label><input id='ap_ssid' value='"+loadValue<String>("apSSID", String(apSSID))+"'></div>"
               "<div class='wifi-field'><label>AP Password</label><input id='ap_pass' type='password' value='"+loadValue<String>("apPASS", String(apPASS))+"'></div>"
               "</div>"
+              
+              "<div class='wifi-field'><label>Hostname</label><input id='hostname' value='"+loadValue<String>("hostname", String(defaultHostname))+"'></div>"
+
               "<div class='wifi-actions'><button class='btn-primary' onclick='saveWiFi()'>Save WiFi</button>"
               "<div class='wifi-hint'>Текущее состояние сети обновляется автоматически</div></div>"
               "<div class='card compact stats-card wifi-status-card'>"
@@ -1333,8 +1337,8 @@ function saveWiFi(){
  let p=document.getElementById('pass').value;
  let aps=document.getElementById('ap_ssid').value;
  let app=document.getElementById('ap_pass').value;
- 
- const body = new URLSearchParams({ssid:s, pass:p, ap_ssid:aps, ap_pass:app});
+ let h=document.getElementById('hostname').value;
+ const body = new URLSearchParams({ssid:s, pass:p, ap_ssid:aps, ap_pass:app, hostname:h});
  fetch('/wifi/save', {method:'POST', body})
    .then(r=>r.json())
    .then(data=>{
@@ -1740,10 +1744,11 @@ function setImg(x){
       String pass = paramOr("pass", loadValue<String>("pass", String(defaultPASS)));
       String apSsid = paramOr("ap_ssid", loadValue<String>("apSSID", String(::apSSID)));
       String apPass = paramOr("ap_pass", loadValue<String>("apPASS", String(::apPASS)));
+      String host = paramOr("hostname", loadValue<String>("hostname", String(defaultHostname)));
 
       StoredAPSSID = apSsid;
       StoredAPPASS = apPass;
-      saveWifiConfig(ssid, pass, apSsid, apPass);
+      saveWifiConfig(ssid, pass, apSsid, apPass, host);
       WifiStatusInfo wifiInfo = getWifiStatus();
 
       String response = "{\\\"saved\\\":1,\\\"connected\\\":" + String(wifiIsConnected() ? 1 : 0) + ",";
