@@ -327,10 +327,7 @@ private:
       ".mqtt-grid{display:flex;flex-direction:column;gap:12px;} "
       ".mqtt-field{display:flex;flex-direction:column;gap:6px;} "
       ".mqtt-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:8px;} "
-      ".mqtt-status{padding:10px 14px;border-radius:12px;background:linear-gradient(135deg,rgba(76,175,80,0.08),rgba(0,210,255,0.08));border:1px solid rgba(255,255,255,0.1);color:#dfe7ff;font-weight:700;letter-spacing:0.02em;min-width:220px;box-shadow:0 10px 20px rgba(0,0,0,0.35);} "
-      ".mqtt-status[data-state='on']{background:linear-gradient(135deg,rgba(76,175,80,0.25),rgba(0,210,255,0.22));border-color:rgba(76,175,80,0.45);color:#e8fff1;} "
-      ".mqtt-status[data-state='pending']{background:linear-gradient(135deg,rgba(255,193,7,0.14),rgba(255,255,255,0.06));color:#ffe082;border-color:rgba(255,193,7,0.45);} "
-      ".mqtt-status[data-state='off']{background:linear-gradient(135deg,rgba(244,67,54,0.1),rgba(255,255,255,0.04));color:#ffb4a9;border-color:rgba(244,67,54,0.35);} "
+
       ".btn-toggle-on{background:linear-gradient(135deg,#4caf50,#81c784);color:#0b0f14;} "
       ".btn-mqtt{position:relative;overflow:hidden;background:linear-gradient(135deg,#1f2a44,#263555);border:1px solid rgba(111,168,255,0.35);color:#e6edff;box-shadow:0 12px 24px rgba(0,0,0,0.4);} "
       ".btn-mqtt:before{content:'';position:absolute;inset:0;opacity:0;pointer-events:none;background:radial-gradient(circle at 20% 20%,rgba(255,255,255,0.28),transparent 45%);transition:opacity 0.18s ease;} "
@@ -339,8 +336,7 @@ private:
       ".btn-mqtt.btn-success{background:linear-gradient(135deg,#123420,#1d4b2a);border-color:rgba(76,175,80,0.55);color:#d5ffde;} "
       ".btn-mqtt.btn-activate-off{background:linear-gradient(135deg,#1b2b52,#23406f);border-color:rgba(64,139,255,0.55);color:#e5efff;} "
       ".btn-mqtt.btn-activate-on{background:linear-gradient(135deg,#0f3b1f,#13532a);border-color:rgba(76,175,80,0.6);color:#d8ffe4;} "
-      ".mqtt-status[data-state='error']{background:linear-gradient(135deg,rgba(244,67,54,0.22),rgba(255,255,255,0.06));border-color:rgba(244,67,54,0.6);color:#ffd7cf;} "
-      
+   
       "</style></head><body>";
 
       // Sidebar
@@ -838,9 +834,7 @@ else if(e.type=="range"){ // Этот блок создает HTML для диа
               "</div>"
               "<div class='mqtt-actions'>"
               "<button class='btn-primary btn-mqtt btn-success' id='mqtt-save-btn' onclick='saveMqttSettings()'>Сохранить настройки</button>"
-              "<button class='btn-secondary btn-mqtt btn-warn' id='mqtt-restart-btn' onclick='restartMqttClient()'>Рестарт MQTT</button>"
-              "<button class='btn-secondary btn-mqtt btn-activate-off' id='mqtt-activate-btn' data-enabled='0' onclick='toggleMqttActivation()'>Активировать MQTT</button>"
-              "<div id='mqtt-status' class='mqtt-status' data-state='pending'>Состояние MQTT обновляется...</div>"
+              "<button class='btn-secondary btn-mqtt btn-activate-off' id='mqtt-activate-btn' data-enabled='0' onclick='toggleMqttActivation()'>Включить MQTT</button>"
               "</div>"
               "</div></div>";
 
@@ -849,7 +843,9 @@ else if(e.type=="range"){ // Этот блок создает HTML для диа
       html += R"rawliteral(
   <script>
     let wifiStatusInterval = null;
+    let mqttStatusInterval = null;
     let mqttEnabledState = false;
+    let mqttConnectedState = false;
 
   // Показ выбранной страницы и скрытие остальных
   function showPage(id,btn){
@@ -867,12 +863,13 @@ else if(e.type=="range"){ // Этот блок создает HTML для диа
           restartCustomGraphInterval(canvas); // Запускаем интервал обновления
         }
       });
-   }
-   if(id === 'stats') startStatsUpdates();
-   else stopStatsUpdates();
-   if(id === 'wifi') startWifiStatusUpdates();
-   else stopWifiStatusUpdates();
-   if(id === 'mqtt') fetchMqttConfig();
+    }
+    if(id === 'stats') startStatsUpdates();
+    else stopStatsUpdates();
+    if(id === 'wifi') startWifiStatusUpdates();
+    else stopWifiStatusUpdates();
+    if(id === 'mqtt') startMqttStatusUpdates();
+    else stopMqttStatusUpdates();
   }
 
  // Скрыть/показать боковую панель
@@ -909,34 +906,16 @@ function toggleSidebar(){
     if(el) el.innerText = value;
   };
 
-  const setMqttStatusText = (connected, enabled, message='', errorCode=null)=>{
-    const statusEl = document.getElementById('mqtt-status');
-    if(!statusEl) return;
-    if(message){
-      statusEl.innerText = message;
-    }
-    const computedState = !enabled ? 'off' : (connected ? 'on' : (errorCode ? 'error' : 'pending'));
-    if(!message){
-      if(!enabled){
-        statusEl.innerText = 'MQTT отключено';
-      } else if(connected){
-        statusEl.innerText = 'Подключено к MQTT-брокеру';
-      } else if(errorCode){
-        statusEl.innerText = `Ошибка подключения (код ${errorCode})`;
-      } else {
-        statusEl.innerText = 'Подключение...';
-      }
-    }
-    statusEl.dataset.state = computedState;
-  };
 
-  const updateMqttActivationButton = (enabled)=>{
+    const updateMqttActivationButton = (enabled, connected)=>{
+
     const btn = document.getElementById('mqtt-activate-btn');
     if(!btn) return;
-    btn.dataset.enabled = enabled ? '1' : '0';
-    btn.classList.toggle('btn-activate-on', enabled);
-    btn.classList.toggle('btn-activate-off', !enabled);
-    btn.innerText = enabled ? 'Деактивировать MQTT' : 'Активировать MQTT';
+    const active = Boolean(enabled && connected);
+    btn.dataset.enabled = active ? '1' : '0';
+    btn.classList.toggle('btn-activate-on', active);
+    btn.classList.toggle('btn-activate-off', !active);
+    btn.innerText = active ? 'Отключить MQTT' : 'Включить MQTT';
   };
 
   function fetchMqttConfig(){
@@ -950,8 +929,12 @@ function toggleSidebar(){
       if(user) user.value = data.user || '';
       if(pass) pass.value = data.pass || '';
       mqttEnabledState = Boolean(data.enabled);
-      updateMqttActivationButton(mqttEnabledState);
-      setMqttStatusText(Boolean(data.connected), mqttEnabledState, data.status || '', data.error);
+      mqttConnectedState = Boolean(data.enabled && data.connected);
+      updateMqttActivationButton(mqttEnabledState, mqttConnectedState);
+    }).catch(()=>{
+      mqttConnectedState = false;
+      updateMqttActivationButton(false, false);
+      
     });
   }
 
@@ -959,7 +942,7 @@ function toggleSidebar(){
     const saveBtn = document.getElementById('mqtt-save-btn');
     const originalText = saveBtn ? saveBtn.innerText : '';
     if(saveBtn){ saveBtn.disabled = true; saveBtn.innerText = 'Сохранение...'; }
-    setMqttStatusText(false, mqttEnabledState, 'Сохранение настроек...');
+
     const payload = new URLSearchParams({
       host: (document.getElementById('mqtt-host') || {}).value || '',
       port: (document.getElementById('mqtt-port') || {}).value || '',
@@ -969,25 +952,16 @@ function toggleSidebar(){
     });
     fetch('/mqtt/save',{method:'POST', body:payload})
       .then(()=>setTimeout(fetchMqttConfig, 300))
-      .catch(()=>setMqttStatusText(false, false, 'Не удалось сохранить настройки'))
+
       .finally(()=>{ if(saveBtn){ saveBtn.disabled = false; saveBtn.innerText = originalText || 'Сохранить настройки'; } });
   }
 
-  function restartMqttClient(){
-    const restartBtn = document.getElementById('mqtt-restart-btn');
-    const original = restartBtn ? restartBtn.innerText : '';
-    if(restartBtn){ restartBtn.disabled = true; restartBtn.innerText = 'Перезапуск...'; }
-    setMqttStatusText(false, mqttEnabledState, 'Перезапуск MQTT...');
-    fetch('/mqtt/restart',{method:'POST'})
-      .then(()=>setTimeout(fetchMqttConfig, 500))
-      .catch(()=>setMqttStatusText(false, mqttEnabledState, 'Ошибка перезапуска'))
-      .finally(()=>{ if(restartBtn){ restartBtn.disabled = false; restartBtn.innerText = original || 'Рестарт MQTT'; } });
-  }
 
   function toggleMqttActivation(){
     const btn = document.getElementById('mqtt-activate-btn');
     const enable = !(btn && btn.dataset.enabled === '1');
     mqttEnabledState = enable;
+    mqttConnectedState = enable ? mqttConnectedState : false;
     const original = btn ? btn.innerText : '';
     if(btn){
       btn.disabled = true;
@@ -995,14 +969,23 @@ function toggleSidebar(){
       btn.classList.toggle('btn-activate-on', enable);
       btn.classList.toggle('btn-activate-off', !enable);
     }
-    setMqttStatusText(false, enable, enable ? 'Запуск MQTT...' : 'Остановка MQTT...');
     const payload = new URLSearchParams({enabled: enable ? '1' : '0'});
     fetch('/mqtt/activate',{method:'POST', body:payload})
       .then(()=>setTimeout(fetchMqttConfig, 400))
-      .catch(()=>setMqttStatusText(false, enable, 'Не удалось обновить состояние'))
-      .finally(()=>{ if(btn){ btn.disabled = false; btn.innerText = original || (enable ? 'Деактивировать MQTT' : 'Активировать MQTT'); } });
+      .finally(()=>{ if(btn){ btn.disabled = false; btn.innerText = original || (enable ? 'Отключить MQTT' : 'Включить MQTT'); } });
   }
 
+  function startMqttStatusUpdates(){
+    if(mqttStatusInterval) return;
+    fetchMqttConfig();
+    mqttStatusInterval = setInterval(fetchMqttConfig, 4000);
+  }
+
+  function stopMqttStatusUpdates(){
+    if(!mqttStatusInterval) return;
+    clearInterval(mqttStatusInterval);
+    mqttStatusInterval = null;
+  }
 
 
   function fetchStats(manual=false){
@@ -1580,9 +1563,7 @@ function setImg(x){
       json += "\\\"user\\\":\\\""+jsonEscape(mqttUsername)+"\\\",";
       json += "\\\"pass\\\":\\\""+jsonEscape(mqttPassword)+"\\\",";
       json += "\\\"enabled\\\":" + String(mqttEnabled ? 1 : 0) + ",";
-      json += "\\\"connected\\\":" + String(mqttClient.connected() ? 1 : 0) + ",";
-      json += "\\\"status\\\":\\\"" + jsonEscape(mqttStatusText()) + "\\\",";
-      json += "\\\"error\\\":" + String(mqttLastError) + "}";
+      json += "\\\"connected\\\":" + String((mqttEnabled && mqttClient.connected()) ? 1 : 0) + "}";
       r->send(200, "application/json", json);
     });
 
@@ -1599,17 +1580,12 @@ function setImg(x){
       mqttPassword = paramOr("pass", mqttPassword);
       mqttEnabled = paramOr("enabled", mqttEnabled ? "1" : "0").toInt() == 1;
 
-      configureMqttServer();
+     
       saveMqttSettings();
-      if(mqttEnabled) restartMqtt(); else mqttClient.disconnect();
-
+      applyMqttState();
       r->send(200, "application/json", "{\\\"status\\\":\\\"saved\\\"}");
     });
 
-    server.on("/mqtt/restart", HTTP_POST, [](AsyncWebServerRequest *r){
-      restartMqtt();
-      r->send(200, "application/json", "{\\\"status\\\":\\\"restarted\\\"}");
-    });
 
     server.on("/mqtt/activate", HTTP_POST, [](AsyncWebServerRequest *r){
       bool enabled = mqttEnabled;
@@ -1617,7 +1593,7 @@ function setImg(x){
       else if(r->hasParam("enabled")) enabled = r->getParam("enabled")->value().toInt() == 1;
       mqttEnabled = enabled;
       saveMqttSettings();
-      if(mqttEnabled) restartMqtt(); else mqttClient.disconnect();
+      applyMqttState();
       r->send(200, "application/json", "{\\\"status\\\":\\\"updated\\\"}");
     });
 

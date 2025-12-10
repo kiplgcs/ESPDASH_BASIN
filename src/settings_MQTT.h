@@ -20,7 +20,6 @@ inline String mqttPassword = "";
 inline bool mqttEnabled = false;
 inline unsigned long mqttPublishInterval = 10000;
 inline unsigned long mqttLastPublish = 0;
-inline int mqttLastError = 0;
 
 inline void persistMqttSettings(){
   if(!spiffsMounted) return;
@@ -83,27 +82,36 @@ inline void connectMqtt(){
     if(mqttUsername.length()) connected = mqttClient.connect(clientId.c_str(), mqttUsername.c_str(), mqttPassword.c_str());
     else connected = mqttClient.connect(clientId.c_str());
 
-    mqttLastError = mqttClient.state();
 
     if(connected){
       mqttClient.subscribe("home/esp32/tempSet", 0);
-      mqttLastError = 0;
     }
   }
 }
 
-inline void restartMqtt(){
+inline void stopMqttService(){
   mqttClient.disconnect();
-  configureMqttServer();
   mqttLastPublish = 0;
-  mqttLastError = 0;
-  connectMqtt();
 }
 
-inline void handleMqttLoop(){
-  if(!mqttEnabled) return;
+inline void applyMqttState(){
+  stopMqttService();
+  configureMqttServer();
+  if(mqttEnabled){
+    mqttLastPublish = 0;
+    connectMqtt();
+  }
+}
 
+
+inline void handleMqttLoop(){
   if(!mqttClient.connected()) connectMqtt();
+
+  if(!mqttEnabled){
+    if(mqttClient.connected()) stopMqttService();
+    return;
+  }
+
   mqttClient.loop();
 
   unsigned long now = millis();
@@ -114,14 +122,4 @@ inline void handleMqttLoop(){
       mqttClient.publish("home/esp32/status", 0, false, payload.c_str());
     }
   }
-}
-
-inline String mqttStatusText(){
-  if(!mqttEnabled) return "Отключено";
-  if(mqttClient.connected()) return "Подключено к MQTT-брокеру";
-  if(WiFi.status() != WL_CONNECTED) return "Ожидание Wi-Fi для подключения к брокеру";
-  if(mqttLastError != 0){
-    return "Ошибка подключения (код " + String(mqttLastError) + ")";
-  }
-  return "Подключение...";
 }

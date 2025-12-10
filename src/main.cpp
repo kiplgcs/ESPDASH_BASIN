@@ -36,9 +36,7 @@ void setup() {
   timeClient.begin();
 
   // Загрузка и применение MQTT параметров
-  loadMqttSettings();
-  configureMqttServer();
-  connectMqtt();
+  applyMqttState();
 
   // Запуск OTA-обновлений на порту 8080
   beginWebUpdate();
