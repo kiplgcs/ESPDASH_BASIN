@@ -215,13 +215,20 @@ inline String scanWifiNetworksJson() {
   wifi_mode_t prevMode = WiFi.getMode();
   bool apOnly = (prevMode == WIFI_MODE_AP);
   wifi_mode_t targetMode = prevMode;
-  if (apOnly)
+
+    bool staWasEnabled = WiFi.getMode() == WIFI_MODE_STA || WiFi.getMode() == WIFI_MODE_APSTA;
+  
+    if (apOnly)
     targetMode = WIFI_MODE_APSTA; // Для сканирования добавляем STA
   else if (prevMode == WIFI_MODE_NULL)
     targetMode = WIFI_MODE_STA;   // Если Wi-Fi выключен — включаем STA
 
   if (targetMode != prevMode) {
     WiFi.mode(targetMode);
+
+    if (apOnly) WiFi.enableSTA(true); // В режиме AP модуль STA был выключен, включаем для сканирования
+
+
     delay(50);
   }
 
@@ -273,6 +280,10 @@ inline String scanWifiNetworksJson() {
   WiFi.scanDelete(); // Очищаем результаты сканирования
 
   if (targetMode != prevMode) {
+
+    if (apOnly && !staWasEnabled)
+      WiFi.enableSTA(false); // Возвращаем исходное состояние STA
+
     WiFi.mode(prevMode);
   }
   return json; // Готовый список сетей в JSON
