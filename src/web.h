@@ -10,7 +10,7 @@
 #include <esp_efuse.h>
 #include "graph.h"               // Пользовательские графики (кастомные)
 #include "fs_utils.h"            // Вспомогательные функции для работы с файловой системой
-#include "wifi_utils.h"          // Вспомогательные функции для WiFi
+#include "wifi_manager.h"                // Логика Wi-Fi и хранение параметров
 #include "settings_MQTT.h"       // Настройки и работа с MQTT
 
 using std::vector;              // Используем vector без указания std:: каждый раз
@@ -789,6 +789,7 @@ else if(e.type=="range"){ // Этот блок создает HTML для диа
               "<div class='wifi-hint'>Текущее состояние сети обновляется автоматически</div></div>"
               "<div class='card compact stats-card wifi-status-card'>"
               "<div class='stat-group'><div class='stat-heading'>Сеть</div><ul class='stat-list'>"
+              "<li><span>Wi-Fi Status (текущее состояние)</span><strong id='wifi-status'>--</strong></li>"
               "<li><span>Wi-Fi Mode (текущий режим STA/AP)</span><strong id='wifi-mode'>--</strong></li>"
               "<li><span>SSID (имя Wi-Fi сети)</span><strong id='wifi-ssid'>--</strong></li>"
               "<li><span>Local IP (текущий IP-адрес)</span><strong id='wifi-ip'>--</strong></li>"
@@ -1044,6 +1045,7 @@ function toggleSidebar(){
   }
 
   const updateWifiStatus = (data)=>{
+    updateStat('wifi-status', data.wifiStatus || 'N/A');
     updateStat('wifi-mode', data.wifiMode || 'N/A');
     updateStat('wifi-ssid', data.ssid && data.ssid.length ? data.ssid : 'N/A');
     updateStat('wifi-ip', data.localIp && data.localIp.length ? data.localIp : 'N/A');
@@ -1304,11 +1306,16 @@ function saveWiFi(){
  let p=document.getElementById('pass').value;
  let aps=document.getElementById('ap_ssid').value;
  let app=document.getElementById('ap_pass').value;
- fetch('/save?key=ssid&val='+encodeURIComponent(s));
- fetch('/save?key=pass&val='+encodeURIComponent(p));
- fetch('/save?key=apSSID&val='+encodeURIComponent(aps));
- fetch('/save?key=apPASS&val='+encodeURIComponent(app));
- alert('WiFi saved! Reboot ESP.');
+ 
+ const body = new URLSearchParams({ssid:s, pass:p, ap_ssid:aps, ap_pass:app});
+ fetch('/wifi/save', {method:'POST', body})
+   .then(r=>r.json())
+   .then(data=>{
+     const connected = data && data.connected ? ' (подключено)' : ' (AP mode)';
+     alert('WiFi сохранен' + connected);
+     fetchStats(true);
+   })
+   .catch(()=>alert('Не удалось сохранить WiFi'));
 }
 
 // ====== ������� ��� ����� � live ======
@@ -1658,16 +1665,11 @@ function setImg(x){
       String vcc = String("N/A");
       String mac = WiFi.macAddress();
 
-      wifi_mode_t mode = WiFi.getMode();
-      String wifiMode = "Unknown";
-      if(mode == WIFI_MODE_STA) wifiMode = "STA";
-      else if(mode == WIFI_MODE_AP) wifiMode = "AP";
-      else if(mode == WIFI_MODE_APSTA) wifiMode = "STA+AP";
-
-      bool staActive = (mode == WIFI_MODE_STA || mode == WIFI_MODE_APSTA) && WiFi.isConnected();
-      String ssid = (staActive && WiFi.SSID().length()) ? WiFi.SSID() : String("N/A");
-      String localIp = staActive ? WiFi.localIP().toString() : String("N/A");
-      String rssi = staActive ? String(WiFi.RSSI()) : String("N/A");
+      WifiStatusInfo wifiInfo = getWifiStatus();
+      String wifiMode = wifiInfo.modeText;
+      String ssid = (wifiInfo.ssid.length()) ? wifiInfo.ssid : String("N/A");
+      String localIp = (wifiInfo.ip.length()) ? wifiInfo.ip : String("N/A");
+      String rssi = wifiInfo.rssi != 0 ? String(wifiInfo.rssi) : String("N/A");
       String freePsram = psramFound() ? String(ESP.getFreePsram()) : String("N/A");
 
       String json = "{";
@@ -1683,6 +1685,7 @@ function setImg(x){
       json += "\"spiffsFree\":"+String(freeSpace)+",";
       json += "\"spiffsTotal\":"+String(total)+",";
       json += "\"wifiMode\":\""+jsonEscape(wifiMode)+"\",";
+      json += "\"wifiStatus\":\""+jsonEscape(wifiInfo.statusText)+"\",";
       json += "\"ssid\":\""+jsonEscape(ssid)+"\",";
       json += "\"localIp\":\""+jsonEscape(localIp)+"\",";
       json += "\"rssi\":\""+jsonEscape(rssi)+"\"";
@@ -1692,62 +1695,33 @@ function setImg(x){
     });
 
     server.on("/wifi/scan", HTTP_GET, [](AsyncWebServerRequest *r){
-      wifi_mode_t prevMode = WiFi.getMode();
-      bool staEnabled = (prevMode & WIFI_MODE_STA);
-      if(!staEnabled){
-        // Включаем STA временно для сканирования, если устройство было только в режиме AP
-        WiFi.mode((wifi_mode_t)(prevMode | WIFI_MODE_STA));
-        delay(50);
-      }
+      r->send(200, "application/json", scanWifiNetworksJson());
+    });
 
-      WiFi.scanDelete();
-      WiFi.scanComplete(); // очистим состояние предыдущих сканов
-      WiFi.scanNetworks(true /*async*/, false /*show_hidden*/);
+    server.on("/wifi/save", HTTP_POST, [](AsyncWebServerRequest *r){
+      auto paramOr = [&](const char* name, const String &fallback)->String{
+        if(r->hasParam(name, true)) return r->getParam(name, true)->value();
+        if(r->hasParam(name)) return r->getParam(name)->value();
+        return fallback;
+      };
 
-      unsigned long start = millis();
-      int16_t status = WIFI_SCAN_RUNNING;
-      while(status == WIFI_SCAN_RUNNING && (millis() - start) < 8000){
-        delay(50);
-        status = WiFi.scanComplete();
-      }
+      String ssid = paramOr("ssid", loadValue<String>("ssid", String(defaultSSID)));
+      String pass = paramOr("pass", loadValue<String>("pass", String(defaultPASS)));
+      String apSsid = paramOr("ap_ssid", loadValue<String>("apSSID", String(::apSSID)));
+      String apPass = paramOr("ap_pass", loadValue<String>("apPASS", String(::apPASS)));
 
-      int16_t n = status;
-      if(n == WIFI_SCAN_RUNNING){
-        // Не дождались завершения, прервем и отдадим пустой список
-        WiFi.scanDelete();
-        n = 0;
-      } else if(n == WIFI_SCAN_FAILED || n < 0){
-        WiFi.scanDelete();
-        n = 0;
-      }
+      StoredAPSSID = apSsid;
+      StoredAPPASS = apPass;
+      saveWifiConfig(ssid, pass, apSsid, apPass);
+      WifiStatusInfo wifiInfo = getWifiStatus();
+
+      String response = "{\\\"saved\\\":1,\\\"connected\\\":" + String(wifiIsConnected() ? 1 : 0) + ",";
+      response += "\\\"status\\\":\\\"" + wifiInfo.statusText + "\\\",";
+      response += "\\\"ip\\\":\\\"" + (wifiIsConnected() ? WiFi.localIP().toString() : String("")) + "\\\"}";
+
+      r->send(200, "application/json", response);
 
 
-      String json = "[";
-      for(int i=0;i<n;i++){
-        String auth = "open";
-        wifi_auth_mode_t enc = WiFi.encryptionType(i);
-        switch(enc){
-          case WIFI_AUTH_WEP: auth = "WEP"; break;
-          case WIFI_AUTH_WPA_PSK: auth = "WPA"; break;
-          case WIFI_AUTH_WPA2_PSK: auth = "WPA2"; break;
-          case WIFI_AUTH_WPA_WPA2_PSK: auth = "WPA/WPA2"; break;
-          case WIFI_AUTH_WPA3_PSK: auth = "WPA3"; break;
-          case WIFI_AUTH_WPA2_WPA3_PSK: auth = "WPA2/WPA3"; break;
-          default: auth = "open"; break;
-        }
-        json += "{\"ssid\":\""+jsonEscape(WiFi.SSID(i))+"\",";
-        json += "\"rssi\":"+String(WiFi.RSSI(i))+",";
-        json += "\"auth\":\""+auth+"\"}";
-        if(i < n-1) json += ",";
-      }
-      json += "]";
-      WiFi.scanDelete();
-
-      if(!staEnabled){
-        WiFi.mode(prevMode);
-      }
-
-      r->send(200, "application/json", json);
     });
 
     server.on("/restart", HTTP_POST, [](AsyncWebServerRequest *r){

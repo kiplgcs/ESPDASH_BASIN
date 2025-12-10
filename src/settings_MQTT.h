@@ -6,7 +6,7 @@
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 
-#include "wifi_utils.h"
+#include "wifi_manager.h"
 #include "fs_utils.h"
 
 inline WiFiClient mqttWifiClient;

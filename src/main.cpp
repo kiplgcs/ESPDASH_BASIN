@@ -4,7 +4,7 @@
 #include <WiFiUdp.h>
 #include <NTPClient.h>
 
-#include "wifi_utils.h"  // Функции для подключения к Wi-Fi
+#include "wifi_manager.h"        // Логика Wi-Fi и сохранение параметров
 #include "fs_utils.h"    // Функции для работы с файловой системой SPIFFS
 #include "graph.h"       // Функции для графиков и визуализации
 #include "web.h"         // Функции работы Web-панели (ESP-DASH)
@@ -24,7 +24,11 @@ void setup() {
   Serial.begin(115200);
 
   // Подключение к Wi-Fi с использованием сохранённых данных и кнопок
-  setupWiFi(StoredAPSSID, StoredAPPASS, button1, button2);
+  StoredAPSSID = loadValue<String>("apSSID", String(apSSID));
+  StoredAPPASS = loadValue<String>("apPASS", String(apPASS));
+  button1 = loadButtonState("button1", 0);
+  button2 = loadButtonState("button2", 0);
+  initWiFiModule();
 
   // Инициализация файловой системы SPIFFS
   initFileSystem();
@@ -147,7 +151,6 @@ void loop() {
 
 }
   
-
 
 
 
