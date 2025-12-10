@@ -886,6 +886,26 @@ function toggleSidebar(){
     el.dataset.manual = '1';
   };
 
+  const wifiInputEdited = {ssid: false, pass: false};
+  const watchWifiInput = (id)=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.addEventListener('input', ()=>{ wifiInputEdited[id] = true; });
+    el.addEventListener('focus', ()=>{
+      wifiInputEdited[id] = true;
+      markManualChange(el);
+    });
+  };
+  const initializeWifiInputs = ()=>{
+    watchWifiInput('ssid');
+    watchWifiInput('pass');
+  };
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', initializeWifiInputs);
+  } else {
+    initializeWifiInputs();
+  }
+
   const formatBytes = (value)=>{
     const num = Number(value);
     if(isNaN(num)) return String(value || 'N/A');
@@ -1052,6 +1072,10 @@ function toggleSidebar(){
     const rssiVal = (typeof data.rssi !== 'undefined' && data.rssi !== null) ? data.rssi : 'N/A';
     const rssiText = isNaN(Number(rssiVal)) ? String(rssiVal) : `${rssiVal} dBm`;
     updateStat('wifi-rssi', rssiText);
+    if(!wifiInputEdited.ssid && data.ssid && data.ssid.length){
+      const ssidInput = document.getElementById('ssid');
+      if(ssidInput) ssidInput.value = data.ssid;
+    }
   };
 
   function fetchWifiStatus(){
@@ -1270,7 +1294,10 @@ function renderWifiScanList(networks){
       btn.innerHTML = `<div class='network-ssid'>${ssid}</div><div class='network-meta'>${rssi} · ${auth}</div>`;
       btn.addEventListener('click', ()=>{
         const ssidInput = document.getElementById('ssid');
-        if(ssidInput) ssidInput.value = net.ssid || '';
+        if(ssidInput){
+          ssidInput.value = net.ssid || '';
+          wifiInputEdited.ssid = true;
+        }
         closeWifiModal();
       });
       list.appendChild(btn);
@@ -1670,7 +1697,11 @@ function setImg(x){
       String ssid = (wifiInfo.ssid.length()) ? wifiInfo.ssid : String("N/A");
       String localIp = (wifiInfo.ip.length()) ? wifiInfo.ip : String("N/A");
       String rssi = wifiInfo.rssi != 0 ? String(wifiInfo.rssi) : String("N/A");
+#if defined(CONFIG_SPIRAM_SUPPORT) && CONFIG_SPIRAM_SUPPORT
       String freePsram = psramFound() ? String(ESP.getFreePsram()) : String("N/A");
+#else
+      String freePsram = String("N/A");
+#endif
 
       String json = "{";
       json += "\"chipModelRevision\":\""+jsonEscape(chipModelRevision)+"\",";

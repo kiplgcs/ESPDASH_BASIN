@@ -18,9 +18,9 @@ struct WifiStatusInfo {
 inline Preferences prefs;
 inline const char *defaultSSID = "OAB-GeelyM";
 inline const char *defaultPASS = "83913381";
-inline const char *apSSID = "ESP32_AP";
+inline const char *apSSID = "ESP32";
 inline const char *apPASS = "12345678";
-inline const char *defaultHostname = "espdash";
+inline const char *defaultHostname = "ESP32";
 
 inline void saveButtonState(const char *key, int val) {
   prefs.begin("buttons", false);
@@ -226,7 +226,6 @@ inline String scanWifiNetworksJson() {
   }
 
   WiFi.scanDelete();
-  WiFi.disconnect(false, true);
   int16_t n = WiFi.scanNetworks(false, true);
   if (n < 0)
     n = 0;
