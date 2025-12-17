@@ -4,10 +4,14 @@
 #include <Arduino.h>             // Основная библиотека Arduino для ESP32
 #include <AsyncTCP.h>            // Асинхронный TCP для ESP32 (не блокирующий)
 #include <ESPAsyncWebServer.h>   // Асинхронный веб-сервер для ESP32
+#include <esp_system.h>
 #include <vector>                // STL вектор для хранения элементов UI
+#include <esp_chip_info.h>
+#include <esp_efuse.h>
 #include "graph.h"               // Пользовательские графики (кастомные)
 #include "fs_utils.h"            // Вспомогательные функции для работы с файловой системой
-#include "wifi_utils.h"          // Вспомогательные функции для WiFi
+#include "wifi_manager.h"                // Логика Wi-Fi и хранение параметров
+#include "settings_MQTT.h"       // Настройки и работа с MQTT
 
 using std::vector;              // Используем vector без указания std:: каждый раз
 
@@ -43,6 +47,61 @@ inline bool dashInterfaceInitialized = false; // Флаг, что интерфе
 
 
 extern void interface();
+
+// Безопасное экранирование строк для JSON ответов
+String jsonEscape(const String &input){
+  String output;
+  output.reserve(input.length() + 8);
+  for(size_t i = 0; i < input.length(); i++){
+    char c = input.charAt(i);
+    switch(c){
+      case '\\': output += "\\\\"; break;
+      case '\"': output += "\\\""; break;
+      case '\b': output += "\\b"; break;
+      case '\f': output += "\\f"; break;
+      case '\n': output += "\\n"; break;
+      case '\r': output += "\\r"; break;
+      case '\t': output += "\\t"; break;
+      default:
+        if(static_cast<uint8_t>(c) < 0x20){
+          char buf[7];
+          snprintf(buf, sizeof(buf), "\\u%04x", static_cast<uint8_t>(c));
+          output += buf;
+        } else {
+          output += c;
+        }
+    }
+  }
+  return output;
+}
+
+String chipSeriesName(const esp_chip_info_t &info){
+  switch(info.model){
+    case CHIP_ESP32: return "ESP32";
+    case CHIP_ESP32S2: return "ESP32-S2";
+    case CHIP_ESP32S3: return "ESP32-S3";
+    case CHIP_ESP32C3: return "ESP32-C3";
+#ifdef CHIP_ESP32C2
+    case CHIP_ESP32C2: return "ESP32-C2";
+#endif
+#ifdef CHIP_ESP32C6
+    case CHIP_ESP32C6: return "ESP32-C6";
+#endif
+    case CHIP_ESP32H2: return "ESP32-H2";
+    default: return "ESP32";
+  }
+}
+
+String buildChipIdentity(){
+  esp_chip_info_t info;
+  esp_chip_info(&info);
+
+  const String series = chipSeriesName(info);
+  char buffer[96];
+  snprintf(buffer, sizeof(buffer), "%s rev %d", series.c_str(), info.revision);
+  return String(buffer);
+}
+
 
 // ---------- Структуры UI ----------
 struct Tab { String id; String title; };
@@ -229,6 +288,55 @@ private:
       ".card:has(#DaysSelect) .select-days label{border:1px solid rgba(255,255,255,0.08);"
       "padding:5px 10px;border-radius:9px;background:rgba(255,255,255,0.02);transition:background 0.2s ease,color 0.2s ease;}"
       ".card:has(#DaysSelect) .select-days input[type=checkbox]{accent-color:#4CAF50;}"
+      
+      ".stats-card{display:flex;flex-direction:column;gap:14px;} "
+      ".stat-group{display:flex;flex-direction:column;gap:8px;} "
+      ".stat-heading{font-size:0.82em;color:#9fb4c8;letter-spacing:0.05em;text-transform:uppercase;padding-left:2px;} "
+      ".stat-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:8px;} "
+      ".stat-list li{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);} "
+      ".stat-list span{color:#9fb4c8;font-size:0.9em;} "
+      ".stat-list strong{color:#fff;font-family:'JetBrains Mono','SFMono-Regular',monospace;font-size:0.95em;} "
+      ".btn-primary{display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border-radius:12px;border:1px solid rgba(255,255,255,0.12);background:linear-gradient(135deg,#3a7bd5,#00d2ff);color:#fff;font-weight:700;letter-spacing:0.03em;text-transform:uppercase;box-shadow:0 12px 26px rgba(0,0,0,0.35),0 0 0 1px rgba(255,255,255,0.08);cursor:pointer;transition:transform 0.12s ease,box-shadow 0.12s ease;} "
+      ".btn-primary:hover{transform:translateY(-1px);box-shadow:0 16px 30px rgba(0,0,0,0.45);} "
+      ".btn-secondary{padding:8px 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.05);color:#e2e6f0;font-weight:600;cursor:pointer;transition:background 0.15s ease,transform 0.12s ease;} "
+      ".btn-secondary:hover{background:rgba(255,255,255,0.1);transform:translateY(-1px);} "
+      ".btn-secondary:disabled{opacity:0.6;cursor:progress;} "
+      ".btn-danger{padding:8px 14px;border-radius:10px;border:1px solid rgba(255,87,87,0.25);background:linear-gradient(135deg,#ff5f6d,#ffc371);color:#0c0f16;font-weight:700;cursor:pointer;box-shadow:0 8px 18px rgba(255,95,109,0.35);transition:transform 0.12s ease,box-shadow 0.12s ease;} "
+      ".btn-danger:hover{transform:translateY(-1px);box-shadow:0 12px 26px rgba(255,95,109,0.45);} "
+      ".btn-danger:disabled{opacity:0.65;cursor:progress;} "
+      ".stats-actions{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;} "
+      ".wifi-card{display:flex;flex-direction:column;gap:10px;} "
+      ".wifi-field label{margin-bottom:6px;font-size:0.85em;color:#9fb4c8;text-transform:uppercase;letter-spacing:0.06em;} "
+      ".input-with-action{display:flex;gap:8px;align-items:center;} "
+      ".wifi-actions{display:flex;align-items:center;gap:14px;margin-top:10px;flex-wrap:wrap;} "
+      ".wifi-hint{color:#9fb4c8;font-size:0.9em;} "
+      ".wifi-status-card .stat-list li{background:rgba(0,0,0,0.3);} "
+      ".section-title{margin-top:10px;margin-bottom:6px;font-size:1em;color:#cfd7e0;} "
+      ".wifi-modal{position:fixed;inset:0;background:rgba(0,0,0,0.55);display:flex;align-items:flex-start;justify-content:center;padding-top:60px;z-index:1200;} "
+      ".wifi-modal.hidden{display:none;} "
+      ".wifi-modal-content{width:min(480px,90vw);background:#1a1c22;border:1px solid rgba(255,255,255,0.08);border-radius:14px;box-shadow:0 18px 40px rgba(0,0,0,0.65);overflow:hidden;} "
+      ".wifi-modal-header{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid rgba(255,255,255,0.06);} "
+      ".wifi-scan-list{max-height:320px;overflow:auto;display:flex;flex-direction:column;} "
+      ".network-row{display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:12px 14px;background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,0.05);color:#e9ecf4;text-align:left;cursor:pointer;transition:background 0.12s ease;} "
+      ".network-row:hover{background:rgba(255,255,255,0.04);} "
+      ".network-ssid{font-weight:700;} "
+      ".network-meta{color:#9fb4c8;font-size:0.9em;} "
+      ".empty-row{padding:16px;color:#9fb4c8;text-align:center;} "
+      ".icon-btn{background:none;border:none;color:#fff;font-size:1.4em;cursor:pointer;line-height:1;} "
+
+      ".mqtt-grid{display:flex;flex-direction:column;gap:12px;} "
+      ".mqtt-field{display:flex;flex-direction:column;gap:6px;} "
+      ".mqtt-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:8px;} "
+
+      ".btn-toggle-on{background:linear-gradient(135deg,#4caf50,#81c784);color:#0b0f14;} "
+      ".btn-mqtt{position:relative;overflow:hidden;background:linear-gradient(135deg,#1f2a44,#263555);border:1px solid rgba(111,168,255,0.35);color:#e6edff;box-shadow:0 12px 24px rgba(0,0,0,0.4);} "
+      ".btn-mqtt:before{content:'';position:absolute;inset:0;opacity:0;pointer-events:none;background:radial-gradient(circle at 20% 20%,rgba(255,255,255,0.28),transparent 45%);transition:opacity 0.18s ease;} "
+      ".btn-mqtt:hover:before{opacity:1;} "
+      ".btn-mqtt.btn-warn{background:linear-gradient(135deg,#2d1e12,#3c2a18);border-color:rgba(255,193,7,0.45);color:#ffe9b3;} "
+      ".btn-mqtt.btn-success{background:linear-gradient(135deg,#123420,#1d4b2a);border-color:rgba(76,175,80,0.55);color:#d5ffde;} "
+      ".btn-mqtt.btn-activate-off{background:linear-gradient(135deg,#1b2b52,#23406f);border-color:rgba(64,139,255,0.55);color:#e5efff;} "
+      ".btn-mqtt.btn-activate-on{background:linear-gradient(135deg,#0f3b1f,#13532a);border-color:rgba(76,175,80,0.6);color:#d8ffe4;} "
+   
       "</style></head><body>";
 
       // Sidebar
@@ -242,6 +350,8 @@ private:
       html += "<hr><div class='card'><label>Theme color</label>"
               "<input id='ThemeColor' type='color' value='"+ThemeColor+"'></div>";
       html += "<button onclick=\"showPage('wifi',this)\">WiFi Settings</button>";
+      html += "<button onclick=\"showPage('stats',this)\">Statistics</button>";
+      html += "<button onclick=\"showPage('mqtt',this)\">Настройка MQTT</button>";
       html += "</div>";
 
       html += "<button id='toggleBtn' onclick='toggleSidebar()'>?</button>";
@@ -663,44 +773,326 @@ else if(e.type=="range"){ // Этот блок создает HTML для диа
 
       // ====== WiFi страница ======
       html += "<div id='wifi' class='page'><h3>WiFi Settings</h3>"
-              "<div class='card compact'><label>SSID</label><input id='ssid' value='"+loadValue<String>("ssid",defaultSSID)+"'></div>"
-              "<div class='card compact'><label>Password</label><input id='pass' type='password' value='"+loadValue<String>("pass",defaultPASS)+"'></div>"
-              "<h4 style='margin-top:10px;margin-bottom:6px;font-size:1em;'>AP Settings</h4>"
-              "<div class='card compact'><label>AP SSID</label><input id='ap_ssid' value='"+loadValue<String>("apSSID", String(apSSID))+"'></div>"
-              "<div class='card compact'><label>AP Password</label><input id='ap_pass' type='password' value='"+loadValue<String>("apPASS", String(apPASS))+"'></div>"
-              "<button onclick='saveWiFi()'>Save WiFi</button></div>";
+              "<div class='card compact wifi-card'>"
+              "<div class='wifi-field'><label>SSID</label><div class='input-with-action'>"
+              "<input id='ssid' value='"+loadValue<String>("ssid",defaultSSID)+"'>"
+              "<button class='btn-secondary' id='scan-btn' onclick='scanWiFi()'>Scan WiFi</button>"
+              "</div></div>"
+              
+              "<div class='wifi-field'><label>Password</label><input id='pass' type='password' value='"+loadValue<String>("pass",defaultPASS)+"'></div>"
+              "</div>"
+              "<h4 class='section-title'>AP Settings</h4>"
+              "<div class='card compact wifi-card'>"
+              "<div class='wifi-field'><label>AP SSID</label><input id='ap_ssid' value='"+loadValue<String>("apSSID", String(apSSID))+"'></div>"
+              "<div class='wifi-field'><label>AP Password</label><input id='ap_pass' type='password' value='"+loadValue<String>("apPASS", String(apPASS))+"'></div>"
+              "</div>"
+              
+              "<div class='wifi-field'><label>Hostname</label><input id='hostname' value='"+loadValue<String>("hostname", String(defaultHostname))+"'></div>"
+
+              "<div class='wifi-actions'><button class='btn-primary' onclick='saveWiFi()'>Save WiFi</button>"
+              "<div class='wifi-hint'>Текущее состояние сети обновляется автоматически</div></div>"
+              "<div class='card compact stats-card wifi-status-card'>"
+              "<div class='stat-group'><div class='stat-heading'>Сеть</div><ul class='stat-list'>"
+              "<li><span>Wi-Fi Status (текущее состояние)</span><strong id='wifi-status'>--</strong></li>"
+              "<li><span>Wi-Fi Mode (текущий режим STA/AP)</span><strong id='wifi-mode'>--</strong></li>"
+              "<li><span>SSID (имя Wi-Fi сети)</span><strong id='wifi-ssid'>--</strong></li>"
+              "<li><span>Local IP (текущий IP-адрес)</span><strong id='wifi-ip'>--</strong></li>"
+              "<li><span>Signal Strength (RSSI) (уровень сигнала Wi-Fi)</span><strong id='wifi-rssi'>--</strong></li>"
+              "</ul></div></div>"
+              "<div id='wifi-scan-modal' class='wifi-modal hidden'>"
+              "<div class='wifi-modal-content'>"
+              "<div class='wifi-modal-header'><h4>Доступные сети</h4><button class='icon-btn' onclick='closeWifiModal()'>&times;</button></div>"
+              "<div id='wifi-scan-list' class='wifi-scan-list'></div>"
+              "</div></div>"
+              "</div>";
+
+      // ====== Statistics страница ======
+      html += "<div id='stats' class='page'><h3>Statistics</h3>"
+              "<div class='stats-actions'>"
+              "<button class='btn-secondary' id='refresh-stats-btn' onclick='fetchStats(true)'>Обновить информацию</button>"
+              "<button class='btn-danger' id='reboot-btn' onclick='rebootEsp()'>Перезагрузить ESP</button>"
+              "</div>"
+              "<div class='card compact stats-card'>"
+              "<div class='stat-group'><div class='stat-heading'>Система</div><ul class='stat-list'>"
+              "<li><span>Chip Model / Revision (модель и ревизия чипа)</span><strong id='stat-chip'>--</strong></li>"
+              "<li><span>CPU Frequency (MHz) (текущая частота процессора)</span><strong id='stat-cpu'>--</strong></li>"
+              "<li><span>Temperature (температура чипа)</span><strong id='stat-temp'>--</strong></li>"
+              "<li><span>Vcc (напряжение питания)</span><strong id='stat-vcc'>--</strong></li>"
+              "<li><span>Uptime (время непрерывной работы устройства)</span><strong id='stat-uptime'>--</strong></li>"
+              "<li><span>MAC Address (уникальный адрес)</span><strong id='stat-mac'>--</strong></li>"
+              "</ul></div>"
+              "<div class='stat-group'><div class='stat-heading'>Память и хранилище</div><ul class='stat-list'>"
+              "<li><span>Free Heap (свободная оперативная память)</span><strong id='stat-heap'>--</strong></li>"
+              "<li><span>Free PSRAM (свободный объём PSRAM)</span><strong id='stat-psram'>--</strong></li>"
+              "<li><span>SPIFFS Used / Free (использовано / свободно в SPIFFS)</span><strong id='stat-spiffs'>--</strong></li>"
+              "</ul></div>"
+              "</div></div>";
+
+      // ====== MQTT страница ======
+      html += "<div id='mqtt' class='page'><h3>Настройка MQTT</h3>"
+              "<div class='card compact'>"
+              "<div class='mqtt-grid'>"
+              "<div class='mqtt-field'><label>MQTT Host</label><input id='mqtt-host' value='"+mqttHost+"'></div>"
+              "<div class='mqtt-field'><label>MQTT Port</label><input id='mqtt-port' type='number' value='"+String(mqttPort)+"'></div>"
+              "<div class='mqtt-field'><label>MQTT Username</label><input id='mqtt-user' value='"+mqttUsername+"'></div>"
+              "<div class='mqtt-field'><label>MQTT Password</label><input id='mqtt-pass' type='password' value='"+mqttPassword+"'></div>"
+              "</div>"
+              "<div class='mqtt-actions'>"
+              "<button class='btn-primary btn-mqtt btn-success' id='mqtt-save-btn' onclick='saveMqttSettings()'>Сохранить настройки</button>"
+              "<button class='btn-secondary btn-mqtt btn-activate-off' id='mqtt-activate-btn' data-enabled='0' onclick='toggleMqttActivation()'>Включить MQTT</button>"
+              "</div>"
+              "</div></div>";
+
 
       // ====== Основной скрипт страницы ======
       html += R"rawliteral(
-<script>
-// Показ выбранной страницы и скрытие остальных
-function showPage(id,btn){
-  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-  document.getElementById(id).classList.add('active'); // Отображаем выбранную страницу
-  document.querySelectorAll('#sidebar button').forEach(b=>b.classList.remove('active'));
-  if(btn) btn.classList.add('active'); // Активируем кнопку меню
-  if(id.startsWith('tab')){
-    resizeCustomGraphs(); // Подгоняем размеры графиков под контейнер
-    customGraphCanvases.forEach(canvas=>{
-      const page = canvas.closest('.page');
-      if(page && page.id===id){
-        fetchCustomGraph(canvas); // Загружаем данные для графика
-        restartCustomGraphInterval(canvas); // Запускаем интервал обновления
-      }
-    });
- }
-}
+  <script>
+    let wifiStatusInterval = null;
+    let mqttStatusInterval = null;
+    let mqttEnabledState = false;
+    let mqttConnectedState = false;
+
+  // Показ выбранной страницы и скрытие остальных
+  function showPage(id,btn){
+    document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+    document.getElementById(id).classList.add('active'); // Отображаем выбранную страницу
+    document.querySelectorAll('#sidebar button').forEach(b=>b.classList.remove('active'));
+    if(btn) btn.classList.add('active'); // Активируем кнопку меню
+
+      if(id.startsWith('tab')){
+      resizeCustomGraphs(); // Подгоняем размеры графиков под контейнер
+      customGraphCanvases.forEach(canvas=>{
+        const page = canvas.closest('.page');
+        if(page && page.id===id){
+          fetchCustomGraph(canvas); // Загружаем данные для графика
+          restartCustomGraphInterval(canvas); // Запускаем интервал обновления
+        }
+      });
+    }
+    if(id === 'stats') startStatsUpdates();
+    else stopStatsUpdates();
+    if(id === 'wifi') startWifiStatusUpdates();
+    else stopWifiStatusUpdates();
+    if(id === 'mqtt') startMqttStatusUpdates();
+    else stopMqttStatusUpdates();
+  }
+
  // Скрыть/показать боковую панель
 function toggleSidebar(){
  let sb=document.getElementById('sidebar');
  sb.classList.toggle('collapsed');
  document.body.classList.toggle('sidebar-hidden', sb.classList.contains('collapsed'));
 }
+
 // Отметить, что пользователь изменил элемент вручную
-const markManualChange = el=>{
-  if(!el) return;
-  el.dataset.manual = '1';
-};
+  const markManualChange = el=>{
+    if(!el) return;
+    el.dataset.manual = '1';
+  };
+
+  const wifiInputEdited = {ssid: false, pass: false};
+  const watchWifiInput = (id)=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.addEventListener('input', ()=>{ wifiInputEdited[id] = true; });
+    el.addEventListener('focus', ()=>{
+      wifiInputEdited[id] = true;
+      markManualChange(el);
+    });
+  };
+  const initializeWifiInputs = ()=>{
+    watchWifiInput('ssid');
+    watchWifiInput('pass');
+  };
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', initializeWifiInputs);
+  } else {
+    initializeWifiInputs();
+  }
+
+  const formatBytes = (value)=>{
+    const num = Number(value);
+    if(isNaN(num)) return String(value || 'N/A');
+    const units = ['B','KB','MB','GB'];
+    let idx = 0; let val = num;
+    while(val >= 1024 && idx < units.length-1){ val /= 1024; idx++; }
+    const decimals = val >= 10 ? 1 : 2;
+    return `${val.toFixed(decimals)} ${units[idx]}`;
+  };
+
+  const renderSpiffs = (used, free, total)=>{
+    if(typeof used === 'undefined' || typeof free === 'undefined') return '--';
+    const percent = total ? ((Number(used)/Number(total))*100).toFixed(1) : '0.0';
+    return `${formatBytes(used)} used / ${formatBytes(free)} free (${percent}%)`;
+  };
+
+  const updateStat = (id, value)=>{
+    const el = document.getElementById(id);
+    if(el) el.innerText = value;
+  };
+
+
+    const updateMqttActivationButton = (enabled, connected)=>{
+
+    const btn = document.getElementById('mqtt-activate-btn');
+    if(!btn) return;
+    const active = Boolean(enabled && connected);
+    btn.dataset.enabled = active ? '1' : '0';
+    btn.classList.toggle('btn-activate-on', active);
+    btn.classList.toggle('btn-activate-off', !active);
+    btn.innerText = active ? 'Отключить MQTT' : 'Включить MQTT';
+  };
+
+  function fetchMqttConfig(){
+    fetch('/mqtt/config').then(r=>r.json()).then(data=>{
+      const host = document.getElementById('mqtt-host');
+      const port = document.getElementById('mqtt-port');
+      const user = document.getElementById('mqtt-user');
+      const pass = document.getElementById('mqtt-pass');
+      if(host) host.value = data.host || '';
+      if(port) port.value = data.port || '';
+      if(user) user.value = data.user || '';
+      if(pass) pass.value = data.pass || '';
+      mqttEnabledState = Boolean(data.enabled);
+      mqttConnectedState = Boolean(data.enabled && data.connected);
+      updateMqttActivationButton(mqttEnabledState, mqttConnectedState);
+    }).catch(()=>{
+      mqttConnectedState = false;
+      updateMqttActivationButton(false, false);
+      
+    });
+  }
+
+  function saveMqttSettings(){
+    const saveBtn = document.getElementById('mqtt-save-btn');
+    const originalText = saveBtn ? saveBtn.innerText : '';
+    if(saveBtn){ saveBtn.disabled = true; saveBtn.innerText = 'Сохранение...'; }
+
+    const payload = new URLSearchParams({
+      host: (document.getElementById('mqtt-host') || {}).value || '',
+      port: (document.getElementById('mqtt-port') || {}).value || '',
+      user: (document.getElementById('mqtt-user') || {}).value || '',
+      pass: (document.getElementById('mqtt-pass') || {}).value || '',
+      enabled: (document.getElementById('mqtt-activate-btn') || {dataset:{enabled:'0'}}).dataset.enabled === '1' ? '1' : '0'
+    });
+    fetch('/mqtt/save',{method:'POST', body:payload})
+      .then(()=>setTimeout(fetchMqttConfig, 300))
+
+      .finally(()=>{ if(saveBtn){ saveBtn.disabled = false; saveBtn.innerText = originalText || 'Сохранить настройки'; } });
+  }
+
+
+  function toggleMqttActivation(){
+    const btn = document.getElementById('mqtt-activate-btn');
+    const enable = !(btn && btn.dataset.enabled === '1');
+    mqttEnabledState = enable;
+    mqttConnectedState = enable ? mqttConnectedState : false;
+    const original = btn ? btn.innerText : '';
+    if(btn){
+      btn.disabled = true;
+      btn.innerText = enable ? 'Включаем MQTT...' : 'Отключаем MQTT...';
+      btn.classList.toggle('btn-activate-on', enable);
+      btn.classList.toggle('btn-activate-off', !enable);
+    }
+    const payload = new URLSearchParams({enabled: enable ? '1' : '0'});
+    fetch('/mqtt/activate',{method:'POST', body:payload})
+      .then(()=>setTimeout(fetchMqttConfig, 400))
+      .finally(()=>{ if(btn){ btn.disabled = false; btn.innerText = original || (enable ? 'Отключить MQTT' : 'Включить MQTT'); } });
+  }
+
+  function startMqttStatusUpdates(){
+    if(mqttStatusInterval) return;
+    fetchMqttConfig();
+    mqttStatusInterval = setInterval(fetchMqttConfig, 4000);
+  }
+
+  function stopMqttStatusUpdates(){
+    if(!mqttStatusInterval) return;
+    clearInterval(mqttStatusInterval);
+    mqttStatusInterval = null;
+  }
+
+
+  function fetchStats(manual=false){
+    const refreshBtn = document.getElementById('refresh-stats-btn');
+    if(manual && refreshBtn){
+      refreshBtn.disabled = true;
+      refreshBtn.innerText = 'Обновление...';
+    }
+    fetch('/stats').then(r=>r.json()).then(data=>{
+      updateStat('stat-chip', data.chipModelRevision || '--');
+      const cpuFreq = typeof data.cpuFreqMHz !== 'undefined' ? data.cpuFreqMHz : null;
+      updateStat('stat-cpu', cpuFreq !== null ? `${cpuFreq} MHz` : 'N/A');
+      const tempVal = (typeof data.temperature !== 'undefined' && data.temperature !== null) ? data.temperature : 'N/A';
+      const tempText = isNaN(Number(tempVal)) ? String(tempVal) : `${Number(tempVal).toFixed(1)} °C`;
+      updateStat('stat-temp', tempText);
+      const vccVal = (typeof data.vcc !== 'undefined' && data.vcc !== null) ? data.vcc : 'N/A';
+      const vccText = isNaN(Number(vccVal)) ? String(vccVal) : `${(Number(vccVal)/1000).toFixed(3)} V`;
+      updateStat('stat-vcc', vccText);
+      updateStat('stat-uptime', data.uptime || '--');
+      updateStat('stat-mac', data.mac || 'N/A');
+      updateStat('stat-heap', typeof data.freeHeap !== 'undefined' ? formatBytes(data.freeHeap) : '--');
+      const psramVal = (typeof data.freePsram === 'undefined' || data.freePsram === null) ? 'N/A' : data.freePsram;
+      updateStat('stat-psram', isNaN(Number(psramVal)) ? String(psramVal) : formatBytes(psramVal));
+      updateStat('stat-spiffs', renderSpiffs(data.spiffsUsed, data.spiffsFree, data.spiffsTotal));
+    }).catch(()=>{}).finally(()=>{
+      if(manual && refreshBtn){
+        refreshBtn.disabled = false;
+        refreshBtn.innerText = 'Обновить информацию';
+      }
+    });
+  }
+
+  function startStatsUpdates(){
+    fetchStats();
+  }
+
+  function stopStatsUpdates(){
+  }
+
+  function rebootEsp(){
+    const rebootBtn = document.getElementById('reboot-btn');
+    const original = rebootBtn ? rebootBtn.innerText : '';
+    if(rebootBtn){
+      rebootBtn.disabled = true;
+      rebootBtn.innerText = 'Перезагрузка...';
+    }
+    fetch('/restart',{method:'POST'})
+      .catch(()=>{})
+      .finally(()=>{
+        setTimeout(()=>location.reload(), 4000);
+      });
+  }
+
+  const updateWifiStatus = (data)=>{
+    updateStat('wifi-status', data.wifiStatus || 'N/A');
+    updateStat('wifi-mode', data.wifiMode || 'N/A');
+    updateStat('wifi-ssid', data.ssid && data.ssid.length ? data.ssid : 'N/A');
+    updateStat('wifi-ip', data.localIp && data.localIp.length ? data.localIp : 'N/A');
+    const rssiVal = (typeof data.rssi !== 'undefined' && data.rssi !== null) ? data.rssi : 'N/A';
+    const rssiText = isNaN(Number(rssiVal)) ? String(rssiVal) : `${rssiVal} dBm`;
+    updateStat('wifi-rssi', rssiText);
+    if(!wifiInputEdited.ssid && data.ssid && data.ssid.length){
+      const ssidInput = document.getElementById('ssid');
+      if(ssidInput) ssidInput.value = data.ssid;
+    }
+  };
+
+  function fetchWifiStatus(){
+    fetch('/stats').then(r=>r.json()).then(updateWifiStatus).catch(()=>{});
+  }
+
+  function startWifiStatusUpdates(){
+    if(wifiStatusInterval) return;
+    fetchWifiStatus();
+    wifiStatusInterval = setInterval(fetchWifiStatus, 3000);
+  }
+
+  function stopWifiStatusUpdates(){
+    if(!wifiStatusInterval) return;
+    clearInterval(wifiStatusInterval);
+    wifiStatusInterval = null;
+  }
 
 // Подсветка и отображение текущего значения для панели LED Color
 const refreshLedColorUI = (val)=>{
@@ -746,6 +1138,7 @@ function updateInputValue(id, value){
   const el = document.getElementById(id);
   if(!el || el.dataset.manual === '1') return;
   const text = String(value);
+  if(el.value !== text) el.value = text; //Динамическое обновление "Comment", "Start Time", "Enter Integer", "Enter Float"
   if(id==='LEDColor') refreshLedColorUI(text);
   else if(id==='ThemeColor') refreshThemeColorUI(text);
 }
@@ -861,16 +1254,95 @@ document.querySelectorAll('div[id$="DaysSelect"]').forEach(el=>{
     });
   });
 });
+
+
+const escapeHtml = (text='')=>String(text)
+  .replace(/&/g,'&amp;')
+  .replace(/</g,'&lt;')
+  .replace(/>/g,'&gt;')
+  .replace(/"/g,'&quot;')
+  .replace(/'/g,'&#039;');
+
+const authLabel = (auth)=>{
+  const val = (auth || '').toString().toUpperCase();
+  if(val.includes('WPA3')) return 'WPA3';
+  if(val.includes('WPA2')) return 'WPA2';
+  if(val.includes('WPA')) return 'WPA';
+  if(val.includes('WEP')) return 'WEP';
+  return 'open';
+};
+
+function closeWifiModal(){
+  const modal = document.getElementById('wifi-scan-modal');
+  if(modal) modal.classList.add('hidden');
+}
+
+function renderWifiScanList(networks){
+  const list = document.getElementById('wifi-scan-list');
+  const modal = document.getElementById('wifi-scan-modal');
+  if(!list || !modal) return;
+  list.innerHTML = '';
+  if(!networks || !networks.length){
+    list.innerHTML = '<div class="empty-row">Сети не найдены</div>';
+  } else {
+    networks.forEach(net=>{
+      const btn = document.createElement('button');
+      btn.className = 'network-row';
+      const ssid = escapeHtml(net.ssid || '(hidden)');
+      const rssi = typeof net.rssi !== 'undefined' ? `${net.rssi} dBm` : 'n/a';
+      const auth = authLabel(net.auth);
+      btn.innerHTML = `<div class='network-ssid'>${ssid}</div><div class='network-meta'>${rssi} · ${auth}</div>`;
+      btn.addEventListener('click', ()=>{
+        const ssidInput = document.getElementById('ssid');
+        if(ssidInput){
+          ssidInput.value = net.ssid || '';
+          wifiInputEdited.ssid = true;
+        }
+        closeWifiModal();
+      });
+      list.appendChild(btn);
+    });
+  }
+  modal.classList.remove('hidden');
+  modal.onclick = (e)=>{ if(e.target === modal) closeWifiModal(); };
+}
+
+function showWifiScanPlaceholder(text){
+  const list = document.getElementById('wifi-scan-list');
+  const modal = document.getElementById('wifi-scan-modal');
+  if(!list || !modal) return;
+  list.innerHTML = `<div class="empty-row">${escapeHtml(text)}</div>`;
+  modal.classList.remove('hidden');
+}
+
+function scanWiFi(){
+  const btn = document.getElementById('scan-btn');
+  if(btn){ btn.disabled = true; btn.innerText = 'Scanning...'; }
+  showWifiScanPlaceholder('Идет сканирование...');
+  fetch('/wifi/scan')
+    .then(r=>r.json())
+    .then(data=>{ renderWifiScanList(Array.isArray(data) ? data : []); })
+    .catch(()=>{ renderWifiScanList([]); })
+    .finally(()=>{
+      if(btn){ btn.disabled = false; btn.innerText = 'Scan WiFi'; }
+    });
+}
+
 function saveWiFi(){
  let s=document.getElementById('ssid').value;
  let p=document.getElementById('pass').value;
  let aps=document.getElementById('ap_ssid').value;
  let app=document.getElementById('ap_pass').value;
- fetch('/save?key=ssid&val='+encodeURIComponent(s));
- fetch('/save?key=pass&val='+encodeURIComponent(p));
- fetch('/save?key=apSSID&val='+encodeURIComponent(aps));
- fetch('/save?key=apPASS&val='+encodeURIComponent(app));
- alert('WiFi saved! Reboot ESP.');
+ let h=document.getElementById('hostname').value;
+ const body = new URLSearchParams({ssid:s, pass:p, ap_ssid:aps, ap_pass:app, hostname:h});
+ fetch('/wifi/save', {method:'POST', body})
+   .then(r=>r.json())
+   .then(data=>{
+     const connected = data && data.connected ? ' (подключено)' : ' (AP mode)';
+     alert('WiFi сохранен' + connected);
+     fetchStats(true);
+   })
+   .catch(()=>alert('Не удалось сохранить WiFi'));
 }
 
 // ====== ������� ��� ����� � live ======
@@ -1018,9 +1490,9 @@ window.addEventListener('resize', ()=>{
   });
 });
 
-function fetchLive(){
-  fetch('/live').then(r=>r.json()).then(j=>{
-    if(document.getElementById('CurrentTime')) document.getElementById('CurrentTime').innerText=j.CurrentTime;
+    function fetchLive(){
+    fetch('/live').then(r=>r.json()).then(j=>{
+      if(document.getElementById('CurrentTime')) document.getElementById('CurrentTime').innerText=j.CurrentTime;
     if(document.getElementById('RandomVal')) document.getElementById('RandomVal').innerText=j.RandomVal;
     if(document.getElementById('InfoString')) document.getElementById('InfoString').innerText=j.InfoString;
     if(document.getElementById('InfoString1')) document.getElementById('InfoString1').innerText=j.InfoString1;
@@ -1039,6 +1511,7 @@ function fetchLive(){
   });
 }
 setInterval(fetchLive, 1000);
+fetchMqttConfig();
 
 // ====== ??????? ???????????? ??????????? (???????? /setjpg ? ????????????? ????????) ======
 function setImg(x){
@@ -1127,6 +1600,47 @@ function setImg(x){
       r->send(200,"text/plain","OK");
     });
 
+    server.on("/mqtt/config", HTTP_GET, [](AsyncWebServerRequest *r){
+      String json = "{\\\"host\\\":\\\""+jsonEscape(mqttHost)+"\\\",";
+      json += "\\\"port\\\":" + String(mqttPort) + ",";
+      json += "\\\"user\\\":\\\""+jsonEscape(mqttUsername)+"\\\",";
+      json += "\\\"pass\\\":\\\""+jsonEscape(mqttPassword)+"\\\",";
+      json += "\\\"enabled\\\":" + String(mqttEnabled ? 1 : 0) + ",";
+      json += "\\\"connected\\\":" + String((mqttEnabled && mqttClient.connected()) ? 1 : 0) + "}";
+      r->send(200, "application/json", json);
+    });
+
+    server.on("/mqtt/save", HTTP_POST, [](AsyncWebServerRequest *r){
+      auto paramOr = [&](const char* name, const String &fallback)->String{
+        if(r->hasParam(name, true)) return r->getParam(name, true)->value();
+        if(r->hasParam(name)) return r->getParam(name)->value();
+        return fallback;
+      };
+
+      mqttHost = paramOr("host", mqttHost);
+      mqttPort = static_cast<uint16_t>(paramOr("port", String(mqttPort)).toInt());
+      mqttUsername = paramOr("user", mqttUsername);
+      mqttPassword = paramOr("pass", mqttPassword);
+      mqttEnabled = paramOr("enabled", mqttEnabled ? "1" : "0").toInt() == 1;
+
+     
+      saveMqttSettings();
+      applyMqttState();
+      r->send(200, "application/json", "{\\\"status\\\":\\\"saved\\\"}");
+    });
+
+
+    server.on("/mqtt/activate", HTTP_POST, [](AsyncWebServerRequest *r){
+      bool enabled = mqttEnabled;
+      if(r->hasParam("enabled", true)) enabled = r->getParam("enabled", true)->value().toInt() == 1;
+      else if(r->hasParam("enabled")) enabled = r->getParam("enabled")->value().toInt() == 1;
+      mqttEnabled = enabled;
+      saveMqttSettings();
+      applyMqttState();
+      r->send(200, "application/json", "{\\\"status\\\":\\\"updated\\\"}");
+    });
+
+
     server.on("/button", HTTP_GET, [](AsyncWebServerRequest *r){
       if(r->hasParam("id") && r->hasParam("state")){
         String id = r->getParam("id")->value();
@@ -1151,6 +1665,104 @@ function setImg(x){
                +",\"Timer1\":\""+Timer1+"\",\"Comment\":\""+Comment+"\"}";
     r->send(200, "application/json", s);
     });
+
+    server.on("/stats", HTTP_GET, [](AsyncWebServerRequest *r){
+      auto formatUptime = [](){
+        unsigned long seconds = millis() / 1000;
+        unsigned long hours = seconds / 3600;
+        unsigned long minutes = (seconds % 3600) / 60;
+        unsigned long secs = seconds % 60;
+        char buffer[16];
+        snprintf(buffer, sizeof(buffer), "%lu:%02lu:%02lu", hours, minutes, secs);
+        return String(buffer);
+      };
+
+      size_t total = SPIFFS.totalBytes();
+      size_t used = SPIFFS.usedBytes();
+      size_t freeSpace = total > used ? (total - used) : 0;
+
+      String chipModelRevision = buildChipIdentity();
+      uint32_t cpuFreq = getCpuFrequencyMhz();
+#ifdef ARDUINO_ARCH_ESP32
+      float temperatureVal = temperatureRead();
+#else
+      float temperatureVal = NAN;
+#endif
+      String temperature = isnan(temperatureVal) ? String("N/A") : String(temperatureVal, 1);
+      String vcc = String("N/A");
+      String mac = WiFi.macAddress();
+
+      WifiStatusInfo wifiInfo = getWifiStatus();
+      String wifiMode = wifiInfo.modeText;
+      String ssid = (wifiInfo.ssid.length()) ? wifiInfo.ssid : String("N/A");
+      String localIp = (wifiInfo.ip.length()) ? wifiInfo.ip : String("N/A");
+      String rssi = wifiInfo.rssi != 0 ? String(wifiInfo.rssi) : String("N/A");
+#if defined(CONFIG_SPIRAM_SUPPORT) && CONFIG_SPIRAM_SUPPORT
+      String freePsram = psramFound() ? String(ESP.getFreePsram()) : String("N/A");
+#else
+      String freePsram = String("N/A");
+#endif
+
+      String json = "{";
+      json += "\"chipModelRevision\":\""+jsonEscape(chipModelRevision)+"\",";
+      json += "\"cpuFreqMHz\":"+String(cpuFreq)+",";
+      json += "\"temperature\":\""+jsonEscape(temperature)+"\",";
+      json += "\"vcc\":\""+jsonEscape(vcc)+"\",";
+      json += "\"uptime\":\""+jsonEscape(formatUptime())+"\",";
+      json += "\"mac\":\""+jsonEscape(mac)+"\",";
+      json += "\"freeHeap\":"+String(ESP.getFreeHeap())+",";
+      json += "\"freePsram\":\""+jsonEscape(freePsram)+"\",";
+      json += "\"spiffsUsed\":"+String(used)+",";
+      json += "\"spiffsFree\":"+String(freeSpace)+",";
+      json += "\"spiffsTotal\":"+String(total)+",";
+      json += "\"wifiMode\":\""+jsonEscape(wifiMode)+"\",";
+      json += "\"wifiStatus\":\""+jsonEscape(wifiInfo.statusText)+"\",";
+      json += "\"ssid\":\""+jsonEscape(ssid)+"\",";
+      json += "\"localIp\":\""+jsonEscape(localIp)+"\",";
+      json += "\"rssi\":\""+jsonEscape(rssi)+"\"";
+      json += "}";
+
+      r->send(200, "application/json", json);
+    });
+
+    server.on("/wifi/scan", HTTP_GET, [](AsyncWebServerRequest *r){
+      r->send(200, "application/json", scanWifiNetworksJson());
+    });
+
+    server.on("/wifi/save", HTTP_POST, [](AsyncWebServerRequest *r){
+      auto paramOr = [&](const char* name, const String &fallback)->String{
+        if(r->hasParam(name, true)) return r->getParam(name, true)->value();
+        if(r->hasParam(name)) return r->getParam(name)->value();
+        return fallback;
+      };
+
+      String ssid = paramOr("ssid", loadValue<String>("ssid", String(defaultSSID)));
+      String pass = paramOr("pass", loadValue<String>("pass", String(defaultPASS)));
+      String apSsid = paramOr("ap_ssid", loadValue<String>("apSSID", String(::apSSID)));
+      String apPass = paramOr("ap_pass", loadValue<String>("apPASS", String(::apPASS)));
+      String host = paramOr("hostname", loadValue<String>("hostname", String(defaultHostname)));
+
+      StoredAPSSID = apSsid;
+      StoredAPPASS = apPass;
+      saveWifiConfig(ssid, pass, apSsid, apPass, host);
+      WifiStatusInfo wifiInfo = getWifiStatus();
+
+      String response = "{\\\"saved\\\":1,\\\"connected\\\":" + String(wifiIsConnected() ? 1 : 0) + ",";
+      response += "\\\"status\\\":\\\"" + wifiInfo.statusText + "\\\",";
+      response += "\\\"ip\\\":\\\"" + (wifiIsConnected() ? WiFi.localIP().toString() : String("")) + "\\\"}";
+
+      r->send(200, "application/json", response);
+
+
+    });
+
+    server.on("/restart", HTTP_POST, [](AsyncWebServerRequest *r){
+      r->send(200, "text/plain", "Restarting");
+      r->client()->stop();
+      delay(100);
+      ESP.restart();
+    });
+
 
     server.on("/graphData", HTTP_GET, [](AsyncWebServerRequest *r){
       String series = "main";
@@ -1216,9 +1828,3 @@ server.on("/getImage", HTTP_GET, [](AsyncWebServerRequest *r){
     server.begin();
   }
 } dash;
-
-
-//вынести HTML/JS в отдельные файлы data/
-// │   ├── index.html
-// │   ├── script.js
-// │   └── style.css

@@ -4,17 +4,18 @@
 #include "ui - JeeUI2.h"
 
 inline void interface(){
-    oab.app("MiniDash");
+    oab.app("Система управления бассейном");
 
-    oab.menu("Main");
+    oab.menu("Общая информация по бассейну");
     oab.menu("Controls");
-    oab.menu("Monitor");
-    oab.menu("Advanced");
-    oab.menu("Metrics");
-    oab.menu("Signals");
-    oab.menu("Hello");
+    oab.menu("Настройка фильтрации, Промывка фильтра");
+    oab.menu("Управление подсветкой");
+    oab.menu("Контроль уровня воды");
+    oab.menu("Контроль температуры");
+    oab.menu("Контроль PH (NaOCl)");
+    oab.menu("Контроль хлора CL (ACO)");
 
-    // Main tab
+    // Общая информация по бассейну
     oab.page();
     oab.display("CurrentTime", "Current Time", "--:--:--");
     oab.display("RandomVal", "Random Number", "0");
@@ -34,25 +35,32 @@ inline void interface(){
     oab.select("ModeSelect", "Mode");
     oab.selectDays("DaysSelect", "Select Days");
     oab.range("RangeSlider", 10, 40, 1, "Range Min-Max", true);
-
-    // Monitor tab
-    oab.page();
     oab.number("IntInput", "Enter Integer");
     oab.number("FloatInput", "Enter Float", true);
-
-    // Advanced tab
-    oab.page();
     oab.time("Timer1", "Start Time");
     oab.text("Comment", "Comment");
 
-   // Metrics tab
+    // Настройка фильтрации, Промывка фильтра
+    oab.page();
+    // oab.number("IntInput", "Enter Integer");
+    // oab.number("FloatInput", "Enter Float", true);
+
+    // Управление подсветкой
+    oab.page();
+    // oab.time("Timer1", "Start Time");
+    // oab.text("Comment", "Comment");
+
+    // Контроль уровня воды
+    oab.page();
+
+   // Контроль температуры
     oab.page();
         oab.displayGraph("SpeedTrend", "Speed Trend",
         "value:Speed;updatePeriod_of_Time:180;updateStep:3;maxPoints:20;width:100%;height:240;"
         "xLabel:Time;yLabel:Speed;pointColor:#ffd166;lineColor:#4CAF50;"
         "lineWidth:1;pointRadius:3;smooth:false", Speed);
 
-    // Signals tab
+    // Контроль PH (NaOCl)
     oab.page();
 
         // График тренда измеренной температуры:
@@ -80,5 +88,11 @@ inline void interface(){
     "xLabel:Time;yLabel:Temperature;pointColor:#6b66ff;lineColor:#ff5e5e;"
     "lineWidth:1;pointRadius:3;smooth:false", Temperatura);
 
-  
+    //Контроль хлора CL (ACO)
+    oab.page();
+    oab.displayGraph("FloatTrend2", "Temperature2 Trend",
+    "value:Temperatura;updatePeriod_of_Time:60;updateStep:5;maxPoints:30;width:100%;height:400;"
+    "xLabel:Time;yLabel:Temperature;pointColor:#6b66ff;lineColor:#ff5e5e;"
+    "lineWidth:1;pointRadius:3;smooth:false", Temperatura);
+
 }
