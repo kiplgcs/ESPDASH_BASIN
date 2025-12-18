@@ -26,7 +26,7 @@ inline void interface(){
 
     // Controls tab
     oab.page();
-    oab.button("button3", "gray", "My Button3");
+    
     oab.range("MotorSpeed", 0, 100, 1, "Motor Speed");
     oab.selectDays("DaysSelect", "Select Days");
     oab.range("RangeSlider", 10, 40, 1, "Range Min-Max", true);
@@ -42,7 +42,7 @@ inline void interface(){
 
     // Управление подсветкой
     oab.page();
-
+    oab.button("button_WS2815", "gray", "Включить / Отключить : RGB ленту WS2815 ");
     oab.color("LEDColor", "Цвет подсветки");
     oab.option("auto", "Автоматически");
     oab.option("manual", "Ручной цвет");
