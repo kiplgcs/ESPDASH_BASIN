@@ -158,6 +158,7 @@ void setup() {
   if(LedAutoplayDuration < 1) LedAutoplayDuration = 1;
   LedBrightness = loadValue<int>("LedBrightness", LedBrightness);
   new_bright = LedBrightness;
+  Pow_WS2815 = loadButtonState("button_WS2815", 1) != 0;
 
   setup_WS2815();
 

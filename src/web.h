@@ -79,7 +79,7 @@ String Lamp_timeON1, Lamp_timeOFF1; // Утавки времени включе�
 String Saved_Lamp_timeON1, Saved_Lamp_timeOFF1;
 
 
-bool Pow_WS2815, Pow_WS28151;		// Включение в ручную
+bool Pow_WS2815 = true, Pow_WS28151;		// Включение в ручную
 bool Pow_WS2815_autosvet, Saved_Pow_WS2815_autosvet; 
 bool WS2815_Time1, Saved_WS2815_Time1;
 String timeON_WS2815, timeOFF_WS2815; // Утавки времени включения-отключения LED ленты
@@ -764,7 +764,8 @@ if(t.id == "tab1"){
                   html += "<label>"+e.label+"</label><input id='"+e.id+"' type='range' min='"+String(minCfg)+"' max='"+String(maxCfg)+"' step='"+String(stepCfg)+"' value='"+val+"' oninput='updateSlider(this)'><span id='"+e.id+"Val'> "+val+"</span>";
               }
               else if(e.type=="button"){
-                  int currentState = loadButtonState(e.id.c_str(), 0);
+                  int defaultState = (e.id == "button_WS2815") ? 1 : 0;
+                  int currentState = loadButtonState(e.id.c_str(), defaultState);
                   String state = String(currentState);
                   String text = (state == "1") ? "ON" : "OFF";
                   String cssState = (state == "1") ? " on" : " off";
@@ -1638,6 +1639,7 @@ window.addEventListener('resize', ()=>{
     if(document.getElementById('InfoString1')) document.getElementById('InfoString1').innerText=j.InfoString1;
     syncDashButton('button1', j.button1);
     syncDashButton('button2', j.button2);
+    syncDashButton('button_WS2815', j.button_WS2815);
     if(typeof j.MotorSpeed !== 'undefined') updateSliderDisplay('MotorSpeed', j.MotorSpeed);
     if(typeof j.RangeMin !== 'undefined' && typeof j.RangeMax !== 'undefined') setRangeSliderUI('RangeSlider', j.RangeMin, j.RangeMax);
     if(typeof j.LEDColor !== 'undefined') updateInputValue('LEDColor', j.LEDColor);
@@ -1802,6 +1804,7 @@ function setImg(x){
         int state = r->getParam("state")->value().toInt();
         if(id == "button1") button1 = state;
         else if(id == "button2") button2 = state;
+        else if(id == "button_WS2815"){Pow_WS2815 = state != 0;}
         saveButtonState(id.c_str(), state);
         r->send(200, "text/plain", "OK");
       } else {
@@ -1812,7 +1815,7 @@ function setImg(x){
     server.on("/live", HTTP_GET, [](AsyncWebServerRequest *r){
     String s = "{\"CurrentTime\":\""+CurrentTime+"\",\"RandomVal\":"+String(RandomVal)
                +",\"InfoString\":\""+InfoString+"\",\"InfoString1\":\""+InfoString1
-               +"\",\"button1\":"+String(button1)+",\"button2\":"+String(button2)
+               +"\",\"button1\":"+String(button1)+",\"button2\":"+String(button2)+",\"button_WS2815\":"+String(Pow_WS2815 ? 1 : 0)
                +",\"MotorSpeed\":"+String(MotorSpeedSetting)
                +",\"RangeMin\":"+String(RangeMin)+",\"RangeMax\":"+String(RangeMax)
                +",\"LEDColor\":\""+LEDColor+"\",\"LedPattern\":\""+LedPattern+"\",\"LedColorMode\":\""+LedColorMode+"\",\"LedBrightness\":"+String(LedBrightness)
