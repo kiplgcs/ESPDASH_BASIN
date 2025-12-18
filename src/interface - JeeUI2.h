@@ -28,11 +28,6 @@ inline void interface(){
     oab.page();
     oab.button("button3", "gray", "My Button3");
     oab.range("MotorSpeed", 0, 100, 1, "Motor Speed");
-    oab.color("LEDColor", "LED Color");
-    oab.option("Normal", "Normal");
-    oab.option("Eco", "Eco");
-    oab.option("Turbo", "Turbo");
-    oab.select("ModeSelect", "Mode");
     oab.selectDays("DaysSelect", "Select Days");
     oab.range("RangeSlider", 10, 40, 1, "Range Min-Max", true);
     oab.number("IntInput", "Enter Integer");
@@ -47,6 +42,22 @@ inline void interface(){
 
     // Управление подсветкой
     oab.page();
+
+    oab.color("LEDColor", "Цвет подсветки");
+    oab.option("auto", "Автоматически");
+    oab.option("manual", "Ручной цвет");
+    oab.select("LedColorMode", "Режим цвета");
+    oab.range("LedBrightness", 10, 255, 1, "Яркость");
+    oab.option("rainbow", "Радуга");
+    oab.option("pulse", "Пульс");
+    oab.option("chase", "Шлейф");
+    oab.option("comet", "Комета");
+    oab.select("LedPattern", "Режим подсветки");
+    oab.range("LedAutoplayDuration", 5, 180, 5, "Смена режима (сек)");
+    oab.option("1", "Автомат");
+    oab.option("0", "Вручную");
+    oab.select("LedAutoplay", "Автосмена");
+    
     // oab.time("Timer1", "Start Time");
     // oab.text("Comment", "Comment");
 

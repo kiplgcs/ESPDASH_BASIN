@@ -21,6 +21,7 @@ inline AsyncWebServer server(80);  // Создаем веб-сервер на п
 // ---------- Глобальные переменные для UI ----------
 // Эти переменные управляют значениями элементов интерфейса
 inline String ThemeColor;        // Цвет темы интерфейса
+inline String ColorLED; //Выбор цвета для лентиы WS2815
 inline String LEDColor;          // Цвет LED-индикатора
 inline int MotorSpeedSetting;    // Настройка скорости мотора (0-100)
 inline int IntInput;             // Целочисленный ввод от пользователя
@@ -44,6 +45,145 @@ inline int RangeMax = 40;        // Максимальное значение д
 inline int jpg = 1;              // Флаг JPG отображения (например, переключение картинок)
 inline String dashAppTitle = "MiniDash"; // Название приложения
 inline bool dashInterfaceInitialized = false; // Флаг, что интерфейс уже инициализирован
+
+
+
+
+
+
+bool Slep = false; //Флаг режима сна
+int Lumen_Ul, Saved_Lumen_Ul; //освещенность на улице
+int Lumen_Ul_percent; //Освещенность в процентах
+
+float PH, Saved_PH; //Кислотность воды
+float  PH1, PH2;					//Точки калибровки PH
+float  PH1_CAL, PH2_CAL; 	//Значения для данных точек калибровки PH от 0 до 4095 (12бит)
+float Temper_PH; //Измеренная тепература для компенасации измерения PH
+float Temper_Reference; // Температура при котором сенсор выдает свои параметры - 20.0 или 25.0 С для разных сенсоров PH;
+bool Act_PH = false; //Активация калибровки
+bool Act_Cl = false; //Активация калибровки
+int analogValuePH_Comp; //корректированное значение АЦП после компенсации по температуре
+
+int Saved_gmtOffset_correct, gmtOffset_correct; // Корректировка часового пояса призапросен времени из Интернета
+
+//bool RestartESP32 = false; //флаг перезагрузки ESP32 по нажатию кнопки
+bool CalCl = false; //флаг кнопки для запоминания значения калибровки по ОВП
+unsigned long Timer_Callback; // Таймер опроса всех кнопок
+
+/************************* Переменные для записи значений полученных по MQTT*******/
+
+bool Lamp, Lamp1;		// Подсветка в бассейне -  Включение в ручную
+bool Lamp_autosvet, Saved_Lamp_autosvet;
+bool Power_Time1, Saved_Power_Time1;
+String Lamp_timeON1, Lamp_timeOFF1; // Утавки времени включения-отключения LED ленты
+String Saved_Lamp_timeON1, Saved_Lamp_timeOFF1;
+
+
+bool Pow_WS2815, Pow_WS28151;		// Включение в ручную
+bool Pow_WS2815_autosvet, Saved_Pow_WS2815_autosvet; 
+bool WS2815_Time1, Saved_WS2815_Time1;
+String timeON_WS2815, timeOFF_WS2815; // Утавки времени включения-отключения LED ленты
+String Saved_timeON_WS2815, Saved_timeOFF_WS2815;
+bool ColorRGB = false;    //режим ручного задания цвета
+int new_bright = 200; //переменная с яркостью установленной в интерфейсе вручную
+bool LedAutoplay = true;
+int LedAutoplayDuration = 30;
+String LedPattern = "rainbow";
+String LedColorMode = "auto";
+int LedBrightness = 200;
+int currentPatternIndex = 0; //Номер цветовой программы в реальном времени
+
+bool Index0,Index1,Index2,Index3,Index4,Index5,Index6,Index7,Index8,Index9,Index10,
+Index11,Index12,Index13,Index14,Index15,Index16,Index17,Index18,Index19,Index20,
+Index21,Index22,Index23,Index24;
+
+	
+bool Power_Filtr, Power_Filtr1;		// Фильтрация в бассейне -  Включение в ручную
+bool Filtr_Time1, Filtr_Time2, Filtr_Time3; // Разрешения работы включения по времени
+bool Saved_Filtr_Time1, Saved_Filtr_Time2, Saved_Filtr_Time3;
+String Filtr_timeON1, Filtr_timeOFF1, Filtr_timeON2, Filtr_timeOFF2, Filtr_timeON3, Filtr_timeOFF3; // Утавки времени включения
+String Saved_Filtr_timeON1, Saved_Filtr_timeOFF1, Saved_Filtr_timeON2, Saved_Filtr_timeOFF2, Saved_Filtr_timeON3, Saved_Filtr_timeOFF3; 
+
+bool Power_Clean, Power_Clean1; // Промывка фильтра
+bool Clean_Time1, Saved_Clean_Time1; // Разрешения работы включения по времени
+String Clean_timeON1, Clean_timeOFF1; // Утавки времени включения
+String Saved_Clean_timeON1, Saved_Clean_timeOFF1;
+bool chk1, chk2, chk3, chk4, chk5, chk6, chk7; //Дни недели ПН, ВТ, СР, ЧТ, ПТ, СБ, ВС - для включения таймера в нужные дни
+bool Saved_chk1, Saved_chk2, Saved_chk3, Saved_chk4, Saved_chk5, Saved_chk6, Saved_chk7;
+
+bool Power_Heat, Power_Heat1;
+bool Activation_Heat, Activation_Heat1; // Включение и Активация контроля включения нагрева воды
+int Sider_heat,  Sider_heat1; 			// Sider_heat1; bool Sider_Heat; // Переменная для получения или передачи из в  Nextion c  сидера монитора уставки нагрева воды
+//float temper1; int set_temper1;  //Для котроля измениения
+//bool Relay4_Time1, Relay4_Time2; // Разрешения работы включения по времени
+//String Relay4_timeON1, Relay4_timeOFF1, Relay4_timeON2, Relay4_timeOFF2; // Утавки времени включения
+	
+bool Pow_Ul_light, Pow_Ul_light1; // Промывка фильтра
+bool Ul_light_Time, Saved_Ul_light_Time; // Разрешения работы включения по времени
+String Ul_light_timeON, Ul_light_timeOFF; // Утавки времени включения
+// String Saved_Ul_light_timeON, Saved_Ul_light_timeOFF;
+
+bool Power_Topping, Power_Topping1; // Долив воды по уровню
+
+
+bool Saved_Power_H2O, Power_H2O2 = false; //Дозация перекеси водороода 
+bool Saved_Power_ACO, Power_ACO = false; 	//Дозация Активное Каталитическое Окисление «Active Catalytic Oxidation» ACO
+//bool Saved_Power_APF, Power_APF = false;		//Высокоэффективный коагулянт и флокулянт «All Poly Floc» APF
+
+// bool Saved_Test_Pump, Test_Pump; //Разрешение на работу тамера дозации ACO
+// bool Saved_Activation_Timer_H2O2, Activation_Timer_H2O2;//Разрешение на работу тамера дозации H2O2
+//bool Saved_Activation_Timer_APF, Activation_Timer_APF; //Разрешение на работу тамера дозации APF
+
+//String Info_H2O2_H2O2_APF;  //Таймера включения дозаторов  H2O2, H2O2, APF
+
+// String Saved_Timer_H2O2_Start, Timer_H2O2_Start;
+// String Saved_Timer_H2O2_Work, Timer_H2O2_Work;
+
+// String Saved_Timer_ACO_Start, Timer_ACO_Start;
+// String Saved_Timer_ACO_Work, Timer_ACO_Work;
+
+bool PH_Control_ACO, Saved_PHControlACO; // Флаг для отслеживания предыдущего состояния PH_Control_ACO
+int ACO_Work, Saved_ACO_Work;
+
+
+bool NaOCl_H2O2_Control, Saved_NaOCl_H2O2_Control;
+int H2O2_Work, Saved_H2O2_Work;
+
+int corr_ORP_temper_mV; 		// ОРП с учетом калибровки по температуре
+int CalRastvor256mV	= 256;	//Калибровочный раствор
+int Calibration_ORP_mV = 0; //Калибровочный кооффициент - разница между колибровочным раствором 256mV 25C	 и показаниями сенсора
+int corrected_ORP_Eh_mV;		// ОРП с учетом калибровки по  калибровочному раствору 	
+float Saved_ppmCl, ppmCl = 1.3; //Свободный Хлор CL2 -  млг/литр, норма: 1,3млг/литр
+
+
+//Строки для хранения информации о таймерах
+char Info_H2O2[50]; String Saved_Info_H2O2;
+char Info_ACO[50];  String Saved_Info_ACO;
+
+// ===== Настройки пределов pH =====
+float PH_setting; // = 7.2;  // Верхний предел для включения дозирования
+
+
+// ===== Настройки пределов ORP =====
+int ORP_setting; // = 500;   // Нижний предел для включения дозирования
+
+//Получение по ModbusRTU Объявляем переменные Input1, ..., Input16
+//bool Input1, Input2, Input3, Input4, Input5, Input6, Input7, Input8, Input9, Input10, Input11, Input12, Input13, Input14, Input15, Input16;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 extern void interface();
@@ -1501,6 +1641,11 @@ window.addEventListener('resize', ()=>{
     if(typeof j.MotorSpeed !== 'undefined') updateSliderDisplay('MotorSpeed', j.MotorSpeed);
     if(typeof j.RangeMin !== 'undefined' && typeof j.RangeMax !== 'undefined') setRangeSliderUI('RangeSlider', j.RangeMin, j.RangeMax);
     if(typeof j.LEDColor !== 'undefined') updateInputValue('LEDColor', j.LEDColor);
+    if(typeof j.LedPattern !== 'undefined') updateSelectValue('LedPattern', j.LedPattern);
+    if(typeof j.LedColorMode !== 'undefined') updateSelectValue('LedColorMode', j.LedColorMode);
+    if(typeof j.LedBrightness !== 'undefined') updateSliderDisplay('LedBrightness', j.LedBrightness);
+    if(typeof j.LedAutoplay !== 'undefined') updateSelectValue('LedAutoplay', j.LedAutoplay);
+    if(typeof j.LedAutoplayDuration !== 'undefined') updateSliderDisplay('LedAutoplayDuration', j.LedAutoplayDuration);
     if(typeof j.ModeSelect !== 'undefined') updateSelectValue('ModeSelect', j.ModeSelect);
     if(typeof j.DaysSelect !== 'undefined') updateDaysSelection('DaysSelect', j.DaysSelect);
     if(typeof j.IntInput !== 'undefined') updateInputValue('IntInput', j.IntInput);
@@ -1534,6 +1679,16 @@ function setImg(x){
         String valStr = r->getParam("val")->value();
         if(key=="ThemeColor") { ThemeColor = valStr; saveValue<String>(key.c_str(), valStr); }
         else if(key=="LEDColor") { LEDColor = valStr; saveValue<String>(key.c_str(), valStr); }
+        else if(key=="LedColorMode") { LedColorMode = valStr; ColorRGB = LedColorMode.equalsIgnoreCase("manual"); saveValue<String>("LedColorMode", LedColorMode); }
+        else if(key=="LedBrightness") { LedBrightness = constrain(valStr.toInt(), 0, 255); new_bright = LedBrightness; saveValue<int>("LedBrightness", LedBrightness); }
+        else if(key=="LedPattern") { LedPattern = valStr; saveValue<String>("LedPattern", LedPattern); }
+        else if(key=="LedAutoplay") { LedAutoplay = valStr.toInt() != 0; saveValue<int>("LedAutoplay", LedAutoplay ? 1 : 0); }
+        else if(key=="LedAutoplayDuration") {
+          int duration = valStr.toInt();
+          if(duration < 1) duration = 1;
+          LedAutoplayDuration = duration;
+          saveValue<int>("LedAutoplayDuration", LedAutoplayDuration);
+        }
         else if(key=="MotorSpeed") { MotorSpeedSetting = valStr.toInt(); saveValue<int>(key.c_str(), MotorSpeedSetting); }
         else if(key=="IntInput") { IntInput = valStr.toInt(); saveValue<int>(key.c_str(), IntInput); }
         else if(key=="FloatInput") { FloatInput = valStr.toFloat(); saveValue<float>(key.c_str(), FloatInput); }
@@ -1660,7 +1815,9 @@ function setImg(x){
                +"\",\"button1\":"+String(button1)+",\"button2\":"+String(button2)
                +",\"MotorSpeed\":"+String(MotorSpeedSetting)
                +",\"RangeMin\":"+String(RangeMin)+",\"RangeMax\":"+String(RangeMax)
-               +",\"LEDColor\":\""+LEDColor+"\",\"ModeSelect\":\""+ModeSelect+"\",\"DaysSelect\":\""+DaysSelect+"\""
+               +",\"LEDColor\":\""+LEDColor+"\",\"LedPattern\":\""+LedPattern+"\",\"LedColorMode\":\""+LedColorMode+"\",\"LedBrightness\":"+String(LedBrightness)
+               +",\"LedAutoplay\":"+String(LedAutoplay ? 1 : 0)+",\"LedAutoplayDuration\":"+String(LedAutoplayDuration)
+               +",\"ModeSelect\":\""+ModeSelect+"\",\"DaysSelect\":\""+DaysSelect+"\""
                +",\"IntInput\":"+String(IntInput)+",\"FloatInput\":"+String(FloatInput)
                +",\"Timer1\":\""+Timer1+"\",\"Comment\":\""+Comment+"\"}";
     r->send(200, "application/json", s);
