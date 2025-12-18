@@ -11,6 +11,26 @@
 
 static NeoPixelBrightnessBus<NeoGrbFeature, Neo800KbpsMethod> ledStrip(NUM_LEDS, DATA_PIN);
 
+static inline RgbColor applyColorOrder(const RgbColor &color){
+    String order = LedColorOrder;
+    order.toUpperCase();
+    if(order == "RGB") return RgbColor(color.G, color.R, color.B);
+    if(order == "RBG") return RgbColor(color.B, color.R, color.G);
+    if(order == "BRG") return RgbColor(color.R, color.B, color.G);
+    if(order == "BGR") return RgbColor(color.G, color.B, color.R);
+    if(order == "GBR") return RgbColor(color.B, color.G, color.R);
+    return color; // GRB и любой неизвестный порядок
+}
+
+static inline void setPixelColorOrdered(uint16_t index, const RgbColor &color){
+    ledStrip.SetPixelColor(index, applyColorOrder(color));
+}
+
+static inline void clearToOrdered(const RgbColor &color){
+    ledStrip.ClearTo(applyColorOrder(color));
+}
+
+
 struct LedPatternDef {
     const char* name;
     void (*render)(uint8_t frame, const RgbColor &accent);
@@ -55,14 +75,14 @@ static inline void fadeStrip(uint8_t amount){
         uint8_t r = (current.R > amount) ? (current.R - amount) : 0;
         uint8_t g = (current.G > amount) ? (current.G - amount) : 0;
         uint8_t b = (current.B > amount) ? (current.B - amount) : 0;
-        ledStrip.SetPixelColor(i, RgbColor(r, g, b));
+        setPixelColorOrdered(i, RgbColor(r, g, b));
     }
 }
 
 static inline void fillRainbowFrame(uint8_t frame){
     for(uint16_t i = 0; i < NUM_LEDS; i++){
         uint8_t position = frame + ((i * 256) / NUM_LEDS);
-        ledStrip.SetPixelColor(i, wheelColor(position));
+        setPixelColorOrdered(i, wheelColor(position));
     }
 }
 
@@ -73,7 +93,7 @@ static inline void fillPulseFrame(uint8_t frame, const RgbColor &accent){
         static_cast<uint8_t>(accent.R * ratio),
         static_cast<uint8_t>(accent.G * ratio),
         static_cast<uint8_t>(accent.B * ratio));
-    ledStrip.ClearTo(scaled);
+    clearToOrdered(scaled);
 }
 
 static inline void fillChaseFrame(uint8_t frame){
@@ -82,12 +102,12 @@ static inline void fillChaseFrame(uint8_t frame){
     RgbColor chaseColor = wheelColor(frame);
     for(uint16_t i = 0; i < NUM_LEDS; i++){
         bool on = ((i + offset) % (segmentLength * 2)) < segmentLength;
-        ledStrip.SetPixelColor(i, on ? chaseColor : RgbColor(0, 0, 0));
+        setPixelColorOrdered(i, on ? chaseColor : RgbColor(0, 0, 0));
     }
 }
 
 static inline void fillCometFrame(uint8_t frame){
-    ledStrip.ClearTo(RgbColor(0, 0, 0));
+    clearToOrdered(RgbColor(0, 0, 0));
     int head = (frame * 3) % NUM_LEDS;
     for(uint8_t trail = 0; trail < 16; ++trail){
         int index = (head - trail + NUM_LEDS) % NUM_LEDS;
@@ -98,29 +118,29 @@ static inline void fillCometFrame(uint8_t frame){
             (color.R * brightness) / 255,
             (color.G * brightness) / 255,
             (color.B * brightness) / 255);
-        ledStrip.SetPixelColor(index, scaled);
+        setPixelColorOrdered(index, scaled);
     }
 }
 
 
 static inline void fillColorWipe(uint8_t frame, const RgbColor &accent){
     uint16_t pos = frame % (NUM_LEDS + 5);
-    ledStrip.ClearTo(RgbColor(0, 0, 0));
+    clearToOrdered(RgbColor(0, 0, 0));
     for(uint16_t i = 0; i < pos && i < NUM_LEDS; ++i){
-        ledStrip.SetPixelColor(i, accent);
+        setPixelColorOrdered(i, accent);
     }
 }
 
 static inline void fillTheaterChase(uint8_t frame, const RgbColor &accent){
     uint8_t offset = frame % 3;
-    ledStrip.ClearTo(RgbColor(0, 0, 0));
+    clearToOrdered(RgbColor(0, 0, 0));
     for(uint16_t i = offset; i < NUM_LEDS; i += 3){
-        ledStrip.SetPixelColor(i, accent);
+        setPixelColorOrdered(i, accent);
     }
 }
 
 static inline void fillScanner(uint8_t frame, const RgbColor &accent){
-    ledStrip.ClearTo(RgbColor(0, 0, 0));
+    clearToOrdered(RgbColor(0, 0, 0));
     uint16_t head = frame % ((NUM_LEDS - 1) * 2);
     if(head >= NUM_LEDS) head = (NUM_LEDS - 1) * 2 - head;
     for(int16_t i = -3; i <= 3; ++i){
@@ -128,16 +148,16 @@ static inline void fillScanner(uint8_t frame, const RgbColor &accent){
         if(idx < 0 || idx >= NUM_LEDS) continue;
         uint8_t brightness = 255 - abs(i) * 64;
         RgbColor scaled((accent.R * brightness) / 255, (accent.G * brightness) / 255, (accent.B * brightness) / 255);
-        ledStrip.SetPixelColor(idx, scaled);
+        setPixelColorOrdered(idx, scaled);
     }
 }
 
 static inline void fillSparkle(uint8_t frame, const RgbColor &accent){
     (void)frame;
-    ledStrip.ClearTo(RgbColor(0, 0, 0));
+    clearToOrdered(RgbColor(0, 0, 0));
     for(uint8_t i = 0; i < 8; ++i){
         uint16_t idx = random(NUM_LEDS);
-        ledStrip.SetPixelColor(idx, accent);
+        setPixelColorOrdered(idx, accent);
     }
 }
 
@@ -153,20 +173,20 @@ static inline void fillTwinkle(uint8_t frame, const RgbColor &accent){
             (base.R + sparkle) > 255 ? 255 : base.R + sparkle,
             (base.G + sparkle) > 255 ? 255 : base.G + sparkle,
             (base.B + sparkle) > 255 ? 255 : base.B + sparkle);
-        ledStrip.SetPixelColor(i, mixed);
+        setPixelColorOrdered(i, mixed);
     }
 }
 
 static inline void fillConfetti(uint8_t frame){
     fadeStrip(4);
     uint16_t idx = random(NUM_LEDS);
-    ledStrip.SetPixelColor(idx, wheelColor(frame + idx));
+    setPixelColorOrdered(idx, wheelColor(frame + idx));
 }
 
 static inline void fillWaves(uint8_t frame){
     for(uint16_t i = 0; i < NUM_LEDS; ++i){
         float wave = sinf((i + frame) * 0.2f) * 127 + 128;
-        ledStrip.SetPixelColor(i, RgbColor(wave, 255 - wave, (wave / 2)));
+        setPixelColorOrdered(i, RgbColor(wave, 255 - wave, (wave / 2)));
     }
 }
 
@@ -177,7 +197,7 @@ static inline void fillBreathe(uint8_t frame, const RgbColor &accent){
         (accent.R * brightness) / 255,
         (accent.G * brightness) / 255,
         (accent.B * brightness) / 255);
-    ledStrip.ClearTo(scaled);
+    clearToOrdered(scaled);
 }
 
 static inline void fillFirefly(uint8_t frame){
@@ -185,26 +205,26 @@ static inline void fillFirefly(uint8_t frame){
     for(uint8_t i = 0; i < 4; ++i){
         uint16_t idx = random(NUM_LEDS);
         uint8_t glow = (sin(frame * 0.2f + idx) + 1.0f) * 127;
-        ledStrip.SetPixelColor(idx, RgbColor(glow, glow, glow));
+        setPixelColorOrdered(idx, RgbColor(glow, glow, glow));
     }
 }
 
 static inline void fillRipple(uint8_t frame, const RgbColor &accent){
-    ledStrip.ClearTo(RgbColor(0, 0, 0));
+    clearToOrdered(RgbColor(0, 0, 0));
     uint16_t center = (frame * 2) % NUM_LEDS;
     for(uint16_t i = 0; i < NUM_LEDS; ++i){
         uint16_t dist = abs((int)center - (int)i);
         uint8_t intensity = dist < 40 ? max(0, 255 - dist * 6) : 0;
         RgbColor scaled((accent.R * intensity) / 255, (accent.G * intensity) / 255, (accent.B * intensity) / 255);
-        ledStrip.SetPixelColor(i, scaled);
+        setPixelColorOrdered(i, scaled);
     }
 }
 
 static inline void fillDots(uint8_t frame){
-    ledStrip.ClearTo(RgbColor(0, 0, 0));
+    clearToOrdered(RgbColor(0, 0, 0));
     for(uint8_t i = 0; i < 12; ++i){
         uint16_t idx = (frame * (i + 1) + i * 7) % NUM_LEDS;
-        ledStrip.SetPixelColor(idx, wheelColor(idx + frame * 5));
+        setPixelColorOrdered(idx, wheelColor(idx + frame * 5));
     }
 }
 
@@ -214,7 +234,7 @@ static inline void fillGradient(uint8_t frame, const RgbColor &accent){
         uint8_t r = (accent.R * (1.0f - t)) + (wheelColor(frame).R * t);
         uint8_t g = (accent.G * (1.0f - t)) + (wheelColor(frame).G * t);
         uint8_t b = (accent.B * (1.0f - t)) + (wheelColor(frame).B * t);
-        ledStrip.SetPixelColor(i, RgbColor(r, g, b));
+        setPixelColorOrdered(i, RgbColor(r, g, b));
     }
 }
 
@@ -230,15 +250,15 @@ static inline void fillMeteor(uint8_t frame){
             (color.R * brightness) / 255,
             (color.G * brightness) / 255,
             (color.B * brightness) / 255);
-        ledStrip.SetPixelColor(idx, scaled);
+        setPixelColorOrdered(idx, scaled);
     }
 }
 
 static inline void fillJuggle(uint8_t frame){
-    ledStrip.ClearTo(RgbColor(0, 0, 0));
+    clearToOrdered(RgbColor(0, 0, 0));
     for(uint8_t i = 0; i < 8; ++i){
         uint16_t pos = (frame * (i + 1)) % NUM_LEDS;
-        ledStrip.SetPixelColor(pos, wheelColor(frame + i * 32));
+        setPixelColorOrdered(pos, wheelColor(frame + i * 32));
     }
 }
 
@@ -249,21 +269,21 @@ static inline void fillAurora(uint8_t frame){
         uint8_t r = static_cast<uint8_t>(wave1 * 120);
         uint8_t g = static_cast<uint8_t>(wave2 * 200);
         uint8_t b = static_cast<uint8_t>((wave1 * 0.5f + wave2 * 0.5f) * 255);
-        ledStrip.SetPixelColor(i, RgbColor(r, g, b));
+        setPixelColorOrdered(i, RgbColor(r, g, b));
     }
 }
 
 static inline void fillCandy(uint8_t frame){
     for(uint16_t i = 0; i < NUM_LEDS; ++i){
         bool stripe = ((i + frame) / 4) % 2 == 0;
-        ledStrip.SetPixelColor(i, stripe ? RgbColor(255, 80, 120) : RgbColor(40, 0, 70));
+        setPixelColorOrdered(i, stripe ? RgbColor(255, 80, 120) : RgbColor(40, 0, 70));
     }
 }
 
 static inline void fillTwirl(uint8_t frame){
     for(uint16_t i = 0; i < NUM_LEDS; ++i){
         uint8_t hue = (i * 5 + frame * 3) & 0xFF;
-        ledStrip.SetPixelColor(i, wheelColor(hue));
+        setPixelColorOrdered(i, wheelColor(hue));
     }
 }
 
@@ -351,7 +371,7 @@ static inline void renderPattern(uint8_t frame){
 void setup_WS2815(){
     initPatterns();
     ledStrip.Begin();
-    ledStrip.ClearTo(RgbColor(0, 0, 0));
+    clearToOrdered(RgbColor(0, 0, 0));
     ledStrip.Show();
     ledLastUpdate = millis();
     ledFrame = 0;
@@ -363,22 +383,23 @@ void setup_WS2815(){
 
 void loop_WS2815(){
     if(!Pow_WS2815){
-                if(ledLastPowerState){
+        if(ledLastPowerState){
             ledStrip.SetBrightness(0);
-            ledStrip.ClearTo(RgbColor(0, 0, 0));
+            clearToOrdered(RgbColor(0, 0, 0));
             ledStrip.Show();
             ledLastPowerState = false;
         }
         ledFrame = 0;
         ledLastUpdate = millis();
         scheduleNextPattern();
-        ledLastPowerState = true;
+        return;
     }
 
     if(!ledLastPowerState){
         ledStrip.SetBrightness(constrain(new_bright, 0, 255));
-        ledStrip.ClearTo(RgbColor(0, 0, 0));
+        clearToOrdered(RgbColor(0, 0, 0));
         ledStrip.Show();
+        ledLastPowerState = true;
         return;
     }
 
@@ -386,7 +407,7 @@ void loop_WS2815(){
 
     if(ColorRGB){
         ledStrip.SetBrightness(constrain(new_bright, 0, 255));
-        ledStrip.ClearTo(parseHexColor(LEDColor));
+        clearToOrdered(parseHexColor(LEDColor));
         ledStrip.Show();
         return;
     }

@@ -90,6 +90,7 @@ bool LedAutoplay = true;
 int LedAutoplayDuration = 30;
 String LedPattern = "rainbow";
 String LedColorMode = "auto";
+String LedColorOrder = "GRB";
 int LedBrightness = 200;
 int currentPatternIndex = 0; //Номер цветовой программы в реальном времени
 
@@ -1646,6 +1647,7 @@ window.addEventListener('resize', ()=>{
     if(typeof j.LedPattern !== 'undefined') updateSelectValue('LedPattern', j.LedPattern);
     if(typeof j.LedColorMode !== 'undefined') updateSelectValue('LedColorMode', j.LedColorMode);
     if(typeof j.LedBrightness !== 'undefined') updateSliderDisplay('LedBrightness', j.LedBrightness);
+    if(typeof j.LedColorOrder !== 'undefined') updateSelectValue('LedColorOrder', j.LedColorOrder);
     if(typeof j.LedAutoplay !== 'undefined') updateSelectValue('LedAutoplay', j.LedAutoplay);
     if(typeof j.LedAutoplayDuration !== 'undefined') updateSliderDisplay('LedAutoplayDuration', j.LedAutoplayDuration);
     if(typeof j.ModeSelect !== 'undefined') updateSelectValue('ModeSelect', j.ModeSelect);
@@ -1682,6 +1684,7 @@ function setImg(x){
         if(key=="ThemeColor") { ThemeColor = valStr; saveValue<String>(key.c_str(), valStr); }
         else if(key=="LEDColor") { LEDColor = valStr; saveValue<String>(key.c_str(), valStr); }
         else if(key=="LedColorMode") { LedColorMode = valStr; ColorRGB = LedColorMode.equalsIgnoreCase("manual"); saveValue<String>("LedColorMode", LedColorMode); }
+        else if(key=="LedColorOrder") { LedColorOrder = valStr; saveValue<String>("LedColorOrder", LedColorOrder); }
         else if(key=="LedBrightness") { LedBrightness = constrain(valStr.toInt(), 0, 255); new_bright = LedBrightness; saveValue<int>("LedBrightness", LedBrightness); }
         else if(key=="LedPattern") { LedPattern = valStr; saveValue<String>("LedPattern", LedPattern); }
         else if(key=="LedAutoplay") { LedAutoplay = valStr.toInt() != 0; saveValue<int>("LedAutoplay", LedAutoplay ? 1 : 0); }
@@ -1818,7 +1821,7 @@ function setImg(x){
                +"\",\"button1\":"+String(button1)+",\"button2\":"+String(button2)+",\"button_WS2815\":"+String(Pow_WS2815 ? 1 : 0)
                +",\"MotorSpeed\":"+String(MotorSpeedSetting)
                +",\"RangeMin\":"+String(RangeMin)+",\"RangeMax\":"+String(RangeMax)
-               +",\"LEDColor\":\""+LEDColor+"\",\"LedPattern\":\""+LedPattern+"\",\"LedColorMode\":\""+LedColorMode+"\",\"LedBrightness\":"+String(LedBrightness)
+                +",\"LEDColor\":\""+LEDColor+"\",\"LedPattern\":\""+LedPattern+"\",\"LedColorMode\":\""+LedColorMode+"\",\"LedColorOrder\":\""+LedColorOrder+"\",\"LedBrightness\":"+String(LedBrightness)
                +",\"LedAutoplay\":"+String(LedAutoplay ? 1 : 0)+",\"LedAutoplayDuration\":"+String(LedAutoplayDuration)
                +",\"ModeSelect\":\""+ModeSelect+"\",\"DaysSelect\":\""+DaysSelect+"\""
                +",\"IntInput\":"+String(IntInput)+",\"FloatInput\":"+String(FloatInput)

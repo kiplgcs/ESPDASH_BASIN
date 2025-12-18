@@ -77,7 +77,13 @@ inline void interface(){
     oab.option("1", "Автомат");
     oab.option("0", "Вручную");
     oab.select("LedAutoplay", "Автосмена");
-    
+    oab.option("GRB", "WS2815 / WS2812 (GRB)");
+    oab.option("RGB", "WS2811 (RGB)");
+    oab.option("GBR", "GBR");
+    oab.option("RBG", "RBG");
+    oab.option("BRG", "BRG");
+    oab.option("BGR", "BGR");
+    oab.select("LedColorOrder", "Порядок цветов ленты");
     // oab.time("Timer1", "Start Time");
     // oab.text("Comment", "Comment");
 

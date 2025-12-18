@@ -152,6 +152,7 @@ void setup() {
   ColorLED = loadValue<String>("LEDColor","#00ff00");      // WS2815
   LedPattern = loadValue<String>("LedPattern", LedPattern);
   LedColorMode = loadValue<String>("LedColorMode", LedColorMode);
+  LedColorOrder = loadValue<String>("LedColorOrder", LedColorOrder);
   ColorRGB = LedColorMode.equalsIgnoreCase("manual");
   LedAutoplay = loadValue<int>("LedAutoplay", LedAutoplay ? 1 : 0) != 0;
   LedAutoplayDuration = loadValue<int>("LedAutoplayDuration", LedAutoplayDuration);
