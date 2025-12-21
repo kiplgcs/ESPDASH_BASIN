@@ -313,13 +313,11 @@ private:
       ".card.pro-card{background:linear-gradient(135deg,#0f0f12,#151a2d);border:1px solid rgba(129,193,255,0.4);} "
       ".card.pro-card label{color:#9ae7ff;text-transform:uppercase;letter-spacing:0.08em;font-size:0.75em;} "
       ".card.pro-card input,.card.pro-card select{background:#090c10;border-color:#252f40;color:#eff6ff;} "
-            ".graph-heading{width:100%;text-align:center;font-weight:700;font-size:1.05rem;margin-bottom:8px;letter-spacing:0.02em;} "
       ".graph-controls{display:flex;flex-direction:row;flex-wrap:nowrap;gap:18px;align-items:center;} "
       ".graph-controls .control-group{flex:1;min-width:220px;display:flex;align-items:center;gap:10px;} "
       ".graph-controls label{display:inline-flex;font-size:0.72em;color:#9fb4c8;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:0;white-space:nowrap;} "
       ".graph-controls select,.graph-controls input{margin-bottom:0;flex:1;} "
       ".dash-graph{width:100%;background:#05070a;}"
-            ".graph-tooltip{position:fixed;pointer-events:none;background:rgba(0,0,0,0.78);color:#f2f6ff;border:1px solid rgba(255,255,255,0.12);padding:6px 10px;border-radius:8px;font-size:0.82rem;box-shadow:0 6px 16px rgba(0,0,0,0.4);z-index:2000;} "
       ".card:has(#ModeSelect),.card:has(#LEDColor),.card:has(#Timer1),"
       ".card:has(#FloatInput),.card:has(#IntInput),.card:has(#CurrentTime),"
       ".card:has(#RandomVal),.card:has(#DaysSelect){"
@@ -1490,33 +1488,8 @@ function saveWiFi(){
 }
 
 // ====== ������� ��� ����� � live ======
+let customGraphCanvases = Array.from(document.querySelectorAll("canvas[id^='graph_']"));
 const customGraphTimers = new Map();
-let customGraphCanvases = [];
-let graphTooltip = document.querySelector('.graph-tooltip');
-if(!graphTooltip){
-  graphTooltip = document.createElement('div');
-  graphTooltip.className = 'graph-tooltip';
-  graphTooltip.style.display = 'none';
-  document.body.appendChild(graphTooltip);
-}
-
-let graphControlsBound = false;
-
-const inferUnit = label => {
-  const lower = (label || '').toLowerCase();
-  if(lower.includes('temp')) return '°C';
-  if(lower.includes('speed')) return 'rpm';
-  if(lower.includes('flow')) return 'l/min';
-  if(lower.includes('perc') || lower.includes('%')) return '%';
-  if(lower.includes('time')) return 's';
-  return '';
-};
-
-const formatNumber = val => {
-  const num = Number(val);
-  if(isNaN(num)) return val;
-  return num.toFixed(1);
-};
 
 function resizeCustomGraphs(){
   customGraphCanvases.forEach(canvas=>{
@@ -1528,138 +1501,45 @@ function resizeCustomGraphs(){
   });
 }
 
-function populateGraphTable(tableId, data, unit){
+function populateGraphTable(tableId, data){
   if(!tableId || !data) return;
   const table = document.getElementById(tableId);
   if(!table) return;
   const tbody = table.querySelector('tbody');
   if(!tbody) return;
   tbody.innerHTML = '';
-    const unitText = unit ? ` ${unit}` : '';
   data.forEach((point, index)=>{
     const tr = document.createElement('tr');
     tr.innerHTML = '<td>'+(index+1)+'</td><td>'+point.time+'</td><td>'+point.value+'</td>';
-        tr.innerHTML = '<td>'+(index+1)+'</td><td>'+point.time+'</td><td>'+formatNumber(point.value)+unitText+'</td>';
     tbody.appendChild(tr);
   });
 }
 
 function drawCustomGraph(canvas,data){
-  if(!canvas || !canvas.getContext) return;
+  if(!canvas || !canvas.getContext || !data.length) return;
   const ctx = canvas.getContext('2d');
   if(!ctx) return;
-    const safeData = Array.isArray(data) ? data : [];
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  ctx.fillStyle = '#05070a';
-  ctx.fillRect(0,0,canvas.width,canvas.height);
-  if(!safeData.length){
-    canvas._graphMeta = {points: [], unit: canvas.dataset.yLabel || ''};
-    populateGraphTable(canvas.dataset.tableId, [], canvas.dataset.yLabel || '');
-    return;
-  }
   const width = canvas.width;
   const height = canvas.height;
-const padding = {left:60,right:26,top:28,bottom:40};
-  const chartWidth = Math.max(10, width - padding.left - padding.right);
-  const chartHeight = Math.max(10, height - padding.top - padding.bottom);
-  const maxPointsAttr = parseInt(canvas.dataset.maxPoints);
-  const maxPoints = !isNaN(maxPointsAttr) && maxPointsAttr > 0 ? maxPointsAttr : 10;
-  const pointsToDraw = safeData.slice(-maxPoints);
-  const yValues = pointsToDraw.map(p=>p.value);
-  const rawMin = Math.min(...yValues);
-  const rawMax = Math.max(...yValues);
-  const range = rawMax - rawMin;
-  const paddingFactor = range === 0 ? 0.1 : 0.08;
-  const extra = (range === 0 ? Math.abs(rawMax || rawMin || 1) : range) * paddingFactor;
-  const yMin = rawMin - extra;
-  const yMax = rawMax + extra;
-  const xLabelRaw = canvas.dataset.xLabel || 'X Axis';
-  const yLabelRaw = canvas.dataset.yLabel || 'Y Axis';
-  const xUnit = inferUnit(xLabelRaw);
-  const yUnit = inferUnit(yLabelRaw);
-  const xLabel = xUnit && !xLabelRaw.includes('(') ? `${xLabelRaw} (${xUnit})` : xLabelRaw;
-  const yLabel = yUnit && !yLabelRaw.includes('(') ? `${yLabelRaw} (${yUnit})` : yLabelRaw;
+  ctx.clearRect(0,0,width,height);
+  ctx.fillStyle = '#05070a';
+  ctx.fillRect(0,0,width,height);
 
-  const toX = idx => {
-    const ratio = pointsToDraw.length>1 ? idx/(pointsToDraw.length-1) : 0;
-    return padding.left + ratio * chartWidth;
-  };
-  const toY = val => {
-    const ratio = (val - yMin) / (yMax - yMin || 1);
-    return padding.top + (1 - ratio) * chartHeight;
-  };
-
-  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+  ctx.strokeStyle = 'rgba(255,255,255,0.07)';
   ctx.lineWidth = 1;
-  const gridSteps = 6;
-  for(let i=0;i<=gridSteps;i++){
-    const y = padding.top + (chartHeight/gridSteps)*i;
+  for(let i=0;i<=4;i++){
+    let y = i*(height/4);
     ctx.beginPath();
-    ctx.moveTo(padding.left, y);
-    ctx.lineTo(width - padding.right, y);
-    ctx.stroke();
-  }
-  for(let i=0;i<=gridSteps;i++){
-    const x = padding.left + (chartWidth/gridSteps)*i;
-    ctx.beginPath();
-    ctx.moveTo(x, padding.top);
-    ctx.lineTo(x, height - padding.bottom);
+    ctx.moveTo(0,y);
+    ctx.lineTo(width,y);
     ctx.stroke();
   }
 
-  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
-  ctx.lineWidth = 1.6;
-  ctx.beginPath();
-  ctx.moveTo(padding.left, padding.top - 6);
-  ctx.lineTo(padding.left, height - padding.bottom);
-  ctx.lineTo(width - padding.right + 6, height - padding.bottom);
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.moveTo(padding.left, padding.top - 6);
-  ctx.lineTo(padding.left - 4, padding.top + 4);
-  ctx.lineTo(padding.left + 4, padding.top + 4);
-  ctx.closePath();
-  ctx.fillStyle = 'rgba(255,255,255,0.65)';
-  ctx.fill();
-  ctx.beginPath();
-  ctx.moveTo(width - padding.right + 6, height - padding.bottom);
-  ctx.lineTo(width - padding.right - 4, height - padding.bottom - 4);
-  ctx.lineTo(width - padding.right - 4, height - padding.bottom + 4);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.fillStyle = '#d7e2f2';
-  ctx.font = '12px Inter, Arial';
-  ctx.textAlign = 'right';
-  ctx.textBaseline = 'middle';
-  for(let i=0;i<=gridSteps;i++){
-    const value = yMin + (yMax - yMin) * (i/gridSteps);
-    const y = toY(value);
-    ctx.fillText(formatNumber(value) + (yUnit ? ` ${yUnit}` : ''), padding.left - 8, y);
-  }
-
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'top';
-  const xTickCount = Math.min(gridSteps, Math.max(2, pointsToDraw.length));
-  for(let i=0;i<xTickCount;i++){
-    const idx = Math.round((pointsToDraw.length - 1) * (i/(xTickCount-1)));
-    const label = (pointsToDraw[idx] && pointsToDraw[idx].time) || '';
-    const x = toX(idx);
-    ctx.fillText(label, x, height - padding.bottom + 6);
-  }
-
-  ctx.save();
-  ctx.textAlign = 'right';
-  ctx.textBaseline = 'bottom';
-  ctx.fillText(xLabel, width - padding.right, height - padding.bottom - 6);
-  ctx.translate(padding.left + 4, padding.top);
-  ctx.rotate(-Math.PI/2);
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'top';
-  ctx.fillText(yLabel, 0, -6);
-  ctx.restore();
-
+  const maxPointsAttr = parseInt(canvas.dataset.maxPoints);
+  const maxPoints = !isNaN(maxPointsAttr) && maxPointsAttr > 0
+    ? maxPointsAttr
+    : 10;
+  const pointsToDraw = data.slice(-maxPoints);
   const lineColor = canvas.dataset.lineColor || '#4CAF50';
   const pointColor = canvas.dataset.pointColor || '#ff0000';
   ctx.strokeStyle = lineColor;
@@ -1670,58 +1550,25 @@ const padding = {left:60,right:26,top:28,bottom:40};
     const y = height - (pointsToDraw[i].value/50.0)*height;
     if(i==0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
   }
-    pointsToDraw.forEach((p, idx)=>{
-    const x = toX(idx);
-    const y = toY(p.value);
-    if(idx===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
-  });
   ctx.stroke();
 
-  const screenPoints = [];
-  pointsToDraw.forEach((p, idx)=>{
-    const x = toX(idx);
-    const y = toY(p.value);
-    screenPoints.push({x,y,value:p.value,time:p.time});
+  ctx.fillStyle = pointColor;
+  for(let i=0;i<pointsToDraw.length;i++){
+    const x = i*(width/(pointsToDraw.length || 1));
+    const y = height - (pointsToDraw[i].value/50.0)*height;
     ctx.beginPath();
     ctx.arc(x,y,3,0,2*Math.PI);
     ctx.fill();
-    });
-
-  if(screenPoints.length){
-    const last = screenPoints[screenPoints.length-1];
-    ctx.beginPath();
-    ctx.fillStyle = '#ffcc66';
-    ctx.strokeStyle = '#ffe6a3';
-    ctx.lineWidth = 2;
-    ctx.arc(last.x,last.y,5,0,2*Math.PI);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = '#f7f2de';
-    ctx.font = '12px Inter, Arial';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'bottom';
-    ctx.fillText(`${formatNumber(last.value)}${yUnit ? ' '+yUnit : ''}`, Math.min(width - padding.right, last.x + 8), last.y - 8);
   }
-
-  canvas._graphMeta = {points: screenPoints, unit: yUnit};
-  populateGraphTable(canvas.dataset.tableId, pointsToDraw, yUnit);
+  populateGraphTable(canvas.dataset.tableId, pointsToDraw);
 }
 
 function fetchCustomGraph(canvas){
   if(!canvas) return;
   const series = canvas.dataset.series || canvas.id;
   fetch('/graphData?series='+encodeURIComponent(series))
-    .then(r=>{
-      if(!r.ok) throw new Error('Graph data fetch failed: '+r.status);
-      return r.json();
-    })
-    .then(j=>{
-      drawCustomGraph(canvas, Array.isArray(j) ? j : []);
-    })
-    .catch(err=>{
-      console.warn('Graph data error for', series, err);
-      drawCustomGraph(canvas, []);
-    });
+    .then(r=>r.json())
+    .then(j=>drawCustomGraph(canvas,j));
 }
 
 function restartCustomGraphInterval(canvas){
@@ -1729,102 +1576,56 @@ function restartCustomGraphInterval(canvas){
   if(customGraphTimers.has(canvas)) clearInterval(customGraphTimers.get(canvas));
   const interval = parseInt(canvas.dataset.updateInterval);
   const delay = (!isNaN(interval) && interval > 0) ? interval : 1000;
-  const timer = setInterval(()=>{
-    if(document.hidden) return;
-    fetchCustomGraph(canvas);
-  }, delay);
+  const timer = setInterval(()=>fetchCustomGraph(canvas), delay);
   customGraphTimers.set(canvas, timer);
 }
 
-function handleGraphHover(canvas, evt){
-  if(!canvas || !canvas._graphMeta || !canvas._graphMeta.points) return;
-  const rect = canvas.getBoundingClientRect();
-  const x = evt.clientX - rect.left;
-  const y = evt.clientY - rect.top;
-  const points = canvas._graphMeta.points;
-  let closest = null;
-  let minDist = Infinity;
-  points.forEach(p=>{
-    const dx = p.x - x;
-    const dy = p.y - y;
-    const dist = Math.sqrt(dx*dx + dy*dy);
-    if(dist < minDist){
-      minDist = dist;
-      closest = p;
-    }
-  });
-  if(closest && minDist <= 12){
-    const unit = canvas._graphMeta.unit ? ` ${canvas._graphMeta.unit}` : '';
-    graphTooltip.innerHTML = `<div><strong>${closest.time}</strong></div><div>${formatNumber(closest.value)}${unit}</div>`;
-    graphTooltip.style.display = 'block';
-    graphTooltip.style.left = `${evt.clientX + 12}px`;
-    graphTooltip.style.top = `${evt.clientY + 12}px`;
-  }else{
-    graphTooltip.style.display = 'none';
-  }
-}
+resizeCustomGraphs();
+customGraphCanvases.forEach(canvas=>{
+  fetchCustomGraph(canvas);
+  restartCustomGraphInterval(canvas);
+});
 
-function bindGraphControls(){
-  if(graphControlsBound) return;
-  graphControlsBound = true;
-  document.querySelectorAll('.graph-update-interval').forEach(select=>{
-    const graphId = select.dataset.graph;
-    const canvas = document.getElementById('graph_'+graphId);
-    const series = canvas ? (canvas.dataset.series || graphId) : graphId;
-    if(canvas && canvas.dataset.updateInterval) select.value = canvas.dataset.updateInterval;
-    select.addEventListener('change', ()=>{
-      let value = parseInt(select.value);
-      if(isNaN(value) || value < 100) value = 100;
-      select.value = value;
-      const target = document.getElementById('graph_'+graphId);
-      if(!target) return;
-      target.dataset.updateInterval = value;
-      fetch('/save?key=graphUpdateInterval_'+graphId+'&series='+encodeURIComponent(series)+'&val='+encodeURIComponent(value));
-      fetchCustomGraph(target);
-      restartCustomGraphInterval(target);
-    });
-  });
-  document.querySelectorAll('.graph-max-points').forEach(input=>{
-    const graphId = input.dataset.graph;
-    const canvas = document.getElementById('graph_'+graphId);
-    const series = canvas ? (canvas.dataset.series || graphId) : graphId;
-    if(canvas && canvas.dataset.maxPoints) input.value = canvas.dataset.maxPoints;
-    input.addEventListener('change', ()=>{
-      let value = parseInt(input.value);
-      if(isNaN(value) || value < 1) value = 1;
-      if(value > 50) value = 50;
-      input.value = value;
-      const target = document.getElementById('graph_'+graphId);
-      if(!target) return;
-      target.dataset.maxPoints = value;
-      fetch('/save?key=graphMaxPoints_'+graphId+'&series='+encodeURIComponent(series)+'&val='+encodeURIComponent(value));
-      fetchCustomGraph(target);
-    });
-  });
-}
 
-function initializeCustomGraphs(){
-  customGraphCanvases = Array.from(document.querySelectorAll("canvas[id^='graph_']"));
-  if(customGraphCanvases.length){
-    resizeCustomGraphs();
-    customGraphCanvases.forEach(canvas=>{
-      fetchCustomGraph(canvas);
-      restartCustomGraphInterval(canvas);
-      canvas.addEventListener('mousemove', evt=>handleGraphHover(canvas, evt));
-      canvas.addEventListener('mouseleave', ()=>{ if(graphTooltip) graphTooltip.style.display='none'; });
-    });
-  }
-  bindGraphControls();
-}
+document.querySelectorAll('.graph-update-interval').forEach(select=>{
+  const graphId = select.dataset.graph;
+  const canvas = document.getElementById('graph_'+graphId);
+  const series = canvas ? (canvas.dataset.series || graphId) : graphId;
+  if(canvas && canvas.dataset.updateInterval) select.value = canvas.dataset.updateInterval;
+  select.addEventListener('change', ()=>{
+    let value = parseInt(select.value);
+    if(isNaN(value) || value < 100) value = 100;
+    select.value = value;
+    const target = document.getElementById('graph_'+graphId);
+    if(!target) return;
+    target.dataset.updateInterval = value;
+    // fetch('/save?key=graphUpdateInterval_'+graphId+'&val='+encodeURIComponent(value));
+    fetch('/save?key=graphUpdateInterval_'+graphId+'&series='+encodeURIComponent(series)+'&val='+encodeURIComponent(value));
+    fetchCustomGraph(target);
+    restartCustomGraphInterval(target);
+  });
+});
 
-if(document.readyState === 'loading'){
-  document.addEventListener('DOMContentLoaded', initializeCustomGraphs);
-} else {
-  initializeCustomGraphs();
-}
+document.querySelectorAll('.graph-max-points').forEach(input=>{
+  const graphId = input.dataset.graph;
+  const canvas = document.getElementById('graph_'+graphId);
+  const series = canvas ? (canvas.dataset.series || graphId) : graphId;
+  if(canvas && canvas.dataset.maxPoints) input.value = canvas.dataset.maxPoints;
+  input.addEventListener('change', ()=>{
+    let value = parseInt(input.value);
+    if(isNaN(value) || value < 1) value = 1;
+    if(value > 50) value = 50;
+    input.value = value;
+    const target = document.getElementById('graph_'+graphId);
+    if(!target) return;
+    target.dataset.maxPoints = value;
+    // fetch('/save?key=graphMaxPoints_'+graphId+'&val='+encodeURIComponent(value));
+    fetch('/save?key=graphMaxPoints_'+graphId+'&series='+encodeURIComponent(series)+'&val='+encodeURIComponent(value));
+    fetchCustomGraph(target);
+  });
+});
 
 window.addEventListener('resize', ()=>{
-  if(!customGraphCanvases.length) return;
   resizeCustomGraphs();
   customGraphCanvases.forEach(canvas=>{
     fetchCustomGraph(canvas);
