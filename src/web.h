@@ -1498,6 +1498,15 @@ function saveWiFi(){
 // ====== ������� ��� ����� � live ======
 let customGraphCanvases = Array.from(document.querySelectorAll("canvas[id^='graph_']"));
 const customGraphTimers = new Map();
+const graphDataCache = new Map();
+const graphTooltip = document.createElement('div');
+graphTooltip.className = 'graph-tooltip hidden';
+document.body.appendChild(graphTooltip);
+
+customGraphCanvases.forEach(canvas=>{
+  canvas.addEventListener('mousemove', evt=>showGraphTooltip(canvas, evt));
+  canvas.addEventListener('mouseleave', hideGraphTooltip);
+});
 
 function resizeCustomGraphs(){
   customGraphCanvases.forEach(canvas=>{
@@ -1568,8 +1577,38 @@ function drawCustomGraph(canvas,data){
     ctx.arc(x,y,3,0,2*Math.PI);
     ctx.fill();
   }
+  graphDataCache.set(canvas, pointsToDraw);
   populateGraphTable(canvas.dataset.tableId, pointsToDraw);
 }
+
+function hideGraphTooltip(){
+  graphTooltip.classList.add('hidden');
+}
+
+function showGraphTooltip(canvas, evt){
+  if(!canvas || !graphDataCache.has(canvas)) return hideGraphTooltip();
+  const points = graphDataCache.get(canvas);
+  if(!points || !points.length) return hideGraphTooltip();
+
+  const rect = canvas.getBoundingClientRect();
+  const relX = evt.clientX - rect.left;
+  const width = canvas.width || rect.width;
+  const height = canvas.height || rect.height;
+  const step = points.length ? (width / (points.length || 1)) : width;
+  let index = Math.round(relX / (step || 1));
+  if(index < 0) index = 0;
+  if(index >= points.length) index = points.length - 1;
+  const point = points[index];
+  const x = index * (width / (points.length || 1));
+  let y = height - (point.value / 50.0) * height;
+  if(!isFinite(y)) y = height / 2;
+
+  graphTooltip.textContent = `${point.time}: ${point.value}`;
+  graphTooltip.style.left = `${rect.left + x}px`;
+  graphTooltip.style.top = `${rect.top + y}px`;
+  graphTooltip.classList.remove('hidden');
+}
+
 
 function fetchCustomGraph(canvas){
   if(!canvas) return;
