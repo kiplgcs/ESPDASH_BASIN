@@ -56,6 +56,52 @@ public:
         addElement("color", id, label, defaultValue);
     }
 
+  void image(const String &id, const String &filename, const String &style=""){
+        auto ensureUnit = [](String raw) -> String {
+            raw.trim();
+            if(!raw.length()) return raw;
+            for(size_t i = 0; i < raw.length(); i++){
+                char c = raw[i];
+                if(!((c >= '0' && c <= '9') || c == '.' || c == '-')) return raw;
+            }
+            return raw + "px";
+        };
+
+        String normalized = style;
+        if(normalized.length() && normalized[normalized.length()-1] != ';') normalized += ';';
+
+        String xRaw, yRaw, rebuilt;
+        int start = 0;
+        while(start < normalized.length()){
+            int end = normalized.indexOf(';', start);
+            if(end < 0) end = normalized.length();
+            String token = normalized.substring(start, end);
+            token.trim();
+            if(token.length()){
+                int sep = token.indexOf(':');
+                if(sep > 0){
+                    String key = token.substring(0, sep); key.trim();
+                    String val = token.substring(sep + 1); val.trim();
+                    if(key.equalsIgnoreCase("x")) xRaw = ensureUnit(val);
+                    else if(key.equalsIgnoreCase("y")) yRaw = ensureUnit(val);
+                    else rebuilt += key + ':' + val + ';';
+                } else {
+                    rebuilt += token + ';';
+                }
+            }
+            start = end + 1;
+        }
+
+        if(xRaw.length() || yRaw.length()){
+            rebuilt += "position:absolute;";
+            rebuilt += "left:" + (xRaw.length() ? xRaw : String("0px")) + ';';
+            rebuilt += "top:" + (yRaw.length() ? yRaw : String("0px")) + ';';
+        }
+
+        addElement("image", id, filename, rebuilt);
+    }
+
+
     void checkbox(const String &id, const String &label, const String &defaultValue="0"){
         addElement("checkbox", id, label, defaultValue);
     }

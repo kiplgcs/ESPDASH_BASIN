@@ -301,7 +301,7 @@ private:
       ".dash-btn.on{background:linear-gradient(135deg,#3a7bd5,#00d2ff);color:#fff;} "
       ".dash-btn.off{background:#222;color:#ddd;opacity:0.9;} "
       ".dash-btn:hover{transform:translateY(-1px);box-shadow:0 6px 14px rgba(0,0,0,0.45);} "
-      ".page{display:none;grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap:15px;} "
+       ".page{display:none;position:relative;grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap:15px;} "
       ".page.active{display:block;} "
       "label{display:block;margin-bottom:5px;font-size:0.9em;} "
       "input,select{width:100%;padding:7px;margin-bottom:10px;background:#111;border:1px solid #333;color:#ddd;border-radius:6px;} "
@@ -512,82 +512,133 @@ private:
       for(auto &t : self->tabs){
           html += "<div id='"+t.id+"' class='page"+String(firstPage?" active":"")+"'><h3>"+t.title+"</h3>";
 
-// Пример для первой вкладки с GIF
-if(t.id == "tab1"){
-    html += "<div class=\"card\" style=\"position:relative; text-align:center;\">";
+     for(auto &e : self->elements){
+              if(e.tab != t.id || e.type != "image") continue;
 
-    html += "<img id=\"dynImg\" src=\"/getImage\""
-            "style=\"display:block; margin:0 auto; max-width:80%; height:auto;"
-            "border-radius:12px; box-shadow:0 4px 12px rgba(0,0,0,0.5);"
-            "position:relative; z-index:1;\"/>";
+              String imgSrc = e.label;
+              if(!imgSrc.startsWith("http") && !imgSrc.startsWith("/")) imgSrc = "/" + imgSrc;
+              if(imgSrc == "/getImage") imgSrc = "/getImage";
 
-    // Генерация элементов UI
-    for(auto &e : self->elements){
-        if(e.tab == t.id && e.type == "displayStringAbsolute"){
-            String styleStr = e.value;
-            // Чтение свойства из строки стилей, например "fontSize:24;color:#00ff00;"
-            auto readProp = [&](const String &prop)->String {
-                String key = prop + ":";
-                int idx = styleStr.indexOf(key);
-                if(idx < 0) return "";
-                int start = idx + key.length();
-                int end = styleStr.indexOf(";", start);
-                if(end < 0) end = styleStr.length();
-                return styleStr.substring(start, end);
-            };
-            // Нормализация координат: если нет единиц, добавляем "px"
-            auto normalizeCoord = [&](const String &raw)->String {
-                if(raw.length() == 0) return raw;
-                bool hasUnit = false;
-                for(int i=0;i<raw.length();i++){
-                    char c = raw[i];
-                    if((c>='0' && c<='9') || c=='-' || c=='.') continue;
-                    hasUnit = true;
-                    break;
-                }
-                return hasUnit ? raw : raw + "px";
-            };
+              String widthRaw, heightRaw, leftRaw, topRaw, extraStyles;
 
-            // Получение параметров стиля с дефолтными значениями
-            String fontSizeStr = readProp("fontSize");
-            int fontSize = fontSizeStr.length() ? fontSizeStr.toInt() : 24;
-            String color = readProp("color"); if(color.length() == 0) color = "#00ff00";
-            String bgColor = readProp("bg"); if(bgColor.length() == 0) bgColor = "rgba(0,0,0,0.65)";
-            String padding = readProp("padding"); if(padding.length() == 0) padding = "6px 12px";
-            String borderRadius = readProp("borderRadius"); if(borderRadius.length() == 0) borderRadius = "14px";
-            // Координаты и трансформация для центрирования
-            String leftRaw = readProp("x");
-            String topRaw = readProp("y");
-            bool hasLeft = leftRaw.length();
-            bool hasTop = topRaw.length();
-            String leftValue = hasLeft ? normalizeCoord(leftRaw) : "50%";
-            String topValue = hasTop ? normalizeCoord(topRaw) : "50%";
-            String translateX = hasLeft ? "0%" : "-50%";
-            String translateY = hasTop ? "0%" : "-50%";
-            String transform = "translate("+translateX+", "+translateY+")";
-            // Формируем inline CSS для элемента
-            String panelStyle = "position:absolute; left:"+leftValue+"; top:"+topValue+"; transform:"+transform+"; "
-                                 "background:"+bgColor+"; color:"+color+"; font-size:"+String(fontSize)+"px; padding:"+padding+"; "
-                                 "border-radius:"+borderRadius+"; display:inline-flex; align-items:center; justify-content:center; "
-                                 "text-align:center; box-sizing:border-box; white-space:nowrap; max-width:90%; "
-                                 "box-shadow:0 10px 20px rgba(0,0,0,0.45); z-index:2;";
+              auto ensureUnit = [&](const String &raw)->String {
+                  String trimmed = raw;
+                  trimmed.trim();
+                  if(trimmed.length() == 0) return trimmed;
+                  bool hasUnit = false;
+                  for(int i=0;i<trimmed.length();i++){
+                      char c = trimmed[i];
+                      if(!((c>='0' && c<='9') || c=='-' || c=='.')){ hasUnit = true; break; }
+                  }
+                  return hasUnit ? trimmed : trimmed + "px";
+              };
 
-            html += "<div id='"+e.id+"' style='"+panelStyle+"'>"+e.label+"</div>";
-        }
-    }
+              String style = e.value;
+              if(style.length() && style[style.length()-1] != ';') style += ';';
+              int tokenStart = 0;
+              while(tokenStart < style.length()){
+                  int tokenEnd = style.indexOf(';', tokenStart);
+                  if(tokenEnd < 0) tokenEnd = style.length();
+                  String token = style.substring(tokenStart, tokenEnd);
+                  token.trim();
+                  if(token.length()){
+                      int sep = token.indexOf(':');
+                      if(sep > 0){
+                          String key = token.substring(0, sep); key.trim();
+                          String val = token.substring(sep + 1); val.trim();
+                          if(key.equalsIgnoreCase("width")) widthRaw = ensureUnit(val);
+                          else if(key.equalsIgnoreCase("height")) heightRaw = ensureUnit(val);
+                          else if(key.equalsIgnoreCase("left")) leftRaw = ensureUnit(val);
+                          else if(key.equalsIgnoreCase("top")) topRaw = ensureUnit(val);
+                          else extraStyles += key + ":" + val + ";";
+                      } else {
+                          extraStyles += token + ";";
+                      }
+                  }
+                  tokenStart = tokenEnd + 1;
+              }
 
-    // Создаем контейнер для кнопок выбора картинок, с CSS для выравнивания и отступов
-    html += "<div style=\"display:flex;gap:10px; justify-content:center; margin-top:10px;\">"
-            "<button onclick=\"setImg(1)\">Картинка 1</button>"  // Кнопка для выбора первой картинки
-            "<button onclick=\"setImg(2)\">Картинка 2</button>"  // Кнопка для выбора второй картинки
-            "</div>"; // Конец контейнера кнопок
+    bool hasCoords = leftRaw.length() || topRaw.length();
+              bool positionProvided = extraStyles.indexOf("position:") >= 0;
 
-    html += "</div>"; // Закрываем .card контейнер для этого элемента интерфейса
-}
+              String imageStyle = "display:block; width:auto; height:auto; border-radius:12px; box-shadow:0 4px 12px rgba(0,0,0,0.5);";
+              imageStyle += widthRaw.length() ? "width:"+widthRaw+";" : "max-width:100%;";
+              imageStyle += heightRaw.length() ? "height:"+heightRaw+";" : "height:auto;";
+              imageStyle += extraStyles;
+              if(!positionProvided) imageStyle += hasCoords ? "position:absolute;" : "position:relative;";
+              imageStyle += " z-index:1; object-fit:contain;";
+
+              String containerStyle = "position:relative; text-align:center; display:inline-flex; align-items:center; justify-content:center;"
+                                       " padding:0; width:fit-content; height:fit-content; background:transparent; border:none; box-shadow:none; margin:0 auto 14px auto;";
+              if(widthRaw.length()) containerStyle += " width:"+widthRaw+";";
+              if(heightRaw.length()) containerStyle += " height:"+heightRaw+";";
+              if(hasCoords){
+                  containerStyle += " position:absolute;";
+                  if(leftRaw.length()) containerStyle += " left:"+leftRaw+";";
+                  if(topRaw.length()) containerStyle += " top:"+topRaw+";";
+                  containerStyle += " margin:0;";
+              }
+
+ html += "<div class=\"card\" style=\""+containerStyle+"\">";
+              html += "<img id='"+e.id+"' src='"+imgSrc+"' data-refresh='"+(imgSrc=="/getImage"?"getImage":"")+"' "
+                      "style='"+imageStyle+"'/>";
+
+              for(auto &overlay : self->elements){
+                  if(overlay.tab != t.id || overlay.type != "displayStringAbsolute") continue;
+
+                  String styleStr = overlay.value;
+                  auto readProp = [&](const String &prop)->String {
+                      String key = prop + ":";
+                      int idx = styleStr.indexOf(key);
+                      if(idx < 0) return "";
+                      int start = idx + key.length();
+                      int end = styleStr.indexOf(";", start);
+                      if(end < 0) end = styleStr.length();
+                      return styleStr.substring(start, end);
+                  };
+
+                  auto normalizeCoord = [&](const String &raw)->String {
+                      if(raw.length() == 0) return raw;
+                      bool hasUnit = false;
+                      for(int i=0;i<raw.length();i++){
+                          char c = raw[i];
+                          if((c>='0' && c<='9') || c=='-' || c=='.') continue;
+                          hasUnit = true;
+                          break;
+                      }
+                      return hasUnit ? raw : raw + "px";
+                  };
+
+                  String fontSizeStr = readProp("fontSize");
+                  int fontSize = fontSizeStr.length() ? fontSizeStr.toInt() : 24;
+                  String color = readProp("color"); if(color.length() == 0) color = "#00ff00";
+                  String bgColor = readProp("bg"); if(bgColor.length() == 0) bgColor = "rgba(0,0,0,0.65)";
+                  String padding = readProp("padding"); if(padding.length() == 0) padding = "6px 12px";
+                  String borderRadius = readProp("borderRadius"); if(borderRadius.length() == 0) borderRadius = "14px";
+                  String leftRaw = readProp("x");
+                  String topRaw = readProp("y");
+                  bool hasLeft = leftRaw.length();
+                  bool hasTop = topRaw.length();
+                  String leftValue = hasLeft ? normalizeCoord(leftRaw) : "50%";
+                  String topValue = hasTop ? normalizeCoord(topRaw) : "50%";
+                  String translateX = hasLeft ? "0%" : "-50%";
+                  String translateY = hasTop ? "0%" : "-50%";
+                  String transform = "translate("+translateX+", "+translateY+")";
+                  String panelStyle = "position:absolute; left:"+leftValue+"; top:"+topValue+"; transform:"+transform+"; "
+                                       "background:"+bgColor+"; color:"+color+"; font-size:"+String(fontSize)+"px; padding:"+padding+"; "
+                                       "border-radius:"+borderRadius+"; display:inline-flex; align-items:center; justify-content:center; "
+                                       "text-align:center; box-sizing:border-box; white-space:nowrap; max-width:90%; "
+                                       "box-shadow:0 10px 20px rgba(0,0,0,0.45); z-index:2;";
+
+                  html += "<div id='"+overlay.id+"' style='"+panelStyle+"'>"+overlay.label+"</div>";
+              }
+
+              html += "</div>";
+          }
 
           for(auto &e : self->elements){
               if(e.tab != t.id) continue;
-              if(t.id == "tab1" && e.type=="displayStringAbsolute") continue;
+                           if(e.type=="displayStringAbsolute" || e.type=="image") continue;
               if(e.type=="displayGraph" || e.type=="displayGraphJS"){
                   String config = e.value;
                   auto readSetting = [&](const String &prop)->String {
@@ -1726,9 +1777,9 @@ fetchMqttConfig();
 // ====== ??????? ???????????? ??????????? (???????? /setjpg ? ????????????? ????????) ======
 function setImg(x){
   fetch('/setjpg?val='+x).then(resp=>{
-    // ??????? ??????????? ? ???????????, ????? ???????? ????
-    const img = document.getElementById('dynImg');
-    if(img) img.src = '/getImage?ts=' + Date.now();
+    document.querySelectorAll('img[data-refresh="getImage"]').forEach(img=>{
+      img.src = '/getImage?ts=' + Date.now();
+    });
   });
 }
 </script></body></html>
@@ -2048,6 +2099,8 @@ server.on("/getImage", HTTP_GET, [](AsyncWebServerRequest *r){
     // ?????? ?????? ???? ? ?????? (???????????)
     server.serveStatic("/img1.jpg", SPIFFS, "/img1.jpg");
     server.serveStatic("/img2.jpg", SPIFFS, "/img2.jpg");
+    server.serveStatic("/anim1.gif", SPIFFS, "/anim1.gif");
+    server.serveStatic("/anim2.gif", SPIFFS, "/anim2.gif");
 
     server.begin();
   }
