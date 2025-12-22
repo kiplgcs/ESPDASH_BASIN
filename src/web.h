@@ -1577,6 +1577,19 @@ function drawCustomGraph(canvas,data){
     ctx.arc(x,y,3,0,2*Math.PI);
     ctx.fill();
   }
+
+  const labelOffsets = [-14, 10, -24, 6];
+  ctx.font = '12px "Inter", "Segoe UI", system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = 'rgba(235, 242, 255, 0.86)';
+  for(let i=0;i<pointsToDraw.length;i++){
+    const x = i*(width/(pointsToDraw.length || 1));
+    const y = height - (pointsToDraw[i].value/50.0)*height;
+    const offset = labelOffsets[i % labelOffsets.length];
+    const labelY = Math.min(height - 6, Math.max(12, y + offset));
+    const label = `${pointsToDraw[i].value}`;
+    ctx.fillText(label, x, labelY);
+  }
   graphDataCache.set(canvas, pointsToDraw);
   populateGraphTable(canvas.dataset.tableId, pointsToDraw);
 }

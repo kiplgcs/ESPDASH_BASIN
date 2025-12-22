@@ -13,7 +13,7 @@ inline WiFiClient mqttWifiClient;
 inline PubSubClient mqttClient(mqttWifiClient);
 
 inline const char* mqttConfigPath = "/mqtt.json";
-inline String mqttHost = "broker.emqx.io";
+inline String mqttHost = "192.168.0.100"; //"broker.emqx.io";
 inline uint16_t mqttPort = 1883;
 inline String mqttUsername = "";
 inline String mqttPassword = "";
