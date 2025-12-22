@@ -1525,11 +1525,12 @@ function populateGraphTable(tableId, data){
   const tbody = table.querySelector('tbody');
   if(!tbody) return;
   tbody.innerHTML = '';
-  data.forEach((point, index)=>{
+  for(let i = data.length - 1, row = 1; i >= 0; i--, row++){
+    const point = data[i];
     const tr = document.createElement('tr');
-    tr.innerHTML = '<td>'+(index+1)+'</td><td>'+point.time+'</td><td>'+point.value+'</td>';
+     tr.innerHTML = '<td>'+row+'</td><td>'+point.time+'</td><td>'+point.value+'</td>';
     tbody.appendChild(tr);
-  });
+  }
 }
 
 function drawCustomGraph(canvas,data){
