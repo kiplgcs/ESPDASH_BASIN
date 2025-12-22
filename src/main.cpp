@@ -3,6 +3,7 @@
 #include <WiFi.h>
 #include <WiFiUdp.h>
 #include <NTPClient.h>
+#include <time.h>
 
 #include "wifi_manager.h"        // Логика Wi-Fi и сохранение параметров
 #include "fs_utils.h"    // Функции для работы с файловой системой SPIFFS
@@ -30,16 +31,20 @@ Adafruit_ADS1115 ads2; // Второй ADS1115 - Хлор
 
 
 
-
-
-
-
-
-
 // ---------- NTP (синхронизация времени) ----------
 WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, "pool.ntp.org", 10800, 1000); 
+NTPClient timeClient(ntpUDP, "pool.ntp.org", 10800, 1000);
 // NTP сервер, смещение +3 часа (МСК), обновление каждые 1 секунду
+
+String formatDateTime(){
+  time_t epoch = timeClient.getEpochTime();
+  struct tm *tmInfo = localtime(&epoch);
+  if(tmInfo == nullptr) return timeClient.getFormattedTime();
+  char buf[20];
+  strftime(buf, sizeof(buf), "%d.%m.%Y %H:%M:%S", tmInfo);
+  return String(buf);
+}
+
 
 /* ---------- Setup ---------- */
 void setup() {
@@ -179,7 +184,7 @@ void loop() {
   if(wifiIsConnected()){
     timeClient.update();
   }
-  CurrentTime = timeClient.getFormattedTime();  // Получение текущего времени
+ CurrentTime = formatDateTime();   // Получение текущего времени
 
   // Генерация случайных значений для демонстрации
   RandomVal = random(0,50);                     // Случайное число

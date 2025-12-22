@@ -714,7 +714,7 @@ if(t.id == "tab1"){
                   html += "</div>";
                   html += "<div class='card' style='overflow-x:auto;'>";
                   html += "<table id='"+tableId+"' style='min-width:400px;'>";
-                  html += "<thead><tr><th>#</th><th>Time</th><th>Value</th></tr></thead><tbody></tbody>";
+                  html += "<thead><tr><th>#</th><th>Date &amp; Time</th><th>Value</th></tr></thead><tbody></tbody>";
                   html += "</table></div>";
                   continue;
               }
