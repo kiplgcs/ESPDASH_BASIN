@@ -175,6 +175,10 @@ void setup() {
 
   dash.begin(); // Запуск дашборда
 
+
+  Serial.printf("PSRAM total: %u\n", ESP.getPsramSize());
+Serial.printf("PSRAM free : %u\n", ESP.getFreePsram());
+
 }
 
 /* ---------- Loop ---------- */
