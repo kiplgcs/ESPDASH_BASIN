@@ -67,6 +67,7 @@ void setup() {
   timeClient.begin();
 
   // Загрузка и применение MQTT параметров
+  loadMqttSettings();
   applyMqttState();
 
   // Запуск OTA-обновлений на порту 8080
@@ -176,8 +177,13 @@ void setup() {
   dash.begin(); // Запуск дашборда
 
 
-  Serial.printf("PSRAM total: %u\n", ESP.getPsramSize());
-Serial.printf("PSRAM free : %u\n", ESP.getFreePsram());
+Serial.printf(
+  "Heap Free: %u | Heap Min: %u | Max Block: %u | PSRAM Free: %u\n",
+  ESP.getFreeHeap(),
+  ESP.getMinFreeHeap(),
+  ESP.getMaxAllocHeap(),
+  ESP.getFreePsram()
+);
 
 }
 

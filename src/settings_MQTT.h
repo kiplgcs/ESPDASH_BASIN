@@ -18,6 +18,7 @@ inline uint16_t mqttPort = 1883;
 inline String mqttUsername = "";
 inline String mqttPassword = "";
 inline bool mqttEnabled = false;
+inline bool mqttIsConnected = false;
 inline unsigned long mqttPublishInterval = 10000;
 inline unsigned long mqttLastPublish = 0;
 
@@ -84,13 +85,17 @@ inline void connectMqtt(){
 
 
     if(connected){
+            mqttIsConnected = true;
       mqttClient.subscribe("home/esp32/tempSet", 0);
+          } else {
+      mqttIsConnected = false;
     }
   }
 }
 
 inline void stopMqttService(){
   mqttClient.disconnect();
+    mqttIsConnected = false;
   mqttLastPublish = 0;
 }
 
@@ -106,6 +111,7 @@ inline void applyMqttState(){
 
 inline void handleMqttLoop(){
   if(!mqttClient.connected()) connectMqtt();
+    mqttIsConnected = mqttClient.connected();
 
   if(!mqttEnabled){
     if(mqttClient.connected()) stopMqttService();
@@ -119,7 +125,8 @@ inline void handleMqttLoop(){
     mqttLastPublish = now;
     if(mqttClient.connected()){
       String payload = String("ESP32 uptime: ") + String(now / 1000) + "s";
-      mqttClient.publish("home/esp32/status", 0, false, payload.c_str());
+      // mqttClient.publish("home/esp32/status", 0, false, payload.c_str());
+          mqttClient.publish("home/esp32/status", payload.c_str(), true);
     }
   }
 }

@@ -243,18 +243,6 @@ String buildChipIdentity(){
   return String(buffer);
 }
 
-inline bool readPsramStats(uint32_t &freePsram, uint32_t &totalPsram){
-#if defined(ARDUINO_ARCH_ESP32)
-  if(psramFound()){
-    freePsram = ESP.getFreePsram();
-    totalPsram = ESP.getPsramSize();
-    return true;
-  }
-#endif
-  freePsram = 0;
-  totalPsram = 0;
-  return false;
-}
 
 // ---------- Структуры UI ----------
 struct Tab { String id; String title; };
@@ -1030,12 +1018,13 @@ else if(e.type=="range"){ // Этот блок создает HTML для диа
               "<li><span>Chip Model / Revision (модель и ревизия чипа)</span><strong id='stat-chip'>--</strong></li>"
               "<li><span>CPU Frequency (MHz) (текущая частота процессора)</span><strong id='stat-cpu'>--</strong></li>"
               "<li><span>Temperature (температура чипа)</span><strong id='stat-temp'>--</strong></li>"
+              "<li><span>Vcc (напряжение питания)</span><strong id='stat-vcc'>--</strong></li>"
               "<li><span>Uptime (время непрерывной работы устройства)</span><strong id='stat-uptime'>--</strong></li>"
               "<li><span>MAC Address (уникальный адрес)</span><strong id='stat-mac'>--</strong></li>"
               "</ul></div>"
               "<div class='stat-group'><div class='stat-heading'>Память и хранилище</div><ul class='stat-list'>"
               "<li><span>Free Heap (свободная оперативная память)</span><strong id='stat-heap'>--</strong></li>"
-               "<li><span>PSRAM (использовано / свободно в PSRAM)</span><strong id='stat-psram'>--</strong></li>"
+              "<li><span>Free PSRAM (свободный объём PSRAM)</span><strong id='stat-psram'>--</strong></li>"
               "<li><span>SPIFFS Used / Free (использовано / свободно в SPIFFS)</span><strong id='stat-spiffs'>--</strong></li>"
               "</ul></div>"
               "</div></div>";
@@ -1132,13 +1121,6 @@ function toggleSidebar(){
     return `${val.toFixed(decimals)} ${units[idx]}`;
   };
 
-  const formatMegaBytes = (value)=>{
-    const num = Number(value);
-    if(isNaN(num)) return String(value || 'N/A');
-    return `${(num / (1024 * 1024)).toFixed(2)} MB`;
-  };
-
-
   const renderSpiffs = (used, free, total)=>{
     if(typeof used === 'undefined' || typeof free === 'undefined') return '--';
     const percent = total ? ((Number(used)/Number(total))*100).toFixed(1) : '0.0';
@@ -1151,15 +1133,15 @@ function toggleSidebar(){
   };
 
 
-    const updateMqttActivationButton = (enabled, connected)=>{
+  const updateMqttActivationButton = (enabled, connected)=>{
 
     const btn = document.getElementById('mqtt-activate-btn');
     if(!btn) return;
-    const active = Boolean(enabled && connected);
-    btn.dataset.enabled = active ? '1' : '0';
+    const active = Boolean(connected);
+    btn.dataset.enabled = enabled ? '1' : '0';
     btn.classList.toggle('btn-activate-on', active);
     btn.classList.toggle('btn-activate-off', !active);
-    btn.innerText = active ? 'Отключить MQTT' : 'Включить MQTT';
+    btn.innerText = active ? 'MQTT работает' : 'Включить MQTT';
   };
 
   function fetchMqttConfig(){
@@ -1245,19 +1227,14 @@ function toggleSidebar(){
       const tempVal = (typeof data.temperature !== 'undefined' && data.temperature !== null) ? data.temperature : 'N/A';
       const tempText = isNaN(Number(tempVal)) ? String(tempVal) : `${Number(tempVal).toFixed(1)} °C`;
       updateStat('stat-temp', tempText);
+      const vccVal = (typeof data.vcc !== 'undefined' && data.vcc !== null) ? data.vcc : 'N/A';
+      const vccText = isNaN(Number(vccVal)) ? String(vccVal) : `${(Number(vccVal)/1000).toFixed(3)} V`;
+      updateStat('stat-vcc', vccText);
       updateStat('stat-uptime', data.uptime || '--');
       updateStat('stat-mac', data.mac || 'N/A');
       updateStat('stat-heap', typeof data.freeHeap !== 'undefined' ? formatBytes(data.freeHeap) : '--');
-       const freePsram = (typeof data.freePsram === 'undefined' || data.freePsram === null) ? null : data.freePsram;
-      const totalPsram = (typeof data.totalPsram === 'undefined' || data.totalPsram === null) ? null : data.totalPsram;
-      let psramText = 'N/A';
-      if(!isNaN(Number(freePsram)) && !isNaN(Number(totalPsram))){
-        const usedPsram = Number(totalPsram) - Number(freePsram);
-        psramText = `${formatMegaBytes(usedPsram)} / ${formatMegaBytes(freePsram)}`;
-      } else if(!isNaN(Number(freePsram))){
-        psramText = formatMegaBytes(freePsram);
-      }
-      updateStat('stat-psram', psramText);
+      const psramVal = (typeof data.freePsram === 'undefined' || data.freePsram === null) ? 'N/A' : data.freePsram;
+      updateStat('stat-psram', isNaN(Number(psramVal)) ? String(psramVal) : formatBytes(psramVal));
       updateStat('stat-spiffs', renderSpiffs(data.spiffsUsed, data.spiffsFree, data.spiffsTotal));
     }).catch(()=>{}).finally(()=>{
       if(manual && refreshBtn){
@@ -1896,12 +1873,13 @@ function setImg(x){
     });
 
     server.on("/mqtt/config", HTTP_GET, [](AsyncWebServerRequest *r){
+            mqttIsConnected = mqttClient.connected();
       String json = "{\\\"host\\\":\\\""+jsonEscape(mqttHost)+"\\\",";
       json += "\\\"port\\\":" + String(mqttPort) + ",";
       json += "\\\"user\\\":\\\""+jsonEscape(mqttUsername)+"\\\",";
       json += "\\\"pass\\\":\\\""+jsonEscape(mqttPassword)+"\\\",";
       json += "\\\"enabled\\\":" + String(mqttEnabled ? 1 : 0) + ",";
-      json += "\\\"connected\\\":" + String((mqttEnabled && mqttClient.connected()) ? 1 : 0) + "}";
+           json += "\\\"connected\\\":" + String((mqttEnabled && mqttIsConnected) ? 1 : 0) + "}";
       r->send(200, "application/json", json);
     });
 
@@ -1987,6 +1965,7 @@ function setImg(x){
       float temperatureVal = NAN;
 #endif
       String temperature = isnan(temperatureVal) ? String("N/A") : String(temperatureVal, 1);
+      String vcc = String("N/A");
       String mac = WiFi.macAddress();
 
       WifiStatusInfo wifiInfo = getWifiStatus();
@@ -1994,23 +1973,21 @@ function setImg(x){
       String ssid = (wifiInfo.ssid.length()) ? wifiInfo.ssid : String("N/A");
       String localIp = (wifiInfo.ip.length()) ? wifiInfo.ip : String("N/A");
       String rssi = wifiInfo.rssi != 0 ? String(wifiInfo.rssi) : String("N/A");
-      uint32_t freePsramVal = 0;
-      uint32_t totalPsramVal = 0;
-      bool hasPsram = readPsramStats(freePsramVal, totalPsramVal);
+#if defined(CONFIG_SPIRAM_SUPPORT) && CONFIG_SPIRAM_SUPPORT
+      String freePsram = psramFound() ? String(ESP.getFreePsram()) : String("N/A");
+#else
+      String freePsram = String("N/A");
+#endif
 
       String json = "{";
       json += "\"chipModelRevision\":\""+jsonEscape(chipModelRevision)+"\",";
       json += "\"cpuFreqMHz\":"+String(cpuFreq)+",";
       json += "\"temperature\":\""+jsonEscape(temperature)+"\",";
+      json += "\"vcc\":\""+jsonEscape(vcc)+"\",";
       json += "\"uptime\":\""+jsonEscape(formatUptime())+"\",";
       json += "\"mac\":\""+jsonEscape(mac)+"\",";
       json += "\"freeHeap\":"+String(ESP.getFreeHeap())+",";
-      json += "\"freePsram\":";
-      json += hasPsram ? String(freePsramVal) : String("null");
-      json += ",";
-      json += "\"totalPsram\":";
-      json += hasPsram ? String(totalPsramVal) : String("null");
-      json += ",";
+      json += "\"freePsram\":\""+jsonEscape(freePsram)+"\",";
       json += "\"spiffsUsed\":"+String(used)+",";
       json += "\"spiffsFree\":"+String(freeSpace)+",";
       json += "\"spiffsTotal\":"+String(total)+",";
