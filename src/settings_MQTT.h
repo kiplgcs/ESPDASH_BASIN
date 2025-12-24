@@ -75,6 +75,7 @@ inline void configureMqttServer(){ // настройка сервера MQTT
 
 inline void connectMqtt(){ // подключение к MQTT
   if(!mqttEnabled) return; // выход если MQTT выключен
+  if(mqttHost.length() == 0) return; // выход если host пустой
   if(WiFi.status() != WL_CONNECTED) return; // выход если нет Wi-Fi
 
   if(!mqttClient.connected()){ // если не подключены
@@ -83,11 +84,10 @@ inline void connectMqtt(){ // подключение к MQTT
     if(mqttUsername.length()) connected = mqttClient.connect(clientId.c_str(), mqttUsername.c_str(), mqttPassword.c_str()); // подключение с логином
     else connected = mqttClient.connect(clientId.c_str()); // подключение без логина
 
-
     if(connected){ // если подключение успешно
-            mqttIsConnected = true; // обновление флага
+      mqttIsConnected = true; // обновление флага
       mqttClient.subscribe("home/esp32/tempSet", 0); // подписка на топик
-          } else { // если не удалось подключиться
+    } else { // если не удалось подключиться
       mqttIsConnected = false; // сброс флага
     }
   }
@@ -95,7 +95,7 @@ inline void connectMqtt(){ // подключение к MQTT
 
 inline void stopMqttService(){ // остановка MQTT
   mqttClient.disconnect(); // отключение от брокера
-    mqttIsConnected = false; // сброс флага подключения
+  mqttIsConnected = false; // сброс флага подключения
   mqttLastPublish = 0; // сброс таймера публикаций
 }
 
@@ -110,9 +110,9 @@ inline void applyMqttState(){ // применение состояния MQTT
 
 inline void handleMqttLoop(){ // основной цикл MQTT
   if(!mqttClient.connected()) connectMqtt(); // переподключение
-    mqttIsConnected = mqttClient.connected(); // обновление флага
+  mqttIsConnected = mqttClient.connected(); // обновление флага
 
-  if(!mqttEnabled){ // если MQTT выключен
+  if(!mqttEnabled || mqttHost.length() == 0){ // если MQTT выключен или host пустой
     if(mqttClient.connected()) stopMqttService(); // отключение
     return; // выход
   }
@@ -125,7 +125,7 @@ inline void handleMqttLoop(){ // основной цикл MQTT
     if(mqttClient.connected()){ // если подключены
       String payload = String("ESP32 uptime: ") + String(now / 1000) + "s"; // сообщение
       // mqttClient.publish("home/esp32/status", 0, false, payload.c_str());
-          mqttClient.publish("home/esp32/status", payload.c_str(), true); // публикация
+      mqttClient.publish("home/esp32/status", payload.c_str(), true); // публикация
     }
   }
 }
