@@ -73,18 +73,18 @@ unsigned long Timer_Callback; // Таймер опроса всех кнопок
 
 /************************* Переменные для записи значений полученных по MQTT*******/
 
-bool Lamp; //, Lamp1;		// Подсветка в бассейне -  Включение в ручную
-bool Lamp_autosvet; //, Saved_Lamp_autosvet;
-bool Power_Time1; //, Saved_Power_Time1;
+bool Lamp , Lamp1;		// Подсветка в бассейне -  Включение в ручную
+bool Lamp_autosvet , Saved_Lamp_autosvet;
+bool Power_Time1, Saved_Power_Time1;
 String Lamp_timeON1, Lamp_timeOFF1; // Утавки времени включения-отключения LED ленты
-//String Saved_Lamp_timeON1, Saved_Lamp_timeOFF1;
+String Saved_Lamp_timeON1, Saved_Lamp_timeOFF1;
 
 
-bool Pow_WS2815; //, Pow_WS28151;		// Включение в ручную
-bool Pow_WS2815_autosvet; //, Saved_Pow_WS2815_autosvet; 
-bool WS2815_Time1; //, Saved_WS2815_Time1;
+bool Pow_WS2815, Pow_WS28151;		// Включение в ручную
+bool Pow_WS2815_autosvet, Saved_Pow_WS2815_autosvet; 
+bool WS2815_Time1, Saved_WS2815_Time1;
 String timeON_WS2815, timeOFF_WS2815; // Утавки времени включения-отключения LED ленты
-//String Saved_timeON_WS2815, Saved_timeOFF_WS2815;
+String Saved_timeON_WS2815, Saved_timeOFF_WS2815;
 
 
 bool ColorRGB = false;    //режим ручного задания цвета

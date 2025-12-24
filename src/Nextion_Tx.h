@@ -48,90 +48,89 @@
 
 
 
+// Функция для поиска в строке подстроки - необходима для преобразования времени в формат для передачи на Nextion
+int getSubstring(const String& input, int start, int end) {
+    // Проверка на корректность входных параметров
+    if (start < 0 || end >= input.length() || start > end) {
+        return 0; // Возвращаем 0 в случае ошибки
+    }
 
-// // Функция для поиска в строке подстроки - необходима для преобразования времени в формат для передачи на Nextion
-// int getSubstring(const String& input, int start, int end) {
-//     // Проверка на корректность входных параметров
-//     if (start < 0 || end >= input.length() || start > end) {
-//         return 0; // Возвращаем 0 в случае ошибки
-//     }
+    String substring = input.substring(start, end + 1);
+    int result = substring.toInt();
 
-//     String substring = input.substring(start, end + 1);
-//     int result = substring.toInt();
-
-//     return result;
-// }
-
+    return result;
+}
 
 
 
-// void Nextion_Transmit (int interval) {
-//   static unsigned long timer;
-//   if (interval + timer > millis()) return; 
-//   timer = millis();
-// // //---------------------------------------------------------------------------------
-// // //---------------------------------------------------------------------------------
-// // //---------------------------------------------------------------------------------
+
+void Nextion_Transmit (int interval) {
+  static unsigned long timer;
+  if (interval + timer > millis()) return; 
+  timer = millis();
+// //---------------------------------------------------------------------------------
+// //---------------------------------------------------------------------------------
+// //---------------------------------------------------------------------------------
 
 // /////////////////////////************* page set_lamp  **************/////////////////////////////
 // ////////////////////////************* page set_lamp  **************//////////////////////////////
 // ///////////////////////************* page set_lamp  **************///////////////////////////////
 
-// if (Lamp != Lamp1 && !triggerRestartNextion){Lamp1 = Lamp;
-//   myNex.writeStr("dim=50");
-//   myNex.writeNum("page0.b0.pic", Lamp ? 2 : 1); 
-//   myNex.writeStr("page set_lamp");
-//   myNex.writeNum("set_lamp.sw3.val", Lamp ? 1 : 0);
+if (Lamp != Lamp1 && !triggerRestartNextion){Lamp1 = Lamp;
+  myNex.writeStr("dim=50");
+  myNex.writeNum("page0.b0.pic", Lamp ? 2 : 1); 
+  myNex.writeStr("page set_lamp");
+  myNex.writeNum("set_lamp.sw3.val", Lamp ? 1 : 0);
 
-//   Error err = RS485.addRequest(40001,1,0x05,0, Lamp ? devices[0].value : devices[1].value);
+  // Error err = RS485.addRequest(40001,1,0x05,0, Lamp ? devices[0].value : devices[1].value);
 
-// }//pcfRelays.digitalWrite(P0, Lamp ? LOW : HIGH);
+}//pcfRelays.digitalWrite(P0, Lamp ? LOW : HIGH);
   
 
 
 
 
 
-// if (Saved_Lamp_autosvet != Lamp_autosvet && !triggerRestartNextion){Saved_Lamp_autosvet = Lamp_autosvet;
-//   myNex.writeStr("dim=50");
-//   myNex.writeStr("page set_lamp");
-//   myNex.writeNum("set_lamp.sw1.val", Lamp_autosvet ? 1 : 0); 
-// }
+if (Saved_Lamp_autosvet != Lamp_autosvet && !triggerRestartNextion){Saved_Lamp_autosvet = Lamp_autosvet;
+  myNex.writeStr("dim=50");
+  myNex.writeStr("page set_lamp");
+  myNex.writeNum("set_lamp.sw1.val", Lamp_autosvet ? 1 : 0); 
+}
 
-// if (Saved_Power_Time1 != Power_Time1 && !triggerRestartNextion){ Saved_Power_Time1 = Power_Time1;
-//   myNex.writeStr("dim=50");  
-//   myNex.writeStr("page set_lamp");
-//   myNex.writeNum("set_lamp.sw0.val", Power_Time1 ? 1 : 0); 
-// }
+if (Saved_Power_Time1 != Power_Time1 && !triggerRestartNextion){ Saved_Power_Time1 = Power_Time1;
+  myNex.writeStr("dim=50");  
+  myNex.writeStr("page set_lamp");
+  myNex.writeNum("set_lamp.sw0.val", Power_Time1 ? 1 : 0); 
+}
 
-// if (Saved_Lamp_timeON1 != Lamp_timeON1 && !triggerRestartNextion) {Saved_Lamp_timeON1 = Lamp_timeON1;
-//   myNex.writeStr("dim=50");
-//   myNex.writeStr("page set_lamp");
-//   myNex.writeNum("set_lamp.n0.val", getSubstring(Lamp_timeON1, 0, 1));
-//   myNex.writeNum("set_lamp.n1.val", getSubstring(Lamp_timeON1, 3, 4));
-// }
+if (Saved_Lamp_timeON1 != Lamp_timeON1 && !triggerRestartNextion) {Saved_Lamp_timeON1 = Lamp_timeON1;
+  myNex.writeStr("dim=50");
+  myNex.writeStr("page set_lamp");
+  myNex.writeNum("set_lamp.n0.val", getSubstring(Lamp_timeON1, 0, 1));
+  myNex.writeNum("set_lamp.n1.val", getSubstring(Lamp_timeON1, 3, 4));
+}
 
-// if (Saved_Lamp_timeOFF1 != Lamp_timeOFF1 && !triggerRestartNextion) {Saved_Lamp_timeOFF1 = Lamp_timeOFF1;
-//   myNex.writeStr("dim=50");
-//   myNex.writeStr("page set_lamp");
-//   myNex.writeNum("set_lamp.n2.val", getSubstring(Lamp_timeOFF1, 0, 1));
-//   myNex.writeNum("set_lamp.n3.val", getSubstring(Lamp_timeOFF1, 3, 4));
-// }
+if (Saved_Lamp_timeOFF1 != Lamp_timeOFF1 && !triggerRestartNextion) {Saved_Lamp_timeOFF1 = Lamp_timeOFF1;
+  myNex.writeStr("dim=50");
+  myNex.writeStr("page set_lamp");
+  myNex.writeNum("set_lamp.n2.val", getSubstring(Lamp_timeOFF1, 0, 1));
+  myNex.writeNum("set_lamp.n3.val", getSubstring(Lamp_timeOFF1, 3, 4));
+}
 
 
 // /////////////////////////************* page set_RGB  **************/////////////////////////////
 // ////////////////////////************* page set_RGB  **************//////////////////////////////
 // ///////////////////////************* page set_RGB  **************///////////////////////////////
 
-// if (Pow_WS28151 != Pow_WS2815 && !triggerRestartNextion){Pow_WS28151 = Pow_WS2815;
-//   myNex.writeStr("dim=50");
-//   myNex.writeNum("page0.b12.pic", Pow_WS2815 ? 2 : 1);
-//   myNex.writeStr("page set_RGB"); 
-//   myNex.writeNum("set_RGB.sw3.val", Pow_WS2815 ? 1 : 0); 
+  if (Pow_WS28151 != Pow_WS2815 && !triggerRestartNextion){Pow_WS28151 = Pow_WS2815;
+    myNex.writeStr("dim=50");
+    myNex.writeNum("page0.b12.pic", Pow_WS2815 ? 2 : 1);
+    myNex.writeStr("page set_RGB"); 
+    myNex.writeNum("set_RGB.sw3.val", Pow_WS2815 ? 1 : 0); 
 
-// //if(Pow_WS2815 == true) {/*loop_i2c(String("LED___ON"));} else if  (Pow_WS2815 ==false) {loop_i2c(String("LED__OFF"));*/}
-//   Error err = RS485.addRequest(40001,1,0x05,1, Pow_WS2815 ? devices[0].value : devices[1].value);
-//  }//pcfRelays.digitalWrite(P1, Pow_WS2815 ? LOW : HIGH);
+  // //if(Pow_WS2815 == true) {/*loop_i2c(String("LED___ON"));} else if  (Pow_WS2815 ==false) {loop_i2c(String("LED__OFF"));*/}
+  //   Error err = RS485.addRequest(40001,1,0x05,1, Pow_WS2815 ? devices[0].value : devices[1].value);
+  }//pcfRelays.digitalWrite(P1, Pow_WS2815 ? LOW : HIGH);
 
 // // if(Color_RGB != Saved_Color_RGB) {Saved_Color_RGB = Color_RGB;
 // // 		//if(Color_RGB == true) {/*loop_i2c(String("CRGB__ON"));} else if  (Color_RGB ==false) {loop_i2c(String("CRGB_OFF"));*/}
@@ -148,32 +147,32 @@
 // 	}
 
 
-// if (Saved_Pow_WS2815_autosvet != Pow_WS2815_autosvet && !triggerRestartNextion){Saved_Pow_WS2815_autosvet = Pow_WS2815_autosvet;
-//   myNex.writeStr("dim=50");
-//   myNex.writeStr("page set_RGB"); 
-//   myNex.writeNum("set_RGB.sw2.val", Pow_WS2815_autosvet ? 1 : 0); 
-// }
+if (Saved_Pow_WS2815_autosvet != Pow_WS2815_autosvet && !triggerRestartNextion){Saved_Pow_WS2815_autosvet = Pow_WS2815_autosvet;
+  myNex.writeStr("dim=50");
+  myNex.writeStr("page set_RGB"); 
+  myNex.writeNum("set_RGB.sw2.val", Pow_WS2815_autosvet ? 1 : 0); 
+}
 
-// if (Saved_WS2815_Time1 != WS2815_Time1 && !triggerRestartNextion){ Saved_WS2815_Time1 = WS2815_Time1;
-//   myNex.writeStr("dim=50");
-//   myNex.writeStr("page set_RGB"); //отобразить страницу
-//   myNex.writeNum("set_RGB.sw0.val", WS2815_Time1); 
-// }
+if (Saved_WS2815_Time1 != WS2815_Time1 && !triggerRestartNextion){ Saved_WS2815_Time1 = WS2815_Time1;
+  myNex.writeStr("dim=50");
+  myNex.writeStr("page set_RGB"); //отобразить страницу
+  myNex.writeNum("set_RGB.sw0.val", WS2815_Time1); 
+}
 
 
-// if (Saved_timeON_WS2815 != timeON_WS2815 && !triggerRestartNextion){Saved_timeON_WS2815 = timeON_WS2815;
-//   myNex.writeStr("dim=50");
-//   myNex.writeStr("page set_RGB"); //отобразить страницу
-//   myNex.writeNum("set_RGB.n0.val", getSubstring(timeON_WS2815, 0, 1));
-//   myNex.writeNum("set_RGB.n1.val", getSubstring(timeON_WS2815, 3, 4));
-// } 
+if (Saved_timeON_WS2815 != timeON_WS2815 && !triggerRestartNextion){Saved_timeON_WS2815 = timeON_WS2815;
+  myNex.writeStr("dim=50");
+  myNex.writeStr("page set_RGB"); //отобразить страницу
+  myNex.writeNum("set_RGB.n0.val", getSubstring(timeON_WS2815, 0, 1));
+  myNex.writeNum("set_RGB.n1.val", getSubstring(timeON_WS2815, 3, 4));
+} 
 
-// if (Saved_timeOFF_WS2815 != timeOFF_WS2815 && !triggerRestartNextion){Saved_timeOFF_WS2815 = timeOFF_WS2815;
-//   myNex.writeStr("dim=50");
-//   myNex.writeStr("page set_RGB");//отобразить страницу
-//   myNex.writeNum("set_RGB.n2.val", getSubstring(timeOFF_WS2815, 0, 1));
-//   myNex.writeNum("set_RGB.n3.val", getSubstring(timeOFF_WS2815, 3, 4));
-// } 
+if (Saved_timeOFF_WS2815 != timeOFF_WS2815 && !triggerRestartNextion){Saved_timeOFF_WS2815 = timeOFF_WS2815;
+  myNex.writeStr("dim=50");
+  myNex.writeStr("page set_RGB");//отобразить страницу
+  myNex.writeNum("set_RGB.n2.val", getSubstring(timeOFF_WS2815, 0, 1));
+  myNex.writeNum("set_RGB.n3.val", getSubstring(timeOFF_WS2815, 3, 4));
+} 
 
 // /////////////////////////************* page set_filtr **************/////////////////////////////
 // ////////////////////////************* page set_filtr **************//////////////////////////////
@@ -503,7 +502,7 @@
 
 
 
-// }
+}
 
 
 
