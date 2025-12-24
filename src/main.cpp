@@ -166,7 +166,9 @@ void setup() {
   LedBrightness = loadValue<int>("LedBrightness", LedBrightness);
   new_bright = LedBrightness;
   Pow_WS2815 = loadButtonState("button_WS2815", 1) != 0;
-
+  WS2815_Time1 = loadValue<int>("WS2815_Time1", 0) != 0;
+  timeON_WS2815 = loadValue<String>("timeON_WS2815", "00:00");
+  timeOFF_WS2815 = loadValue<String>("timeOFF_WS2815", "00:00");
   setup_WS2815();
 
 
@@ -211,7 +213,7 @@ TimerControlRelay(10000);  // TimerControlRelay(600); //Контроль вкл�
   Temperatura = random(220, 320) / 10.0f;      // Случайная температура
 
   // Формирование информационных строк
-  InfoString = "Random value is " + String(RandomVal) + " at " + CurrentTime;
+  InfoString = "Random value is " + String(RandomVal) + " at " + CurrentTime + "Pow_WS2815 = " + String(Pow_WS2815);
   InfoString1 = /*"Speed " + String(Speed, 1) + " / Temp " + String(Temperatura, 1)*/ + " button1 = " + String(button1)
               + " RangeSlider = " + String(RangeMin) + " / " + String(RangeMax);
   

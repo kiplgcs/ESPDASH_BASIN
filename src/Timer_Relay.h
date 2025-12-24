@@ -1,4 +1,8 @@
+#pragma once
+#include <Arduino.h>
+#include <NTPClient.h>
 
+extern NTPClient timeClient;
 // Функция для проверки времени в заданном интервале
 bool checkTimeInInterval(int currentHour, int currentMinute, const String& startTime, const String& endTime)
 {
@@ -145,6 +149,8 @@ void TimerControlRelay(int interval) {
   static unsigned long timer;
   if (interval + timer > millis()) return; 
   timer = millis();
+  int currentHour = timeClient.getHours();
+  int currentMinute = timeClient.getMinutes();
 // //---------------------------------------------------------------------------------
 // //---------------------------------------------------------------------------------
 // //---------------------------------------------------------------------------------
@@ -156,7 +162,7 @@ void TimerControlRelay(int interval) {
 //     } else if (Power_Time1==true) {Lamp=false; } // Выключаем
      
    
-                  if (checkTimeInInterval(hours, minutes, timeON_WS2815, timeOFF_WS2815)&&WS2815_Time1==true) {
+                  if (checkTimeInInterval(currentHour, currentMinute, timeON_WS2815, timeOFF_WS2815)&&WS2815_Time1==true) {
                       Pow_WS2815=true;
                     } else if (WS2815_Time1==true) {Pow_WS2815=false;} // Выключаем
                       

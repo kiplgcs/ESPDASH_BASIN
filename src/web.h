@@ -799,6 +799,9 @@ private:
               else if(e.id=="IntInput") val = String(IntInput);
               else if(e.id=="FloatInput") val = String(FloatInput);
               else if(e.id=="Timer1") val = Timer1;
+              else if(e.id=="WS2815_Time1") val = WS2815_Time1 ? "1" : "0";
+              else if(e.id=="timeON_WS2815") val = timeON_WS2815;
+              else if(e.id=="timeOFF_WS2815") val = timeOFF_WS2815;
               else if(e.id=="Comment") val = Comment;
 
               else if(e.id=="RandomVal") val = String(RandomVal);
@@ -810,6 +813,12 @@ private:
                   val = String(RangeMin) + "-" + String(RangeMax);
               }
 
+
+              if(e.type=="checkbox" && !val.length()){
+                  int defaultVal = e.value.length() ? e.value.toInt() : 0;
+                  val = String(loadValue<int>(e.id.c_str(), defaultVal));
+              }
+
               html += "<div class='card'>";
 
               if(e.type=="text") html += "<label>"+e.label+"</label><input id='"+e.id+"' type='text' value='"+val+"'>";
@@ -817,6 +826,11 @@ private:
               else if(e.type=="float") html += "<label>"+e.label+"</label><input id='"+e.id+"' type='number' step='0.1' value='"+val+"'>";
               else if(e.type=="time") html += "<label>"+e.label+"</label><input id='"+e.id+"' type='time' value='"+val+"'>";
               else if(e.type=="color") html += "<label>"+e.label+"</label><input id='"+e.id+"' type='color' value='"+val+"'>";
+                            else if(e.type=="checkbox"){
+                  String checked = (val == "1" || val.equalsIgnoreCase("true")) ? " checked" : "";
+                  html += "<label><input id='"+e.id+"' type='checkbox' value='1'"+checked+">"+e.label+"</label>";
+              }
+              
               else if(e.type=="slider"){
                   String cfg = e.value;
                   auto readSliderCfg = [&](const String &prop)->String {
@@ -1381,6 +1395,15 @@ function updateInputValue(id, value){
   else if(id==='ThemeColor') refreshThemeColorUI(text);
 }
 
+function updateCheckboxValue(id, value){
+  if(typeof value === 'undefined') return;
+  const el = document.getElementById(id);
+  if(!el || el.dataset.manual === '1') return;
+  const isOn = value == 1 || value === true || value === "1" || String(value).toLowerCase() === "true";
+  el.checked = isOn;
+}
+
+
 function updateSelectValue(id, value){
   if(typeof value === 'undefined') return;
   const el = document.getElementById(id);
@@ -1481,6 +1504,15 @@ document.querySelectorAll('input[type=text],input[type=number],input[type=time],
   if(el.id==='LEDColor') refreshLedColorUI(el.value);
 });
 
+document.querySelectorAll('input[type=checkbox][id]').forEach(el=>{
+  el.addEventListener('change', ()=>{
+    markManualChange(el);
+    const value = el.checked ? 1 : 0;
+    fetch('/save?key='+el.id+'&val='+encodeURIComponent(value));
+    clearManualFlag(el);
+  });
+  listenToManual(el);
+});
 
 document.querySelectorAll('div[id$="DaysSelect"]').forEach(el=>{
   el.querySelectorAll('input[type=checkbox]').forEach(chk=>{
@@ -1850,6 +1882,10 @@ window.addEventListener('resize', ()=>{
     if(typeof j.FloatInput !== 'undefined') updateInputValue('FloatInput', j.FloatInput);
 
     if(typeof j.Timer1 !== 'undefined') updateInputValue('Timer1', j.Timer1);
+       if(typeof j.WS2815_Time1 !== 'undefined') updateCheckboxValue('WS2815_Time1', j.WS2815_Time1);
+    if(typeof j.timeON_WS2815 !== 'undefined') updateInputValue('timeON_WS2815', j.timeON_WS2815);
+    if(typeof j.timeOFF_WS2815 !== 'undefined') updateInputValue('timeOFF_WS2815', j.timeOFF_WS2815); 
+    
     if(typeof j.Comment !== 'undefined') updateInputValue('Comment', j.Comment);
   });
 }
@@ -1872,10 +1908,17 @@ function setImg(x){
     });
 
     // ---------------- SAVE ----------------
-    server.on("/save", HTTP_GET, [](AsyncWebServerRequest *r){
+       server.on("/save", HTTP_GET, [self](AsyncWebServerRequest *r){
       if(r->hasParam("key") && r->hasParam("val")){
         String key = r->getParam("key")->value();
         String valStr = r->getParam("val")->value();
+                bool isCheckbox = false;
+        for(const auto &element : self->elements){
+          if(element.id == key && element.type == "checkbox"){
+            isCheckbox = true;
+            break;
+          }
+        }
         if(key=="ThemeColor") { ThemeColor = valStr; saveValue<String>(key.c_str(), valStr); }
         else if(key=="LEDColor") { LEDColor = valStr; saveValue<String>(key.c_str(), valStr); }
         else if(key=="LedColorMode") { LedColorMode = valStr; ColorRGB = LedColorMode.equalsIgnoreCase("manual"); saveValue<String>("LedColorMode", LedColorMode); }
@@ -1893,6 +1936,9 @@ function setImg(x){
         else if(key=="IntInput") { IntInput = valStr.toInt(); saveValue<int>(key.c_str(), IntInput); }
         else if(key=="FloatInput") { FloatInput = valStr.toFloat(); saveValue<float>(key.c_str(), FloatInput); }
         else if(key=="Timer1") { Timer1 = valStr; saveValue<String>(key.c_str(), Timer1); }
+              else if(key=="WS2815_Time1") { WS2815_Time1 = valStr.toInt() != 0; saveValue<int>("WS2815_Time1", WS2815_Time1 ? 1 : 0); }
+        else if(key=="timeON_WS2815") { timeON_WS2815 = valStr; saveValue<String>("timeON_WS2815", timeON_WS2815); }
+        else if(key=="timeOFF_WS2815") { timeOFF_WS2815 = valStr; saveValue<String>("timeOFF_WS2815", timeOFF_WS2815); }
         else if(key=="Comment") { Comment = valStr; saveValue<String>(key.c_str(), Comment); }
         else if(key=="ModeSelect") { ModeSelect = valStr; saveValue<String>(key.c_str(), ModeSelect); }
         else if(key=="DaysSelect") { DaysSelect = valStr; saveValue<String>(key.c_str(), DaysSelect); }
@@ -1951,6 +1997,7 @@ function setImg(x){
         else if(key=="RangeSliderMax") { RangeMax = valStr.toInt(); saveValue<int>("RangeMax", RangeMax); }
         else if(key=="apSSID") { StoredAPSSID = valStr; saveValue<String>(key.c_str(), valStr); }
         else if(key=="apPASS") { StoredAPPASS = valStr; saveValue<String>(key.c_str(), valStr); }
+         else if(isCheckbox) { saveValue<int>(key.c_str(), valStr.toInt()); }
       }
       r->send(200,"text/plain","OK");
     });
@@ -2020,7 +2067,9 @@ function setImg(x){
                +",\"LedAutoplay\":"+String(LedAutoplay ? 1 : 0)+",\"LedAutoplayDuration\":"+String(LedAutoplayDuration)
                +",\"ModeSelect\":\""+ModeSelect+"\",\"DaysSelect\":\""+DaysSelect+"\""
                +",\"IntInput\":"+String(IntInput)+",\"FloatInput\":"+String(FloatInput)
-               +",\"Timer1\":\""+Timer1+"\",\"Comment\":\""+Comment+"\"}";
+                             +",\"Timer1\":\""+Timer1+"\",\"WS2815_Time1\":"+String(WS2815_Time1 ? 1 : 0)
+               +",\"timeON_WS2815\":\""+timeON_WS2815+"\",\"timeOFF_WS2815\":\""+timeOFF_WS2815+"\""
+               +",\"Comment\":\""+Comment+"\"}";
     r->send(200, "application/json", s);
     });
 
