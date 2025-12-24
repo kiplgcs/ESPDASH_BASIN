@@ -48,7 +48,7 @@ inline void interface(){
     
     // Управление лампой
     oab.page();
-    oab.text("InfoString2", InfoString2, "x:45%;y:5%;fontSize:12;color:#00ff00");
+    oab.text("InfoString2", InfoString2, "x:45%;y:1%;fontSize:22;color:#00ff00");
     oab.button("button_Lamp", "red", "Включить / Отключить : Лампу в бассейне ");
     oab.checkbox("Power_Time1", "Таймер лампы"); //Галочка - активания/деактивация таймера
 	oab.time("Lamp_timeON1", "Время включения по таймеру"); //Задать время включения часы/минуты

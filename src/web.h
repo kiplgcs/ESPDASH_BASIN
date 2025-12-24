@@ -73,11 +73,11 @@ unsigned long Timer_Callback; // Таймер опроса всех кнопок
 
 /************************* Переменные для записи значений полученных по MQTT*******/
 
-bool Lamp, Lamp1;		// Подсветка в бассейне -  Включение в ручную
-bool Lamp_autosvet, Saved_Lamp_autosvet;
-bool Power_Time1, Saved_Power_Time1;
+bool Lamp; //, Lamp1;		// Подсветка в бассейне -  Включение в ручную
+bool Lamp_autosvet; //, Saved_Lamp_autosvet;
+bool Power_Time1; //, Saved_Power_Time1;
 String Lamp_timeON1, Lamp_timeOFF1; // Утавки времени включения-отключения LED ленты
-String Saved_Lamp_timeON1, Saved_Lamp_timeOFF1;
+//String Saved_Lamp_timeON1, Saved_Lamp_timeOFF1;
 
 
 bool Pow_WS2815; //, Pow_WS28151;		// Включение в ручную
@@ -1891,7 +1891,7 @@ window.addEventListener('resize', ()=>{
     if(typeof j.FloatInput !== 'undefined') updateInputValue('FloatInput', j.FloatInput);
 
     if(typeof j.Timer1 !== 'undefined') updateInputValue('Timer1', j.Timer1);
-        if(typeof j.Power_Time1 !== 'undefined') updateCheckboxValue('Power_Time1', j.Power_Time1);
+    if(typeof j.Power_Time1 !== 'undefined') updateCheckboxValue('Power_Time1', j.Power_Time1);
     if(typeof j.Lamp_timeON1 !== 'undefined') updateInputValue('Lamp_timeON1', j.Lamp_timeON1);
     if(typeof j.Lamp_timeOFF1 !== 'undefined') updateInputValue('Lamp_timeOFF1', j.Lamp_timeOFF1);
     if(typeof j.WS2815_Time1 !== 'undefined') updateCheckboxValue('WS2815_Time1', j.WS2815_Time1);
@@ -2083,7 +2083,7 @@ function setImg(x){
                +",\"LedAutoplay\":"+String(LedAutoplay ? 1 : 0)+",\"LedAutoplayDuration\":"+String(LedAutoplayDuration)
                +",\"ModeSelect\":\""+ModeSelect+"\",\"DaysSelect\":\""+DaysSelect+"\""
                +",\"IntInput\":"+String(IntInput)+",\"FloatInput\":"+String(FloatInput)
-                 +",\"Timer1\":\""+Timer1+"\",\"Power_Time1\":"+String(Power_Time1 ? 1 : 0)
+              +",\"Timer1\":\""+Timer1+"\",\"Power_Time1\":"+String(Power_Time1 ? 1 : 0)
                +",\"Lamp_timeON1\":\""+Lamp_timeON1+"\",\"Lamp_timeOFF1\":\""+Lamp_timeOFF1
                +"\",\"WS2815_Time1\":"+String(WS2815_Time1 ? 1 : 0)
                +",\"timeON_WS2815\":\""+timeON_WS2815+"\",\"timeOFF_WS2815\":\""+timeOFF_WS2815+"\""

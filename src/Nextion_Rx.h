@@ -13,8 +13,8 @@ int triggerRestartNextion = true; //Флаг функции для отложе�
 #include "EasyNextionLibrary.h"  // Include EasyNextionLibrary
 #include <HardwareSerial.h>
 HardwareSerial MySerial(1);
-#define RXD1 6//4 // 6 //8/15/16
-#define TXD1 7//5 //7 //9//14/17
+#define RXD1 6 //4 // 6 //8/15/16
+#define TXD1 7 //5 //7 //9//14/17
 
 EasyNex myNex(MySerial); // Create an object of EasyNex class with the name < myNex >
                        // Set as parameter the Hardware Serial you are going to use
@@ -91,24 +91,24 @@ void trigger1(){
 }
 
 
-// /////////////////////////************* page set_lamp  **************/////////////////////////////
-// ////////////////////////************* page set_lamp  **************//////////////////////////////
-// ///////////////////////************* page set_lamp  **************///////////////////////////////
+/////////////////////////************* page set_lamp  **************/////////////////////////////
+////////////////////////************* page set_lamp  **************//////////////////////////////
+///////////////////////************* page set_lamp  **************///////////////////////////////
 
-// //printh 23 02 54 04 - "set_lamp" Присвоить все кнопки подсветки
-// void read_lamp_sw0_sw1_sw2(){
+//printh 23 02 54 04 - "set_lamp" Присвоить все кнопки подсветки
+void read_lamp_sw0_sw1_sw2(){
 
-//     Lamp1 = Lamp = myNex.readNumber("set_lamp.sw3.val"); 
-//     jee.var("Lamp", Lamp ? "true" : "false");
-//     Error err = RS485.addRequest(40001,1,0x05,0, Lamp ? devices[0].value : devices[1].value);
+    Lamp = myNex.readNumber("set_lamp.sw3.val"); 
+    // jee.var("Lamp", Lamp ? "true" : "false");
+    // Error err = RS485.addRequest(40001,1,0x05,0, Lamp ? devices[0].value : devices[1].value);
 
-//     Saved_Power_Time1=Power_Time1 = myNex.readNumber("set_lamp.sw0.val"); delay(50);
-//     jee.var("Power_Time1", Power_Time1 ? "true" : "false"); //jee.var("Power_Time1", String(Power_Time1));
+    Power_Time1 = myNex.readNumber("set_lamp.sw0.val"); delay(50);
+    // jee.var("Power_Time1", Power_Time1 ? "true" : "false"); //jee.var("Power_Time1", String(Power_Time1));
 
-//     Saved_Lamp_autosvet = Lamp_autosvet = myNex.readNumber("set_lamp.sw1.val"); delay(50);
-//     jee.var("Lamp_autosvet", Lamp_autosvet ? "true" : "false"); //jee.var("Lamp_autosvet", String(Lamp_autosvet));
-// }
-// void trigger4(){ read_lamp_sw0_sw1_sw2();}
+    Lamp_autosvet = myNex.readNumber("set_lamp.sw1.val"); delay(50);
+    // jee.var("Lamp_autosvet", Lamp_autosvet ? "true" : "false"); //jee.var("Lamp_autosvet", String(Lamp_autosvet));
+}
+void trigger4(){ read_lamp_sw0_sw1_sw2();}
 
 
 // //printh 23 02 54 02  - "set_lamp" Присвоить n0 / n1 время включенния подсветки
@@ -479,77 +479,77 @@ void trigger1(){
 
 
 
-// //Отложенное чтение переменных из Nextion, связанное с поздним обновление в Nextion информации.
-// void NextionDelay(void){
-// // void NextionDelay(int interval) {
-// // static unsigned long timer;
-// // if (interval + timer > millis()) return; 
-// // timer = millis();
-// //---------------------------------------------------------------------------------
-// //---------------------------------------------------------------------------------
-// //---------------------------------------------------------------------------------
+//Отложенное чтение переменных из Nextion, связанное с поздним обновление в Nextion информации.
+void NextionDelay(void){
+// void NextionDelay(int interval) {
+// static unsigned long timer;
+// if (interval + timer > millis()) return; 
+// timer = millis();
+//---------------------------------------------------------------------------------
+//---------------------------------------------------------------------------------
+//---------------------------------------------------------------------------------
 
-// triggerActivated_Nextion = false; //Деактивируем вызов из loop - выполнение данной функции
+triggerActivated_Nextion = false; //Деактивируем вызов из loop - выполнение данной функции
 
-// // Используем switch для вызова соответствующей функции
-//   switch(Function_Nextion) {
-//     case 0:  break;
-//     case 1:  break;
-//     case 2:  break;
-//     case 3:  break;
-//     case 4:  break;
-//     case 5:  break;
-//     case 6:  break;
-//     case 7:  break;
-//     case 8:  break;
-//     case 9:  break;
-//     case 10:  break;
-//     case 11:  break;
-//     case 12:  break;
-//     case 13:  break;
-//     case 14:  break;
-//     case 15:  break;
-//     case 16:  break;
-//     case 17:  break;
-//     case 18:  break;
-//     case 19:  break;
-//     case 20:  break;
-//     case 21:  break;
-//     case 22:  break;
-//     case 23: 
-//     Saved_ACO_Work = ACO_Work = myNex.readNumber("Dispensers.cb0.val") +1;  //Отложенное повторное выполнение через 1 секунду
-//     //Serial.println(ACO_Work);
-//     jee.var("ACO_Work", String(ACO_Work));
-//     break;
-//     case 24:  break;
-//     case 25: 
-//     Saved_H2O2_Work = H2O2_Work = myNex.readNumber("Dispensers.cb1.val") +1;  //Отложенное повторное выполнение через 1 секунду
-//     //Serial.println(H2O2_Work);
-//     jee.var("H2O2_Work", String(H2O2_Work));
-//     break;
-//     default: break; // Ничего не делаем, если значение функции вне диапазона
-//   }
-// }
-
-
+// Используем switch для вызова соответствующей функции
+  switch(Function_Nextion) {
+    case 0:  break;
+    case 1:  break;
+    case 2:  break;
+    case 3:  break;
+    case 4:  break;
+    case 5:  break;
+    case 6:  break;
+    case 7:  break;
+    case 8:  break;
+    case 9:  break;
+    case 10:  break;
+    case 11:  break;
+    case 12:  break;
+    case 13:  break;
+    case 14:  break;
+    case 15:  break;
+    case 16:  break;
+    case 17:  break;
+    case 18:  break;
+    case 19:  break;
+    case 20:  break;
+    case 21:  break;
+    case 22:  break;
+    case 23: 
+    Saved_ACO_Work = ACO_Work = myNex.readNumber("Dispensers.cb0.val") +1;  //Отложенное повторное выполнение через 1 секунду
+    //Serial.println(ACO_Work);
+    // jee.var("ACO_Work", String(ACO_Work));
+    break;
+    case 24:  break;
+    case 25: 
+    Saved_H2O2_Work = H2O2_Work = myNex.readNumber("Dispensers.cb1.val") +1;  //Отложенное повторное выполнение через 1 секунду
+    //Serial.println(H2O2_Work);
+    // jee.var("H2O2_Work", String(H2O2_Work));
+    break;
+    default: break; // Ничего не делаем, если значение функции вне диапазона
+  }
+}
 
 
-// //Отложенное чтение всех необходимых переменных из Nextion, после перезагрузки контроллера - 1 раз после перезагрузки
-// void RestartNextionDelay(void) {
-// // void RestartNextionDelay(int interval) {
-// // static unsigned long timer;
-// // if (interval + timer > millis()) return; 
-// // timer = millis();
-// //---------------------------------------------------------------------------------
-// //---------------------------------------------------------------------------------
-// //---------------------------------------------------------------------------------
-// triggerRestartNextion = false;
+
+
+//Отложенное чтение всех необходимых переменных из Nextion, после перезагрузки контроллера - 1 раз после перезагрузки
+void RestartNextionDelay(void) {
+// void RestartNextionDelay(int interval) {
+// static unsigned long timer;
+// if (interval + timer > millis()) return; 
+// timer = millis();
+//---------------------------------------------------------------------------------
+//---------------------------------------------------------------------------------
+//---------------------------------------------------------------------------------
+triggerRestartNextion = false;
 
 // //////////////////////////***************** set_lamp **********///////////////////////////
 // //////////////////////////******** Управление подсветкой - лампами  *****/////////////////
 // read_lamp_n0_n1();
 // read_lamp_n2_n3();
-// read_lamp_sw0_sw1_sw2();
+read_lamp_sw0_sw1_sw2();
 // //////////////////////////***************** set_RGB **********///////////////////////////
 // //////////////////////////******** Управление RGB подстветкой - лентой WS2815  *****/////////////////
 // in_hours = myNex.readNumber("set_RGB.n0.val"); read_RGB_n0_n1();
@@ -597,6 +597,6 @@ void trigger1(){
 
 
 
-// }
+}
 
 
