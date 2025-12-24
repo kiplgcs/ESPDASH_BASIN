@@ -317,7 +317,12 @@ private:
       ".page.active{display:block;} "
             ".page-header{display:flex;flex-direction:column;align-items:center;gap:6px;margin-bottom:10px;} "
       ".page-header h3{margin:0;} "
-      ".page-datetime{font-size:0.95em;color:#cbd4df;letter-spacing:0.06em;text-align:center;} "
+             ".page-datetime{font-size:1.25em;letter-spacing:0.08em;text-align:center;font-weight:600;"
+      "background:linear-gradient(90deg,#ff3b3b,#ff9a1f,#ffe64d,#52ff6a,#35e0ff,#5a79ff,#b84dff,#ff3b3b);"
+      "background-size:300% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;"
+      "text-shadow:0 0 10px rgba(0,0,0,0.55),0 1px 1px rgba(0,0,0,0.9);"
+      "animation:rainbow-shift 8s linear infinite;} "
+      "@keyframes rainbow-shift{0%{background-position:0% 50%;}100%{background-position:100% 50%;}} "
       "label{display:block;margin-bottom:5px;font-size:0.9em;} "
       "input,select{width:100%;padding:7px;margin-bottom:10px;background:#111;border:1px solid #333;color:#ddd;border-radius:6px;} "
       "input[type=range]{width:100%;} "
@@ -1775,11 +1780,51 @@ window.addEventListener('resize', ()=>{
     fetchCustomGraph(canvas);
   });
 });
+
+    let pageDateTimeBase = null;
+    let pageDateTimeLastSync = 0;
+
+    function formatDateTime(dateObj){
+      const pad = (num)=>String(num).padStart(2, '0');
+      return `${pad(dateObj.getDate())}.${pad(dateObj.getMonth()+1)}.${dateObj.getFullYear()} ` +
+             `${pad(dateObj.getHours())}:${pad(dateObj.getMinutes())}:${pad(dateObj.getSeconds())}`;
+    }
+
+    function parseDeviceDateTime(value){
+      const match = /^(\d{2})\.(\d{2})\.(\d{4}) (\d{2}):(\d{2}):(\d{2})$/.exec(value);
+      if(!match) return null;
+      const [, dd, mm, yyyy, hh, min, ss] = match;
+      return new Date(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh), Number(min), Number(ss));
+    }
+
+    function renderPageDateTime(dateObj){
+      const text = formatDateTime(dateObj);
+      document.querySelectorAll('.page-datetime').forEach(el=>{
+        el.innerText = text;
+      });
+    }
+
+
     function updatePageDateTime(value){
+          const parsed = parseDeviceDateTime(value);
+      if(parsed){
+        pageDateTimeBase = parsed;
+        pageDateTimeLastSync = Date.now();
+        renderPageDateTime(parsed);
+        return;
+      }
       document.querySelectorAll('.page-datetime').forEach(el=>{
         el.innerText = value;
       });
     }
+
+    function tickPageDateTime(){
+      if(!pageDateTimeBase) return;
+      const elapsedSeconds = Math.floor((Date.now() - pageDateTimeLastSync) / 1000);
+      const current = new Date(pageDateTimeBase.getTime() + elapsedSeconds * 1000);
+      renderPageDateTime(current);
+    }
+
 
     function fetchLive(){
     fetch('/live').then(r=>r.json()).then(j=>{
@@ -1809,6 +1854,7 @@ window.addEventListener('resize', ()=>{
   });
 }
 setInterval(fetchLive, 1000);
+setInterval(tickPageDateTime, 1000);
 fetchMqttConfig();
 
 // ====== ??????? ???????????? ??????????? (???????? /setjpg ? ????????????? ????????) ======
