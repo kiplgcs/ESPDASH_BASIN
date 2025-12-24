@@ -17,10 +17,9 @@ inline void interface(){
 
     // Общая информация по бассейну
     oab.page();
-    oab.display("RandomVal", "Random Number", "0");
-    oab.display("CurrentTime", "Current Time", "--:--:--");
     oab.image("Image1", "/anim1.gif", "width:40%;height:200; x:25%;y:50%;");
-    
+    oab.display("CurrentTime", "Current Time", "--:--:--");
+    oab.display("RandomVal", "Random Number", "0");
     oab.text("InfoString", InfoString, "x:44%;y:60%;fontSize:12;color:#00ff00");
     oab.text("InfoString1", InfoString1, "x:44%;y:90%;fontSize:12;color:#00ff00");
     oab.button("button1", "gray", "My Button");
@@ -28,7 +27,7 @@ inline void interface(){
 
     // Controls tab
     oab.page();
-    
+    oab.display("CurrentTime", "Current Time", "--:--:--");
     oab.range("MotorSpeed", 0, 100, 1, "Motor Speed");
     oab.selectDays("DaysSelect", "Select Days");
     oab.range("RangeSlider", 10, 40, 1, "Range Min-Max", true);
