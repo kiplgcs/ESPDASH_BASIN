@@ -325,6 +325,10 @@ private:
       "@keyframes rainbow-shift{0%{background-position:0% 50%;}100%{background-position:100% 50%;}} "
       "label{display:block;margin-bottom:5px;font-size:0.9em;} "
       "input,select{width:100%;padding:7px;margin-bottom:10px;background:#111;border:1px solid #333;color:#ddd;border-radius:6px;} "
+      "input[type=time]{width:30%;margin-right:auto;} "
+      "input[type=checkbox]{width:auto;margin-right:auto;} "
+      "label:has(input[type=checkbox]){display:flex;flex-direction:column;align-items:flex-start;gap:6px;width:fit-content;} "
+      "label:has(input[type=checkbox]) input[type=checkbox]{margin-bottom:0;transform:scale(1.4);transform-origin:left center;} "
       "input[type=range]{width:100%;} "
       ".select-days{display:grid; grid-template-columns: repeat(4, auto); gap:5px; padding:5px; background:#222; border-radius:6px;} "
       ".select-days label{display:flex;align-items:center;gap:5px;cursor:pointer;} "
@@ -826,9 +830,9 @@ private:
               else if(e.type=="float") html += "<label>"+e.label+"</label><input id='"+e.id+"' type='number' step='0.1' value='"+val+"'>";
               else if(e.type=="time") html += "<label>"+e.label+"</label><input id='"+e.id+"' type='time' value='"+val+"'>";
               else if(e.type=="color") html += "<label>"+e.label+"</label><input id='"+e.id+"' type='color' value='"+val+"'>";
-                            else if(e.type=="checkbox"){
-                  String checked = (val == "1" || val.equalsIgnoreCase("true")) ? " checked" : "";
-                  html += "<label><input id='"+e.id+"' type='checkbox' value='1'"+checked+">"+e.label+"</label>";
+              else if(e.type=="checkbox"){ 
+                String checked = (val == "1" || val.equalsIgnoreCase("true")) ? " checked" : "";
+                html += "<label><input id='"+e.id+"' type='checkbox' value='1'"+checked+">"+e.label+"</label>";
               }
               
               else if(e.type=="slider"){
