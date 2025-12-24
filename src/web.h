@@ -612,57 +612,57 @@ private:
               html += "<img id='"+e.id+"' src='"+imgSrc+"' data-refresh='"+(imgSrc=="/getImage"?"getImage":"")+"' "
                       "style='"+imageStyle+"'/>";
 
-              for(auto &overlay : self->elements){
-                  if(overlay.tab != t.id || overlay.type != "displayStringAbsolute") continue;
+       html += "</div>";
+          }
 
-                  String styleStr = overlay.value;
-                  auto readProp = [&](const String &prop)->String {
-                      String key = prop + ":";
-                      int idx = styleStr.indexOf(key);
-                      if(idx < 0) return "";
-                      int start = idx + key.length();
-                      int end = styleStr.indexOf(";", start);
-                      if(end < 0) end = styleStr.length();
-                      return styleStr.substring(start, end);
-                  };
+          for(auto &overlay : self->elements){
+              if(overlay.tab != t.id || overlay.type != "displayStringAbsolute") continue;
 
-                  auto normalizeCoord = [&](const String &raw)->String {
-                      if(raw.length() == 0) return raw;
-                      bool hasUnit = false;
-                      for(int i=0;i<raw.length();i++){
-                          char c = raw[i];
-                          if((c>='0' && c<='9') || c=='-' || c=='.') continue;
-                          hasUnit = true;
-                          break;
-                      }
-                      return hasUnit ? raw : raw + "px";
-                  };
+              String styleStr = overlay.value;
+              auto readProp = [&](const String &prop)->String {
+                  String key = prop + ":";
+                  int idx = styleStr.indexOf(key);
+                  if(idx < 0) return "";
+                  int start = idx + key.length();
+                  int end = styleStr.indexOf(";", start);
+                  if(end < 0) end = styleStr.length();
+                  return styleStr.substring(start, end);
+              };
 
-                  String fontSizeStr = readProp("fontSize");
-                  int fontSize = fontSizeStr.length() ? fontSizeStr.toInt() : 24;
-                  String color = readProp("color"); if(color.length() == 0) color = "#00ff00";
-                  String bgColor = readProp("bg"); if(bgColor.length() == 0) bgColor = "rgba(0,0,0,0.65)";
-                  String padding = readProp("padding"); if(padding.length() == 0) padding = "6px 12px";
-                  String borderRadius = readProp("borderRadius"); if(borderRadius.length() == 0) borderRadius = "14px";
-                  String leftRaw = readProp("x");
-                  String topRaw = readProp("y");
-                  bool hasLeft = leftRaw.length();
-                  bool hasTop = topRaw.length();
-                  String leftValue = hasLeft ? normalizeCoord(leftRaw) : "50%";
-                  String topValue = hasTop ? normalizeCoord(topRaw) : "50%";
-                  String translateX = hasLeft ? "0%" : "-50%";
-                  String translateY = hasTop ? "0%" : "-50%";
-                  String transform = "translate("+translateX+", "+translateY+")";
-                  String panelStyle = "position:absolute; left:"+leftValue+"; top:"+topValue+"; transform:"+transform+"; "
-                                       "background:"+bgColor+"; color:"+color+"; font-size:"+String(fontSize)+"px; padding:"+padding+"; "
-                                       "border-radius:"+borderRadius+"; display:inline-flex; align-items:center; justify-content:center; "
-                                       "text-align:center; box-sizing:border-box; white-space:nowrap; max-width:90%; "
-                                       "box-shadow:0 10px 20px rgba(0,0,0,0.45); z-index:2;";
+              auto normalizeCoord = [&](const String &raw)->String {
+                  if(raw.length() == 0) return raw;
+                  bool hasUnit = false;
+                  for(int i=0;i<raw.length();i++){
+                      char c = raw[i];
+                      if((c>='0' && c<='9') || c=='-' || c=='.') continue;
+                      hasUnit = true;
+                      break;
+                  }
+                  return hasUnit ? raw : raw + "px";
+              };
 
-                  html += "<div id='"+overlay.id+"' style='"+panelStyle+"'>"+overlay.label+"</div>";
-              }
+              String fontSizeStr = readProp("fontSize");
+              int fontSize = fontSizeStr.length() ? fontSizeStr.toInt() : 24;
+              String color = readProp("color"); if(color.length() == 0) color = "#00ff00";
+              String bgColor = readProp("bg"); if(bgColor.length() == 0) bgColor = "rgba(0,0,0,0.65)";
+              String padding = readProp("padding"); if(padding.length() == 0) padding = "6px 12px";
+              String borderRadius = readProp("borderRadius"); if(borderRadius.length() == 0) borderRadius = "14px";
+              String leftRaw = readProp("x");
+              String topRaw = readProp("y");
+              bool hasLeft = leftRaw.length();
+              bool hasTop = topRaw.length();
+              String leftValue = hasLeft ? normalizeCoord(leftRaw) : "50%";
+              String topValue = hasTop ? normalizeCoord(topRaw) : "50%";
+              String translateX = hasLeft ? "0%" : "-50%";
+              String translateY = hasTop ? "0%" : "-50%";
+              String transform = "translate("+translateX+", "+translateY+")";
+              String panelStyle = "position:absolute; left:"+leftValue+"; top:"+topValue+"; transform:"+transform+"; "
+                                   "background:"+bgColor+"; color:"+color+"; font-size:"+String(fontSize)+"px; padding:"+padding+"; "
+                                   "border-radius:"+borderRadius+"; display:inline-flex; align-items:center; justify-content:center; "
+                                   "text-align:center; box-sizing:border-box; white-space:nowrap; max-width:90%; "
+                                   "box-shadow:0 10px 20px rgba(0,0,0,0.45); z-index:2;";
 
-              html += "</div>";
+              html += "<div id='"+overlay.id+"' style='"+panelStyle+"'>"+overlay.label+"</div>";
           }
 
           for(auto &e : self->elements){
@@ -2067,7 +2067,7 @@ function setImg(x){
 
     server.on("/live", HTTP_GET, [](AsyncWebServerRequest *r){
     String s = "{\"CurrentTime\":\""+CurrentTime+"\",\"RandomVal\":"+String(RandomVal)
-               +",\"InfoString\":\""+InfoString+"\",\"InfoString1\":\""+InfoString1
+               +",\"InfoString\":\""+InfoString+"\",\"InfoString1\":\""+InfoString1+"\",\"InfoString2\":\""+InfoString2
                +"\",\"button1\":"+String(button1)+",\"button2\":"+String(button2)+",\"button_WS2815\":"+String(Pow_WS2815 ? 1 : 0)
                +",\"MotorSpeed\":"+String(MotorSpeedSetting)
                +",\"RangeMin\":"+String(RangeMin)+",\"RangeMax\":"+String(RangeMax)

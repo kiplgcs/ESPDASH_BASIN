@@ -21,8 +21,8 @@ inline void interface(){
     oab.image("Image1", "/anim1.gif", "width:40%;height:200; x:25%;y:50%;");
 
     oab.display("RandomVal", "Random Number", "0");
-    oab.text("InfoString", InfoString, "x:44%;y:60%;fontSize:12;color:#00ff00");
-    oab.text("InfoString1", InfoString1, "x:44%;y:90%;fontSize:12;color:#00ff00");
+    oab.text("InfoString", InfoString, "x:10%;y:10%;fontSize:12;color:#00ff00");
+    oab.text("InfoString1", InfoString1, "x:20%;y:50%;fontSize:12;color:#00ff00");
     oab.button("button1", "gray", "My Button");
     oab.button("button2", "gray", "My Button1");
 
@@ -45,10 +45,11 @@ inline void interface(){
 
     
 
-
+    
     // Управление лампой
     oab.page();
-    oab.text("InfoString1", InfoString2, "x:10%;y:10%;fontSize:12;color:#00ff00");
+    InfoString2 = InfoString1;
+    oab.text("InfoString1", InfoString2, "x:45%;y:5%;fontSize:12;color:#00ff00");
     oab.button("button_Lamp", "red", "Включить / Отключить : Лампу в бассейне ");
     oab.checkbox("Power_Time1", "Таймер лампы"); //Галочка - активания/деактивация таймера
 	oab.time("Lamp_timeON1", "Время включения по таймеру"); //Задать время включения часы/минуты
