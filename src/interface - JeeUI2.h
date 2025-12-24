@@ -9,7 +9,8 @@ inline void interface(){
     oab.menu("Общая информация по бассейну");
     oab.menu("Controls");
     oab.menu("Настройка фильтрации, Промывка фильтра");
-    oab.menu("Управление подсветкой");
+    oab.menu("Управление лампой");
+    oab.menu("Управление RGB подсветкой");
     oab.menu("Контроль уровня воды");
     oab.menu("Контроль температуры");
     oab.menu("Контроль PH (NaOCl)");
@@ -29,7 +30,7 @@ inline void interface(){
     oab.page();
     
     oab.range("MotorSpeed", 0, 100, 1, "Motor Speed");
-    oab.selectDays("DaysSelect", "Select Days");
+  
     oab.range("RangeSlider", 10, 40, 1, "Range Min-Max", true);
     oab.number("IntInput", "Enter Integer");
     oab.number("FloatInput", "Enter Float", true);
@@ -38,12 +39,27 @@ inline void interface(){
 
     // Настройка фильтрации, Промывка фильтра
     oab.page();
+    oab.selectDays("DaysSelect", "Select Days");
     // oab.number("IntInput", "Enter Integer");
     // oab.number("FloatInput", "Enter Float", true);
 
-    // Управление подсветкой
+    
+
+
+    // Управление лампой
     oab.page();
-    oab.button("button_WS2815", "gray", "Включить / Отключить : RGB ленту WS2815 ");
+    oab.text("InfoString1", InfoString2, "x:10%;y:10%;fontSize:12;color:#00ff00");
+    oab.button("button_Lamp", "red", "Включить / Отключить : Лампу в бассейне ");
+    oab.checkbox("Power_Time1", "Таймер лампы"); //Галочка - активания/деактивация таймера
+	oab.time("Lamp_timeON1", "Время включения по таймеру"); //Задать время включения часы/минуты
+	oab.time("Lamp_timeOFF1", "Время отключения по таймеру"); //Задать время отключения часы/минуты
+
+    // Управление RGB подсветкой
+    oab.page();
+    oab.button("button_WS2815", "gray", "Включить / Отключить : RGB ленту WS2815");
+    oab.checkbox("WS2815_Time1", "Таймер RGB ленты"); //Галочка - активания/деактивация таймера
+	oab.time("timeON_WS2815", "Время включения по таймеру"); //Задать время включения часы/минуты
+	oab.time("timeOFF_WS2815", "Время отключения по таймеру"); //Задать время отключения часы/минуты
     oab.color("LEDColor", "Цвет подсветки");
     oab.option("auto", "Автоматически");
     oab.option("manual", "Ручной цвет");
@@ -87,9 +103,7 @@ inline void interface(){
     oab.select("LedColorOrder", "Порядок цветов ленты");
 
 
-    oab.checkbox("WS2815_Time1", "Таймер RGB ленты"); //Галочка - активания/деактивация таймера
-	oab.time("timeON_WS2815", "Время включения по таймеру"); //Задать время включения часы/минуты
-	oab.time("timeOFF_WS2815", "Время отключения по таймеру"); //Задать время отключения часы/минуты
+
     // oab.time("Timer1", "Start Time");
     // oab.text("Comment", "Comment");
 

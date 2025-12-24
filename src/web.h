@@ -34,6 +34,7 @@ inline String CurrentTime;       // Текущее время
 inline int RandomVal;            // Случайное значение (например, для демонстрации)
 inline String InfoString;        // Информационная строка
 inline String InfoString1;       // Вспомогательная информационная строка
+inline String InfoString2;
 inline String ModeSelect;        // Режим работы (например, Auto/Manual)
 inline String DaysSelect;        // Выбор дней недели
 inline String StoredAPSSID;      // Сохраненный SSID точки доступа
@@ -79,11 +80,13 @@ String Lamp_timeON1, Lamp_timeOFF1; // Утавки времени включе�
 String Saved_Lamp_timeON1, Saved_Lamp_timeOFF1;
 
 
-bool Pow_WS2815 = true, Pow_WS28151;		// Включение в ручную
-bool Pow_WS2815_autosvet, Saved_Pow_WS2815_autosvet; 
-bool WS2815_Time1, Saved_WS2815_Time1;
+bool Pow_WS2815; //, Pow_WS28151;		// Включение в ручную
+bool Pow_WS2815_autosvet; //, Saved_Pow_WS2815_autosvet; 
+bool WS2815_Time1; //, Saved_WS2815_Time1;
 String timeON_WS2815, timeOFF_WS2815; // Утавки времени включения-отключения LED ленты
-String Saved_timeON_WS2815, Saved_timeOFF_WS2815;
+//String Saved_timeON_WS2815, Saved_timeOFF_WS2815;
+
+
 bool ColorRGB = false;    //режим ручного задания цвета
 int new_bright = 200; //переменная с яркостью установленной в интерфейсе вручную
 bool LedAutoplay = true;
@@ -1868,6 +1871,7 @@ window.addEventListener('resize', ()=>{
     if(document.getElementById('RandomVal')) document.getElementById('RandomVal').innerText=j.RandomVal;
     if(document.getElementById('InfoString')) document.getElementById('InfoString').innerText=j.InfoString;
     if(document.getElementById('InfoString1')) document.getElementById('InfoString1').innerText=j.InfoString1;
+    if(document.getElementById('InfoString2')) document.getElementById('InfoString2').innerText=j.InfoString2;
     syncDashButton('button1', j.button1);
     syncDashButton('button2', j.button2);
     syncDashButton('button_WS2815', j.button_WS2815);
