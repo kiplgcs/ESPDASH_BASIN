@@ -1874,6 +1874,7 @@ window.addEventListener('resize', ()=>{
     if(document.getElementById('InfoString2')) document.getElementById('InfoString2').innerText=j.InfoString2;
     syncDashButton('button1', j.button1);
     syncDashButton('button2', j.button2);
+    syncDashButton('button_Lamp', j.button_Lamp);
     syncDashButton('button_WS2815', j.button_WS2815);
     if(typeof j.MotorSpeed !== 'undefined') updateSliderDisplay('MotorSpeed', j.MotorSpeed);
     if(typeof j.RangeMin !== 'undefined' && typeof j.RangeMax !== 'undefined') setRangeSliderUI('RangeSlider', j.RangeMin, j.RangeMax);
@@ -1890,7 +1891,10 @@ window.addEventListener('resize', ()=>{
     if(typeof j.FloatInput !== 'undefined') updateInputValue('FloatInput', j.FloatInput);
 
     if(typeof j.Timer1 !== 'undefined') updateInputValue('Timer1', j.Timer1);
-       if(typeof j.WS2815_Time1 !== 'undefined') updateCheckboxValue('WS2815_Time1', j.WS2815_Time1);
+        if(typeof j.Power_Time1 !== 'undefined') updateCheckboxValue('Power_Time1', j.Power_Time1);
+    if(typeof j.Lamp_timeON1 !== 'undefined') updateInputValue('Lamp_timeON1', j.Lamp_timeON1);
+    if(typeof j.Lamp_timeOFF1 !== 'undefined') updateInputValue('Lamp_timeOFF1', j.Lamp_timeOFF1);
+    if(typeof j.WS2815_Time1 !== 'undefined') updateCheckboxValue('WS2815_Time1', j.WS2815_Time1);
     if(typeof j.timeON_WS2815 !== 'undefined') updateInputValue('timeON_WS2815', j.timeON_WS2815);
     if(typeof j.timeOFF_WS2815 !== 'undefined') updateInputValue('timeOFF_WS2815', j.timeOFF_WS2815); 
     
@@ -1927,7 +1931,7 @@ function setImg(x){
             break;
           }
         }
-        if(key=="ThemeColor") { ThemeColor = valStr; saveValue<String>(key.c_str(), valStr); }
+           if(key=="ThemeColor") { ThemeColor = valStr; saveValue<String>(key.c_str(), valStr); }
         else if(key=="LEDColor") { LEDColor = valStr; saveValue<String>(key.c_str(), valStr); }
         else if(key=="LedColorMode") { LedColorMode = valStr; ColorRGB = LedColorMode.equalsIgnoreCase("manual"); saveValue<String>("LedColorMode", LedColorMode); }
         else if(key=="LedColorOrder") { LedColorOrder = valStr; saveValue<String>("LedColorOrder", LedColorOrder); }
@@ -1944,7 +1948,10 @@ function setImg(x){
         else if(key=="IntInput") { IntInput = valStr.toInt(); saveValue<int>(key.c_str(), IntInput); }
         else if(key=="FloatInput") { FloatInput = valStr.toFloat(); saveValue<float>(key.c_str(), FloatInput); }
         else if(key=="Timer1") { Timer1 = valStr; saveValue<String>(key.c_str(), Timer1); }
-              else if(key=="WS2815_Time1") { WS2815_Time1 = valStr.toInt() != 0; saveValue<int>("WS2815_Time1", WS2815_Time1 ? 1 : 0); }
+              else if(key=="Power_Time1") { Power_Time1 = valStr.toInt() != 0; saveValue<int>("Power_Time1", Power_Time1 ? 1 : 0); }
+        else if(key=="Lamp_timeON1") { Lamp_timeON1 = valStr; saveValue<String>("Lamp_timeON1", Lamp_timeON1); }
+        else if(key=="Lamp_timeOFF1") { Lamp_timeOFF1 = valStr; saveValue<String>("Lamp_timeOFF1", Lamp_timeOFF1); }
+        else if(key=="WS2815_Time1") { WS2815_Time1 = valStr.toInt() != 0; saveValue<int>("WS2815_Time1", WS2815_Time1 ? 1 : 0); }
         else if(key=="timeON_WS2815") { timeON_WS2815 = valStr; saveValue<String>("timeON_WS2815", timeON_WS2815); }
         else if(key=="timeOFF_WS2815") { timeOFF_WS2815 = valStr; saveValue<String>("timeOFF_WS2815", timeOFF_WS2815); }
         else if(key=="Comment") { Comment = valStr; saveValue<String>(key.c_str(), Comment); }
@@ -2057,6 +2064,7 @@ function setImg(x){
         int state = r->getParam("state")->value().toInt();
         if(id == "button1") button1 = state;
         else if(id == "button2") button2 = state;
+                else if(id == "button_Lamp"){Lamp = state != 0;}
         else if(id == "button_WS2815"){Pow_WS2815 = state != 0;}
         saveButtonState(id.c_str(), state);
         r->send(200, "text/plain", "OK");
@@ -2068,14 +2076,16 @@ function setImg(x){
     server.on("/live", HTTP_GET, [](AsyncWebServerRequest *r){
     String s = "{\"CurrentTime\":\""+CurrentTime+"\",\"RandomVal\":"+String(RandomVal)
                +",\"InfoString\":\""+InfoString+"\",\"InfoString1\":\""+InfoString1+"\",\"InfoString2\":\""+InfoString2
-               +"\",\"button1\":"+String(button1)+",\"button2\":"+String(button2)+",\"button_WS2815\":"+String(Pow_WS2815 ? 1 : 0)
+                   +"\",\"button1\":"+String(button1)+",\"button2\":"+String(button2)+",\"button_Lamp\":"+String(Lamp ? 1 : 0)+",\"button_WS2815\":"+String(Pow_WS2815 ? 1 : 0)
                +",\"MotorSpeed\":"+String(MotorSpeedSetting)
                +",\"RangeMin\":"+String(RangeMin)+",\"RangeMax\":"+String(RangeMax)
                 +",\"LEDColor\":\""+LEDColor+"\",\"LedPattern\":\""+LedPattern+"\",\"LedColorMode\":\""+LedColorMode+"\",\"LedColorOrder\":\""+LedColorOrder+"\",\"LedBrightness\":"+String(LedBrightness)
                +",\"LedAutoplay\":"+String(LedAutoplay ? 1 : 0)+",\"LedAutoplayDuration\":"+String(LedAutoplayDuration)
                +",\"ModeSelect\":\""+ModeSelect+"\",\"DaysSelect\":\""+DaysSelect+"\""
                +",\"IntInput\":"+String(IntInput)+",\"FloatInput\":"+String(FloatInput)
-                             +",\"Timer1\":\""+Timer1+"\",\"WS2815_Time1\":"+String(WS2815_Time1 ? 1 : 0)
+                 +",\"Timer1\":\""+Timer1+"\",\"Power_Time1\":"+String(Power_Time1 ? 1 : 0)
+               +",\"Lamp_timeON1\":\""+Lamp_timeON1+"\",\"Lamp_timeOFF1\":\""+Lamp_timeOFF1
+               +"\",\"WS2815_Time1\":"+String(WS2815_Time1 ? 1 : 0)
                +",\"timeON_WS2815\":\""+timeON_WS2815+"\",\"timeOFF_WS2815\":\""+timeOFF_WS2815+"\""
                +",\"Comment\":\""+Comment+"\"}";
     r->send(200, "application/json", s);

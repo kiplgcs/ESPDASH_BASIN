@@ -154,7 +154,10 @@ void setup() {
 
 
 
-
+  Pow_WS2815 = loadButtonState("button_WS2815", 1) != 0;
+  WS2815_Time1 = loadValue<int>("WS2815_Time1", 0) != 0;
+  timeON_WS2815 = loadValue<String>("timeON_WS2815", "00:00");
+  timeOFF_WS2815 = loadValue<String>("timeOFF_WS2815", "00:00");
   ColorLED = loadValue<String>("LEDColor","#00ff00");      // WS2815
   LedPattern = loadValue<String>("LedPattern", LedPattern);
   LedColorMode = loadValue<String>("LedColorMode", LedColorMode);
@@ -165,10 +168,12 @@ void setup() {
   if(LedAutoplayDuration < 1) LedAutoplayDuration = 1;
   LedBrightness = loadValue<int>("LedBrightness", LedBrightness);
   new_bright = LedBrightness;
-  Pow_WS2815 = loadButtonState("button_WS2815", 1) != 0;
-  WS2815_Time1 = loadValue<int>("WS2815_Time1", 0) != 0;
-  timeON_WS2815 = loadValue<String>("timeON_WS2815", "00:00");
-  timeOFF_WS2815 = loadValue<String>("timeOFF_WS2815", "00:00");
+
+  Lamp = loadButtonState("button_Lamp", 0) != 0;
+  Power_Time1 = loadValue<int>("Power_Time1", 0) != 0;
+  Lamp_timeON1 = loadValue<String>("Lamp_timeON1", "00:00");
+  Lamp_timeOFF1 = loadValue<String>("Lamp_timeOFF1", "00:00");
+
   setup_WS2815();
 
 
@@ -217,7 +222,7 @@ TimerControlRelay(10000);  // TimerControlRelay(600); //Контроль вкл�
   InfoString1 = /*"Speed " + String(Speed, 1) + " / Temp " + String(Temperatura, 1)*/ + " button1 = " + String(button1)
               + " RangeSlider = " + String(RangeMin) + " / " + String(RangeMax);
   
-              
+  InfoString2 = InfoString1;          
 
 //   // ---------- Рандомный цвет LED ----------
 //   // LEDColor = "#" + String((random(0x1000000) | 0x1000000), HEX).substring(1);
