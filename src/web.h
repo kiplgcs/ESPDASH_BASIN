@@ -1051,7 +1051,7 @@ else if(e.type=="range"){ // Этот блок создает HTML для диа
               "</div>"
               "<div class='mqtt-actions'>"
               "<button class='btn-primary btn-mqtt btn-success' id='mqtt-save-btn' onclick='saveMqttSettings()'>Сохранить настройки</button>"
-              "<button class='btn-secondary btn-mqtt btn-activate-off' id='mqtt-activate-btn' data-enabled='0' onclick='toggleMqttActivation()'>Включить MQTT</button>"
+                          "<button class='btn-secondary btn-mqtt btn-activate-off' id='mqtt-activate-btn' data-enabled='0' onclick='toggleMqttActivation()'>Реконект MQTT</button>"
               "</div>"
               "</div></div>";
 
@@ -1159,7 +1159,7 @@ function toggleSidebar(){
     btn.dataset.enabled = active ? '1' : '0';
     btn.classList.toggle('btn-activate-on', active);
     btn.classList.toggle('btn-activate-off', !active);
-    btn.innerText = active ? 'Отключить MQTT' : 'Включить MQTT';
+    btn.innerText = 'Реконект MQTT';
   };
 
   function fetchMqttConfig(){
@@ -1209,14 +1209,14 @@ function toggleSidebar(){
     const original = btn ? btn.innerText : '';
     if(btn){
       btn.disabled = true;
-      btn.innerText = enable ? 'Включаем MQTT...' : 'Отключаем MQTT...';
+           btn.innerText = 'Реконектируем MQTT...';
       btn.classList.toggle('btn-activate-on', enable);
       btn.classList.toggle('btn-activate-off', !enable);
     }
     const payload = new URLSearchParams({enabled: enable ? '1' : '0'});
     fetch('/mqtt/activate',{method:'POST', body:payload})
       .then(()=>setTimeout(fetchMqttConfig, 400))
-      .finally(()=>{ if(btn){ btn.disabled = false; btn.innerText = original || (enable ? 'Отключить MQTT' : 'Включить MQTT'); } });
+            .finally(()=>{ if(btn){ btn.disabled = false; btn.innerText = original || 'Реконект MQTT'; } });
   }
 
   function startMqttStatusUpdates(){
