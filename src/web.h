@@ -313,8 +313,11 @@ private:
       ".dash-btn.on{background:linear-gradient(135deg,#3a7bd5,#00d2ff);color:#fff;} "
       ".dash-btn.off{background:#222;color:#ddd;opacity:0.9;} "
       ".dash-btn:hover{transform:translateY(-1px);box-shadow:0 6px 14px rgba(0,0,0,0.45);} "
-       ".page{display:none;position:relative;grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap:15px;} "
+                ".page{display:none;position:relative;grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap:15px;} "
       ".page.active{display:block;} "
+            ".page-header{display:flex;flex-direction:column;align-items:center;gap:6px;margin-bottom:10px;} "
+      ".page-header h3{margin:0;} "
+      ".page-datetime{font-size:0.95em;color:#cbd4df;letter-spacing:0.06em;text-align:center;} "
       "label{display:block;margin-bottom:5px;font-size:0.9em;} "
       "input,select{width:100%;padding:7px;margin-bottom:10px;background:#111;border:1px solid #333;color:#ddd;border-radius:6px;} "
       "input[type=range]{width:100%;} "
@@ -339,7 +342,7 @@ private:
       ".graph-tooltip{position:fixed;pointer-events:none;background:rgba(10,14,20,0.9);color:#eef4ff;padding:6px 10px;border:1px solid rgba(255,255,255,0.18);border-radius:6px;font-size:0.8em;z-index:1000;transform:translate(-50%,-120%);white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,0.35);}" 
       ".graph-tooltip.hidden{display:none;}" 
       ".card:has(#ModeSelect),.card:has(#LEDColor),.card:has(#Timer1)," 
-      ".card:has(#FloatInput),.card:has(#IntInput),.card:has(#CurrentTime),"
+      ".card:has(#FloatInput),.card:has(#IntInput),"
       ".card:has(#RandomVal),.card:has(#DaysSelect){"
       "background:linear-gradient(145deg,#111,#080b13);border:1px solid rgba(159,180,255,0.25);"
       "box-shadow:0 18px 34px rgba(0,0,0,0.65);border-radius:18px;padding:14px 16px;"
@@ -347,7 +350,7 @@ private:
       "position:relative;overflow:hidden;"
       "} "
       ".card:has(#ModeSelect):hover,.card:has(#LEDColor):hover,.card:has(#Timer1):hover,"
-      ".card:has(#FloatInput):hover,.card:has(#IntInput):hover,.card:has(#CurrentTime):hover,"
+        ".card:has(#FloatInput) label,.card:has(#IntInput) label,"
       ".card:has(#RandomVal):hover,.card:has(#DaysSelect):hover{"
       "transform:translateY(-2px);box-shadow:0 22px 40px rgba(0,0,0,0.7);}"
       ".card:has(#ModeSelect) label,.card:has(#LEDColor) label,.card:has(#Timer1) label,"
@@ -441,7 +444,7 @@ private:
       "#LEDColor::-moz-color-swatch{border-radius:10px;border:1px solid rgba(255,255,255,0.18);"
       "box-shadow:inset 0 0 0 1px rgba(0,0,0,0.25);}"
 
-      ".card:has(#CurrentTime) #CurrentTime,.card:has(#RandomVal) #RandomVal{"
+       ".card:has(#RandomVal) #RandomVal{"
       "font-size:1.5em;font-weight:700;color:#ffffff;text-shadow:0 4px 12px rgba(0,0,0,0.45);margin-top:6px;"
       "} "
       ".card:has(#DaysSelect) .select-days{gap:8px;padding:8px 6px;background:rgba(255,255,255,0.02);"
@@ -522,7 +525,9 @@ private:
 
       bool firstPage = true;
       for(auto &t : self->tabs){
-          html += "<div id='"+t.id+"' class='page"+String(firstPage?" active":"")+"'><h3>"+t.title+"</h3>";
+           html += "<div id='"+t.id+"' class='page"+String(firstPage?" active":"")+"'>"
+                  "<div class='page-header'><h3>"+t.title+"</h3>"
+                  "<div class='page-datetime' id='page-datetime-"+t.id+"'>--</div></div>";
 
      for(auto &e : self->elements){
               if(e.tab != t.id || e.type != "image") continue;
@@ -790,7 +795,7 @@ private:
               else if(e.id=="FloatInput") val = String(FloatInput);
               else if(e.id=="Timer1") val = Timer1;
               else if(e.id=="Comment") val = Comment;
-              else if(e.id=="CurrentTime") val = CurrentTime;
+
               else if(e.id=="RandomVal") val = String(RandomVal);
               else if(e.id=="ModeSelect") val = ModeSelect;
               else if(e.id=="DaysSelect") val = DaysSelect;
@@ -985,7 +990,9 @@ else if(e.type=="range"){ // Этот блок создает HTML для диа
       }
 
       // ====== WiFi страница ======
-      html += "<div id='wifi' class='page'><h3>WiFi Settings</h3>"
+      html += "<div id='wifi' class='page'>"
+              "<div class='page-header'><h3>WiFi Settings</h3>"
+              "<div class='page-datetime' id='page-datetime-wifi'>--</div></div>"
               "<div class='card compact wifi-card'>"
               "<div class='wifi-field'><label>SSID</label><div class='input-with-action'>"
               "<input id='ssid' value='"+loadValue<String>("ssid",defaultSSID)+"'>"
@@ -1020,7 +1027,9 @@ else if(e.type=="range"){ // Этот блок создает HTML для диа
               "</div>";
 
       // ====== Statistics страница ======
-      html += "<div id='stats' class='page'><h3>Statistics</h3>"
+      html += "<div id='stats' class='page'>"
+              "<div class='page-header'><h3>Statistics</h3>"
+              "<div class='page-datetime' id='page-datetime-stats'>--</div></div>"
               "<div class='stats-actions'>"
               "<button class='btn-secondary' id='refresh-stats-btn' onclick='fetchStats(true)'>Обновить информацию</button>"
               "<button class='btn-danger' id='reboot-btn' onclick='rebootEsp()'>Перезагрузить ESP</button>"
@@ -1766,10 +1775,15 @@ window.addEventListener('resize', ()=>{
     fetchCustomGraph(canvas);
   });
 });
+    function updatePageDateTime(value){
+      document.querySelectorAll('.page-datetime').forEach(el=>{
+        el.innerText = value;
+      });
+    }
 
     function fetchLive(){
     fetch('/live').then(r=>r.json()).then(j=>{
-      if(document.getElementById('CurrentTime')) document.getElementById('CurrentTime').innerText=j.CurrentTime;
+        if(typeof j.CurrentTime !== 'undefined') updatePageDateTime(j.CurrentTime);
     if(document.getElementById('RandomVal')) document.getElementById('RandomVal').innerText=j.RandomVal;
     if(document.getElementById('InfoString')) document.getElementById('InfoString').innerText=j.InfoString;
     if(document.getElementById('InfoString1')) document.getElementById('InfoString1').innerText=j.InfoString1;
