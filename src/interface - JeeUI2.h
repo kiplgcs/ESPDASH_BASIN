@@ -85,6 +85,11 @@ inline void interface(){
     oab.option("BRG", "BRG");
     oab.option("BGR", "BGR");
     oab.select("LedColorOrder", "Порядок цветов ленты");
+
+
+    oab.checkbox("WS2815_Time1", "Таймер RGB ленты"); //Галочка - активания/деактивация таймера
+	oab.time("timeON_WS2815", "Время включения по таймеру"); //Задать время включения часы/минуты
+	oab.time("timeOFF_WS2815", "Время отключения по таймеру"); //Задать время отключения часы/минуты
     // oab.time("Timer1", "Start Time");
     // oab.text("Comment", "Comment");
 
