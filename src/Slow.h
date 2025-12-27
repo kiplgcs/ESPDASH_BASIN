@@ -156,9 +156,9 @@ switch (flag_slow) {
   Lumen_Ul = analogRead(3); // GPIO1  GPIO2  GPIO3  GPIO4  GPIO5  GPIO6  GPIO7  GPIO8  GPIO9  GPIO10
   //jee.var("Lumen_Ul", String(Lumen_Ul));
   // if(Lumen_Ul != Saved_Lumen_Ul) {Saved_Lumen_Ul = Lumen_Ul;
-  Lumen_Ul_percent = map(Lumen_Ul, 4095, 0, 100, 0); // Переводим диаппазон люменов в диаппазон процентов
+  Lumen_Ul  = map(Lumen_Ul, 4095, 0, 100, 0); // Переводим диаппазон люменов в диаппазон процентов
 
-  InfoString2 = "Освещенность = " + String(Lumen_Ul_percent) + " %";  
+  InfoString2 = "Освещенность = " + String(Lumen_Ul) + " %";  
 
     //  jee.var("Lumen_Ul", ""); //освещенность на улице в процентах
     //  delay(5);

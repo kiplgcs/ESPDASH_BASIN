@@ -54,7 +54,7 @@ inline bool dashInterfaceInitialized = false; // Флаг, что интерфе
 
 bool Slep = false; //Флаг режима сна
 int Lumen_Ul, Saved_Lumen_Ul; //освещенность на улице
-int Lumen_Ul_percent; //Освещенность в процентах
+//int Lumen_Ul_percent; //Освещенность в процентах
 
 float PH, Saved_PH; //Кислотность воды
 float  PH1, PH2;					//Точки калибровки PH
@@ -810,6 +810,7 @@ private:
               else if(e.id=="timeON_WS2815") val = timeON_WS2815;
               else if(e.id=="timeOFF_WS2815") val = timeOFF_WS2815;
               else if(e.id=="Comment") val = Comment;
+              else if(e.id=="Lumen_Ul") val = Lumen_Ul;
 
               else if(e.id=="RandomVal") val = String(RandomVal);
               else if(e.id=="ModeSelect") val = ModeSelect;
@@ -1899,6 +1900,7 @@ window.addEventListener('resize', ()=>{
     if(typeof j.timeOFF_WS2815 !== 'undefined') updateInputValue('timeOFF_WS2815', j.timeOFF_WS2815); 
     
     if(typeof j.Comment !== 'undefined') updateInputValue('Comment', j.Comment);
+    if(typeof j.Lumen_Ul !== 'undefined') updateInputValue('Lumen_Ul', j.Lumen_Ul);
   });
 }
 setInterval(fetchLive, 1000);
@@ -1955,6 +1957,8 @@ function setImg(x){
         else if(key=="timeON_WS2815") { timeON_WS2815 = valStr; saveValue<String>("timeON_WS2815", timeON_WS2815); }
         else if(key=="timeOFF_WS2815") { timeOFF_WS2815 = valStr; saveValue<String>("timeOFF_WS2815", timeOFF_WS2815); }
         else if(key=="Comment") { Comment = valStr; saveValue<String>(key.c_str(), Comment); }
+
+        
         else if(key=="ModeSelect") { ModeSelect = valStr; saveValue<String>(key.c_str(), ModeSelect); }
         else if(key=="DaysSelect") { DaysSelect = valStr; saveValue<String>(key.c_str(), DaysSelect); }
         else if(key=="graphMainMaxPoints") {
@@ -2087,6 +2091,7 @@ function setImg(x){
                +",\"Lamp_timeON1\":\""+Lamp_timeON1+"\",\"Lamp_timeOFF1\":\""+Lamp_timeOFF1
                +"\",\"WS2815_Time1\":"+String(WS2815_Time1 ? 1 : 0)
                +",\"timeON_WS2815\":\""+timeON_WS2815+"\",\"timeOFF_WS2815\":\""+timeOFF_WS2815+"\""
+               +",\"Lumen_Ul\":\""+Lumen_Ul+"\""
                +",\"Comment\":\""+Comment+"\"}";
     r->send(200, "application/json", s);
     });

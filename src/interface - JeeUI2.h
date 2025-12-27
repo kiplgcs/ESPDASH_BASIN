@@ -55,7 +55,7 @@ inline void interface(){
     oab.option("Lamp_autosvet", "Включение по датчику освещенности");
     oab.option("Power_Time1", "Включение по таймеру");
     oab.select("SetLamp", "Режим света");
-    oab.text("Lumen_Ul", "Lumen_Ul");
+    oab.text("Lumen_Ul", "Освещенность на улице, %");
     oab.checkbox("Power_Time1", "Таймер лампы"); //Галочка - активания/деактивация таймера
 	oab.time("Lamp_timeON1", "Время включения по таймеру"); //Задать время включения часы/минуты
 	oab.time("Lamp_timeOFF1", "Время отключения по таймеру"); //Задать время отключения часы/минуты
