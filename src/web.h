@@ -37,6 +37,7 @@ inline String InfoString1;       // Вспомогательная информ�
 inline String InfoString2;
 inline String ModeSelect;        // Режим работы (например, Auto/Manual)
 inline String DaysSelect;        // Выбор дней недели
+inline String SetLamp;           // Режим работы лампы
 inline String StoredAPSSID;      // Сохраненный SSID точки доступа
 inline String StoredAPPASS;      // Сохраненный пароль точки доступа
 inline int button1 = 0;          // Состояние кнопки 1
@@ -814,6 +815,7 @@ private:
 
               else if(e.id=="RandomVal") val = String(RandomVal);
               else if(e.id=="ModeSelect") val = ModeSelect;
+              else if(e.id=="SetLamp") val = SetLamp;
               else if(e.id=="DaysSelect") val = DaysSelect;
               else if(e.id=="RangeSlider") {
                   RangeMin = loadValue<int>("RangeMin", RangeMin);
@@ -1887,6 +1889,7 @@ window.addEventListener('resize', ()=>{
     if(typeof j.LedAutoplay !== 'undefined') updateSelectValue('LedAutoplay', j.LedAutoplay);
     if(typeof j.LedAutoplayDuration !== 'undefined') updateSliderDisplay('LedAutoplayDuration', j.LedAutoplayDuration);
     if(typeof j.ModeSelect !== 'undefined') updateSelectValue('ModeSelect', j.ModeSelect);
+        if(typeof j.SetLamp !== 'undefined') updateSelectValue('SetLamp', j.SetLamp);
     if(typeof j.DaysSelect !== 'undefined') updateDaysSelection('DaysSelect', j.DaysSelect);
     if(typeof j.IntInput !== 'undefined') updateInputValue('IntInput', j.IntInput);
     if(typeof j.FloatInput !== 'undefined') updateInputValue('FloatInput', j.FloatInput);
@@ -1960,6 +1963,7 @@ function setImg(x){
 
         
         else if(key=="ModeSelect") { ModeSelect = valStr; saveValue<String>(key.c_str(), ModeSelect); }
+                else if(key=="SetLamp") { SetLamp = valStr; saveValue<String>(key.c_str(), SetLamp); }
         else if(key=="DaysSelect") { DaysSelect = valStr; saveValue<String>(key.c_str(), DaysSelect); }
         else if(key=="graphMainMaxPoints") {
           int valInt = valStr.toInt();
@@ -2086,6 +2090,7 @@ function setImg(x){
                 +",\"LEDColor\":\""+LEDColor+"\",\"LedPattern\":\""+LedPattern+"\",\"LedColorMode\":\""+LedColorMode+"\",\"LedColorOrder\":\""+LedColorOrder+"\",\"LedBrightness\":"+String(LedBrightness)
                +",\"LedAutoplay\":"+String(LedAutoplay ? 1 : 0)+",\"LedAutoplayDuration\":"+String(LedAutoplayDuration)
                +",\"ModeSelect\":\""+ModeSelect+"\",\"DaysSelect\":\""+DaysSelect+"\""
+                              +",\"ModeSelect\":\""+ModeSelect+"\",\"SetLamp\":\""+SetLamp+"\",\"DaysSelect\":\""+DaysSelect+"\""
                +",\"IntInput\":"+String(IntInput)+",\"FloatInput\":"+String(FloatInput)
               +",\"Timer1\":\""+Timer1+"\",\"Power_Time1\":"+String(Power_Time1 ? 1 : 0)
                +",\"Lamp_timeON1\":\""+Lamp_timeON1+"\",\"Lamp_timeOFF1\":\""+Lamp_timeOFF1

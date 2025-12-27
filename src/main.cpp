@@ -148,6 +148,7 @@ void setup() {
   FloatInput = loadValue<float>("FloatInput",3.14);       // Число с плавающей точкой
   Timer1 = loadValue<String>("Timer1","12:00");           // Таймер
   Comment = loadValue<String>("Comment","Hello!");        // Комментарий
+  // ModeSelect = loadValue<String>("ModeSelect","Normal");  // Режим работы
   ModeSelect = loadValue<String>("ModeSelect","Normal");  // Режим работы
   DaysSelect = loadValue<String>("DaysSelect","Mon,Wed,Fri"); // Дни недели
   RangeMin = loadValue<int>("RangeMin", RangeMin);        // Минимум диапазона

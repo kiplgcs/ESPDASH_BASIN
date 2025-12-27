@@ -156,11 +156,27 @@ void TimerControlRelay(int interval) {
 // //---------------------------------------------------------------------------------
 // //---------------------------------------------------------------------------------
 
-                //Проверяем, находится ли текущее время в диапазоне времени включения/выключения
-                  if (checkTimeInInterval(currentHour, currentMinute, Lamp_timeON1, Lamp_timeOFF1)&&Power_Time1==true) {
-                    Lamp=true;
-                  } else if (Power_Time1==true) {Lamp=false; } // Выключаем
-     
+                // //Проверяем, находится ли текущее время в диапазоне времени включения/выключения
+                //   if (checkTimeInInterval(currentHour, currentMinute, Lamp_timeON1, Lamp_timeOFF1)&&Power_Time1==true) {
+                //     Lamp=true;
+                //   } else if (Power_Time1==true) {Lamp=false; } // Выключаем
+                 //Проверяем режим освещения и применяем логику включения лампы
+                if (SetLamp == "off") {
+                  Lamp = false;
+                } else if (SetLamp == "on") {
+                  Lamp = true;
+                } else if (SetLamp == "timer") {
+                  Lamp = checkTimeInInterval(currentHour, currentMinute, Lamp_timeON1, Lamp_timeOFF1);
+                } else if (SetLamp == "auto") {
+                  Lamp = Lumen_Ul < 20;
+                } else {
+                  // Резервная логика для совместимости со старым управлением
+                  if (Power_Time1) {
+                    Lamp = checkTimeInInterval(currentHour, currentMinute, Lamp_timeON1, Lamp_timeOFF1);
+                  } else if (Lamp_autosvet) {
+                    Lamp = Lumen_Ul < 20;
+                  }
+                }    
    
                   if (checkTimeInInterval(currentHour, currentMinute, timeON_WS2815, timeOFF_WS2815)&&WS2815_Time1==true) {
                       Pow_WS2815=true;
