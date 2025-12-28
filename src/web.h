@@ -81,6 +81,35 @@ String Lamp_timeON1, Lamp_timeOFF1; // Утавки времени включе�
 String Saved_Lamp_timeON1, Saved_Lamp_timeOFF1;
 
 
+// inline void applyLampModeFromSetLamp() {
+//   if (SetLamp == "off") {
+//     Lamp = false;
+//     Lamp_autosvet = false;
+//     Power_Time1 = false;
+//   } else if (SetLamp == "on") {
+//     Lamp = true;
+//     Lamp_autosvet = false;
+//     Power_Time1 = false;
+//   } else if (SetLamp == "auto") {
+//     Lamp_autosvet = true;
+//     Power_Time1 = false;
+//   } else if (SetLamp == "timer") {
+//     Power_Time1 = true;
+//     Lamp_autosvet = false;
+//   }
+// }
+
+// inline void syncSetLampFromFlags() {
+//   if (Power_Time1) {
+//     SetLamp = "timer";
+//   } else if (Lamp_autosvet) {
+//     SetLamp = "auto";
+//   } else {
+//     SetLamp = Lamp ? "on" : "off";
+//   }
+// }
+
+
 bool Pow_WS2815, Pow_WS28151;		// Включение в ручную
 bool Pow_WS2815_autosvet, Saved_Pow_WS2815_autosvet; 
 bool WS2815_Time1, Saved_WS2815_Time1;
@@ -1963,8 +1992,39 @@ function setImg(x){
 
         
         else if(key=="ModeSelect") { ModeSelect = valStr; saveValue<String>(key.c_str(), ModeSelect); }
-                else if(key=="SetLamp") { SetLamp = valStr; saveValue<String>(key.c_str(), SetLamp); }
-        else if(key=="DaysSelect") { DaysSelect = valStr; saveValue<String>(key.c_str(), DaysSelect); }
+                // else if(key=="SetLamp") { SetLamp = valStr; saveValue<String>(key.c_str(), SetLamp); }
+                else if(key=="SetLamp") {
+                  SetLamp = valStr;
+                  if (SetLamp == "on") {
+                    Lamp = true;
+                    Lamp_autosvet = false;
+                    Power_Time1 = false;
+                  } else if (SetLamp == "auto") {
+                    Lamp = false;
+                    Lamp_autosvet = true;
+                    Power_Time1 = false;
+                  } else if (SetLamp == "timer") {
+                    Lamp = false;
+                    Lamp_autosvet = false;
+                    Power_Time1 = true;
+                  } else {
+                    Lamp = false;
+                    Lamp_autosvet = false;
+                    Power_Time1 = false;
+                  }
+                  saveValue<String>(key.c_str(), SetLamp);
+                  saveButtonState("button_Lamp", Lamp ? 1 : 0);
+                  saveValue<int>("Lamp_autosvet", Lamp_autosvet ? 1 : 0);
+                  saveValue<int>("Power_Time1", Power_Time1 ? 1 : 0);
+                }
+                //   else if(key=="SetLamp") {
+                //   SetLamp = valStr;
+                //   applyLampModeFromSetLamp();
+                //   saveValue<String>(key.c_str(), SetLamp);
+                //   saveButtonState("button_Lamp", Lamp ? 1 : 0);
+                //   saveValue<int>("Power_Time1", Power_Time1 ? 1 : 0);
+                // }      
+                else if(key=="DaysSelect") { DaysSelect = valStr; saveValue<String>(key.c_str(), DaysSelect); }
         else if(key=="graphMainMaxPoints") {
           int valInt = valStr.toInt();
           if(valInt < minGraphPoints) valInt = minGraphPoints;

@@ -107,7 +107,21 @@ void read_lamp_sw0_sw1_sw2(){
 
     Lamp_autosvet = myNex.readNumber("set_lamp.sw1.val"); delay(50);
     // jee.var("Lamp_autosvet", Lamp_autosvet ? "true" : "false"); //jee.var("Lamp_autosvet", String(Lamp_autosvet));
-}
+
+
+    if (Power_Time1) {
+      SetLamp = "timer";
+    } else if (Lamp_autosvet) {
+      SetLamp = "auto";
+    } else {
+      SetLamp = Lamp ? "on" : "off";
+    }
+
+    saveButtonState("button_Lamp", Lamp ? 1 : 0);
+    saveValue<int>("Power_Time1", Power_Time1 ? 1 : 0);
+    saveValue<String>("SetLamp", SetLamp);
+
+  }
 void trigger4(){ read_lamp_sw0_sw1_sw2();}
 
 
@@ -120,6 +134,15 @@ void trigger4(){ read_lamp_sw0_sw1_sw2();}
 // }
 // void trigger2(){read_lamp_n0_n1();}
 
+void read_lamp_n0_n1(){
+    in_hours = myNex.readNumber("set_lamp.n0.val"); in_minutes = myNex.readNumber("set_lamp.n1.val");
+    //Lamp_timeON1 = String(hours / 10) + String(hours % 10) + ":" + String(minutes/ 10) + String(minutes % 10);
+    sprintf(buffer, "%02d:%02d", in_hours, in_minutes); Saved_Lamp_timeON1=Lamp_timeON1 = buffer;
+    saveValue<String>("Lamp_timeON1", Lamp_timeON1);
+    // jee.var("Lamp_timeON1", Lamp_timeON1);
+}
+void trigger2(){read_lamp_n0_n1();}
+
 // //printh 23 02 54 03 - "set_lamp" Присвоить n2 / n3 время отключения подсветки
 // void read_lamp_n2_n3(){
 //     in_hours = myNex.readNumber("set_lamp.n2.val");  in_minutes = myNex.readNumber("set_lamp.n3.val");
@@ -127,7 +150,13 @@ void trigger4(){ read_lamp_sw0_sw1_sw2();}
 //     jee.var("Lamp_timeOFF1", Lamp_timeOFF1);
 // }
 // void trigger3(){read_lamp_n2_n3();}
-
+void read_lamp_n2_n3(){
+    in_hours = myNex.readNumber("set_lamp.n2.val");  in_minutes = myNex.readNumber("set_lamp.n3.val");
+    sprintf(buffer, "%02d:%02d", in_hours, in_minutes); Saved_Lamp_timeOFF1=Lamp_timeOFF1 = buffer;
+    saveValue<String>("Lamp_timeOFF1", Lamp_timeOFF1);
+    // jee.var("Lamp_timeOFF1", Lamp_timeOFF1);
+}
+void trigger3(){read_lamp_n2_n3();}
 
 // /////////////////////////************* page set_RGB  **************/////////////////////////////
 // ////////////////////////************* page set_RGB  **************//////////////////////////////
@@ -141,7 +170,14 @@ void trigger4(){ read_lamp_sw0_sw1_sw2();}
 //     jee.var("timeON_WS2815", timeON_WS2815);
 // }
 // void trigger5(){read_RGB_n0_n1();}
-
+void read_RGB_n0_n1(){
+    in_hours = myNex.readNumber("set_RGB.n0.val"); in_minutes = myNex.readNumber("set_RGB.n1.val");  
+    //Lamp_timeON1 = String(hours / 10) + String(hours % 10) + ":" + String(minutes/ 10) + String(minutes % 10);
+    sprintf(buffer, "%02d:%02d", in_hours, in_minutes); Saved_timeON_WS2815=timeON_WS2815 = buffer;
+    saveValue<String>("timeON_WS2815", timeON_WS2815);
+    // jee.var("timeON_WS2815", timeON_WS2815);
+}
+void trigger5(){read_RGB_n0_n1();}
 
 // //printh 23 02 54 06 - Присвоить n2 / n3 время отключения RGB ленты
 // void read_RGB_n2_n3(){
@@ -150,7 +186,13 @@ void trigger4(){ read_lamp_sw0_sw1_sw2();}
 //     jee.var("timeOFF_WS2815", timeOFF_WS2815);
 // }
 // void trigger6(){read_RGB_n2_n3();}
-
+void read_RGB_n2_n3(){
+    in_hours = myNex.readNumber("set_RGB.n2.val"); in_minutes = myNex.readNumber("set_RGB.n3.val");
+    sprintf(buffer, "%02d:%02d", in_hours, in_minutes); Saved_timeOFF_WS2815=timeOFF_WS2815 = buffer;
+    saveValue<String>("timeOFF_WS2815", timeOFF_WS2815);
+    // jee.var("timeOFF_WS2815", timeOFF_WS2815);
+}
+void trigger6(){read_RGB_n2_n3();}
 
 // //printh 23 02 54 07 - "set-RGB" Присвоить все кнопки подсветки RGB ленты
 // void read_RGB_sw0_sw2_sw3(){

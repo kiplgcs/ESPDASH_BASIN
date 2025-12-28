@@ -49,7 +49,7 @@ inline void interface(){
     // Управление лампой
     oab.page();
     oab.text("InfoString2", InfoString2, "x:45%;y:1%;fontSize:22;color:#00ff00");
-    oab.button("button_Lamp", "red", "Включить / Отключить : Лампу в бассейне ");
+    // oab.button("button_Lamp", "red", "Включить / Отключить : Лампу в бассейне ");
     // oab.option("button_Lamp", "Лампа отключена постоянно");
     // oab.option("button_Lamp", "Лампа включена постоянно");
     // oab.option("Lamp_autosvet", "Включение по датчику освещенности");
@@ -61,7 +61,7 @@ inline void interface(){
 
     oab.select("SetLamp", "Режим света");
     oab.text("Lumen_Ul", "Освещенность на улице, %");
-    oab.checkbox("Power_Time1", "Таймер лампы"); //Галочка - активания/деактивация таймера
+    // oab.checkbox("Power_Time1", "Таймер лампы"); //Галочка - активания/деактивация таймера
 	oab.time("Lamp_timeON1", "Время включения по таймеру"); //Задать время включения часы/минуты
 	oab.time("Lamp_timeOFF1", "Время отключения по таймеру"); //Задать время отключения часы/минуты
 

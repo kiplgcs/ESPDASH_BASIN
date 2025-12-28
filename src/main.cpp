@@ -172,10 +172,21 @@ void setup() {
   LedBrightness = loadValue<int>("LedBrightness", LedBrightness);
   new_bright = LedBrightness;
 
+
+  // SetLamp = loadValue<String>("SetLamp", "");
   Lamp = loadButtonState("button_Lamp", 0) != 0;
+  // Lamp_autosvet = false;
+  Lamp_autosvet = loadValue<int>("Lamp_autosvet", 0) != 0;
   Power_Time1 = loadValue<int>("Power_Time1", 0) != 0;
   Lamp_timeON1 = loadValue<String>("Lamp_timeON1", "00:00");
   Lamp_timeOFF1 = loadValue<String>("Lamp_timeOFF1", "00:00");
+  // if (SetLamp.length()) {
+  //   applyLampModeFromSetLamp();
+  // } else {
+  //   syncSetLampFromFlags();
+  //   saveValue<String>("SetLamp", SetLamp);
+  // }
+   SetLamp = loadValue<String>("SetLamp", "off");
 
   setup_WS2815();
 
