@@ -224,15 +224,54 @@ void trigger6(){read_RGB_n2_n3();}
 //     Pow_WS28151 = Pow_WS2815 = myNex.readNumber("set_RGB.sw3.val"); delay(50);
 //     jee.var("Pow_WS2815", Pow_WS2815 ? "true" : "false");
 //     Error err = RS485.addRequest(40001,1,0x05,1, Pow_WS2815 ? devices[0].value : devices[1].value);
+void read_RGB_sw0_sw2_sw3(){
+    Pow_WS2815 = myNex.readNumber("set_RGB.sw3.val"); delay(50);
+    WS2815_Time1 = myNex.readNumber("set_RGB.sw0.val"); delay(50);
+    Pow_WS2815_autosvet = myNex.readNumber("set_RGB.sw2.val"); delay(50);
+
+    bool timerChanged = WS2815_Time1 != Saved_WS2815_Time1;
+    bool autoChanged = Pow_WS2815_autosvet != Saved_Pow_WS2815_autosvet;
+    if (WS2815_Time1 && Pow_WS2815_autosvet) {
+      if (timerChanged && !autoChanged) {
+        Pow_WS2815_autosvet = false;
+      } else if (autoChanged && !timerChanged) {
+        WS2815_Time1 = false;
+      } else {
+        Pow_WS2815_autosvet = false;
+      }
+    }
+
+    if (WS2815_Time1 != Saved_WS2815_Time1 || Pow_WS2815_autosvet != Saved_Pow_WS2815_autosvet) {
+      myNex.writeStr("page set_RGB");
+      if (WS2815_Time1 != Saved_WS2815_Time1) {
+        myNex.writeNum("set_RGB.sw0.val", WS2815_Time1 ? 1 : 0);
+        Saved_WS2815_Time1 = WS2815_Time1;
+      }
+      if (Pow_WS2815_autosvet != Saved_Pow_WS2815_autosvet) {
+        myNex.writeNum("set_RGB.sw2.val", Pow_WS2815_autosvet ? 1 : 0);
+        Saved_Pow_WS2815_autosvet = Pow_WS2815_autosvet;
+      }
+    }
 
 //     Saved_WS2815_Time1=WS2815_Time1 = myNex.readNumber("set_RGB.sw0.val"); delay(50);
 //     jee.var("WS2815_Time1", WS2815_Time1 ? "true" : "false"); 
-
+    if (WS2815_Time1) {
+      SetRGB = "timer";
+    } else if (Pow_WS2815_autosvet) {
+      SetRGB = "auto";
+    } else {
+      SetRGB = Pow_WS2815 ? "on" : "off";
+    }
 //     Saved_Pow_WS2815_autosvet = Pow_WS2815_autosvet = myNex.readNumber("set_RGB.sw2.val"); 
 //     jee.var("Pow_WS2815_autosvet", Pow_WS2815_autosvet ? "true" : "false"); 
 // }
 // void trigger7(){read_RGB_sw0_sw2_sw3();}
-
+    saveButtonState("button_WS2815", Pow_WS2815 ? 1 : 0);
+    saveValue<int>("Pow_WS2815_autosvet", Pow_WS2815_autosvet ? 1 : 0);
+    saveValue<int>("WS2815_Time1", WS2815_Time1 ? 1 : 0);
+    saveValue<String>("SetRGB", SetRGB);
+}
+void trigger7(){read_RGB_sw0_sw2_sw3();}
 
 // /////////////////////////************* page set_filtr **************/////////////////////////////
 // ////////////////////////************* page set_filtr **************//////////////////////////////

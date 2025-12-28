@@ -158,9 +158,11 @@ void setup() {
 
 
   Pow_WS2815 = loadButtonState("button_WS2815", 1) != 0;
+    Pow_WS2815_autosvet = loadValue<int>("Pow_WS2815_autosvet", 0) != 0;
   WS2815_Time1 = loadValue<int>("WS2815_Time1", 0) != 0;
   timeON_WS2815 = loadValue<String>("timeON_WS2815", "00:00");
   timeOFF_WS2815 = loadValue<String>("timeOFF_WS2815", "00:00");
+    SetRGB = loadValue<String>("SetRGB", "off");
   ColorLED = loadValue<String>("LEDColor","#00ff00");      // WS2815
   LedPattern = loadValue<String>("LedPattern", LedPattern);
   LedColorMode = loadValue<String>("LedColorMode", LedColorMode);

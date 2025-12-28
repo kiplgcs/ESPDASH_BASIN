@@ -38,6 +38,7 @@ inline String InfoString2;
 inline String ModeSelect;        // Режим работы (например, Auto/Manual)
 inline String DaysSelect;        // Выбор дней недели
 inline String SetLamp;           // Режим работы лампы
+inline String SetRGB;            // Режим управления RGB подсветкой
 inline String StoredAPSSID;      // Сохраненный SSID точки доступа
 inline String StoredAPPASS;      // Сохраненный пароль точки доступа
 inline int button1 = 0;          // Состояние кнопки 1
@@ -337,8 +338,36 @@ private:
       ".card.compact label{font-size:0.78em;color:#b0b0b0;margin-bottom:2px;text-transform:uppercase;letter-spacing:0.3px;} "
       ".card.compact input,.card.compact select,.card.compact .display-value{font-size:0.95em;padding:6px 8px;border-radius:8px;background:#111;border:1px solid #262626;color:#f6f6f6;} "
       ".card.compact .display-value{background:transparent;border:none;padding:2px 0;} "
-      ".select-days{display:grid; grid-template-columns: repeat(4, auto); gap:5px; padding:5px; background:#222; border-radius:6px;} "
-      ".select-days label{display:flex;align-items:center;gap:5px;cursor:pointer;} "
+".select-days{--day-accent:#4cc3ff;display:flex;flex-wrap:nowrap;gap:8px;"
+      "justify-content:center;align-items:center;padding:8px;"
+      "background:linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02));"
+      "border-radius:14px;border:1px solid rgba(255,255,255,0.12);"
+      "box-shadow:inset 0 1px 0 rgba(255,255,255,0.08),0 10px 24px rgba(0,0,0,0.45);"
+      "overflow-x:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.2) transparent;} "
+      ".select-days::-webkit-scrollbar{height:6px;} "
+      ".select-days::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.2);border-radius:999px;} "
+      ".select-days .day-pill{position:relative;display:inline-flex;align-items:center;justify-content:center;"
+      "min-width:42px;height:32px;padding:0 12px;border-radius:999px;"
+      "font-size:0.78em;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;"
+      "color:#b7c0ce;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);"
+      "box-shadow:inset 0 1px 0 rgba(255,255,255,0.08),0 6px 14px rgba(0,0,0,0.4);"
+      "cursor:pointer;transition:transform 0.18s ease,box-shadow 0.18s ease,background 0.18s ease,color 0.18s ease;} "
+      ".select-days .day-pill input{position:absolute;opacity:0;pointer-events:none;} "
+      ".select-days .day-pill:hover{transform:translateY(-1px) scale(1.05);"
+      "box-shadow:0 10px 18px rgba(0,0,0,0.45);} "
+      ".select-days .day-pill:active{transform:translateY(0) scale(0.98);} "
+      ".select-days .day-pill:has(input:checked){color:#fff;"
+      "background:linear-gradient(135deg,rgba(76,195,255,0.3),rgba(76,195,255,0.12));"
+      "border-color:rgba(76,195,255,0.6);"
+      "box-shadow:0 0 0 1px rgba(76,195,255,0.35),0 12px 26px rgba(76,195,255,0.35);} "
+      ".select-days .day-pill:has(input:checked)::after{content:'';position:absolute;inset:-6px;"
+      "border-radius:inherit;background:radial-gradient(circle,rgba(76,195,255,0.35),transparent 65%);"
+      "opacity:0.75;filter:blur(6px);z-index:0;} "
+      ".select-days .day-pill span{position:relative;z-index:1;} "
+      "@media (max-width:520px){"
+      ".select-days{gap:6px;padding:6px;}"
+      ".select-days .day-pill{min-width:36px;height:30px;padding:0 10px;font-size:0.74em;}"
+      "} "
       ".select-days.compact{gap:6px;padding:6px;background:#141416;border:1px solid #242424;} "
       "table{width:100%;border-collapse:collapse;margin-top:10px;} th,td{border:1px solid #444;padding:6px;text-align:center;} "
       "th{background:#333;} "
@@ -363,8 +392,32 @@ private:
       "label:has(input[type=checkbox]){display:flex;flex-direction:column;align-items:flex-start;gap:6px;width:fit-content;} "
       "label:has(input[type=checkbox]) input[type=checkbox]{margin-bottom:0;transform:scale(1.4);transform-origin:left center;} "
       "input[type=range]{width:100%;} "
-      ".select-days{display:grid; grid-template-columns: repeat(4, auto); gap:5px; padding:5px; background:#222; border-radius:6px;} "
-      ".select-days label{display:flex;align-items:center;gap:5px;cursor:pointer;} "
+   ".select-days{--day-accent:#4cc3ff;display:flex;flex-wrap:nowrap;gap:8px;"
+      "justify-content:center;align-items:center;padding:8px;"
+      "background:linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02));"
+      "border-radius:14px;border:1px solid rgba(255,255,255,0.12);"
+      "box-shadow:inset 0 1px 0 rgba(255,255,255,0.08),0 10px 24px rgba(0,0,0,0.45);"
+      "overflow-x:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.2) transparent;} "
+      ".select-days::-webkit-scrollbar{height:6px;} "
+      ".select-days::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.2);border-radius:999px;} "
+      ".select-days .day-pill{position:relative;display:inline-flex;align-items:center;justify-content:center;"
+      "min-width:42px;height:32px;padding:0 12px;border-radius:999px;"
+      "font-size:0.78em;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;"
+      "color:#b7c0ce;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);"
+      "box-shadow:inset 0 1px 0 rgba(255,255,255,0.08),0 6px 14px rgba(0,0,0,0.4);"
+      "cursor:pointer;transition:transform 0.18s ease,box-shadow 0.18s ease,background 0.18s ease,color 0.18s ease;} "
+      ".select-days .day-pill input{position:absolute;opacity:0;pointer-events:none;} "
+      ".select-days .day-pill:hover{transform:translateY(-1px) scale(1.05);"
+      "box-shadow:0 10px 18px rgba(0,0,0,0.45);} "
+      ".select-days .day-pill:active{transform:translateY(0) scale(0.98);} "
+      ".select-days .day-pill:has(input:checked){color:#fff;"
+      "background:linear-gradient(135deg,rgba(76,195,255,0.3),rgba(76,195,255,0.12));"
+      "border-color:rgba(76,195,255,0.6);"
+      "box-shadow:0 0 0 1px rgba(76,195,255,0.35),0 12px 26px rgba(76,195,255,0.35);} "
+      ".select-days .day-pill:has(input:checked)::after{content:'';position:absolute;inset:-6px;"
+      "border-radius:inherit;background:radial-gradient(circle,rgba(76,195,255,0.35),transparent 65%);"
+      "opacity:0.75;filter:blur(6px);z-index:0;} "
+      ".select-days .day-pill span{position:relative;z-index:1;} "
       "table{width:100%;border-collapse:collapse;margin-top:10px;} th,td{border:1px solid #444;padding:6px;text-align:center;} "
       "th{background:#333;} "
       ".card.pro-card{background:linear-gradient(135deg,#0f0f12,#151a2d);border:1px solid rgba(129,193,255,0.4);} "
@@ -489,12 +542,12 @@ private:
        ".card:has(#RandomVal) #RandomVal{"
       "font-size:1.5em;font-weight:700;color:#ffffff;text-shadow:0 4px 12px rgba(0,0,0,0.45);margin-top:6px;"
       "} "
-      ".card:has(#DaysSelect) .select-days{gap:8px;padding:8px 6px;background:rgba(255,255,255,0.02);"
-      "border-radius:12px;border:1px solid rgba(255,255,255,0.12);box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02);}"
-      ".card:has(#DaysSelect) .select-days label{border:1px solid rgba(255,255,255,0.08);"
-      "padding:5px 10px;border-radius:9px;background:rgba(255,255,255,0.02);transition:background 0.2s ease,color 0.2s ease;}"
-      ".card:has(#DaysSelect) .select-days input[type=checkbox]{accent-color:#4CAF50;}"
-      
+      // ".card:has(#DaysSelect) .select-days{gap:8px;padding:8px 6px;background:rgba(255,255,255,0.02);"
+      // "border-radius:12px;border:1px solid rgba(255,255,255,0.12);box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02);}"
+      // ".card:has(#DaysSelect) .select-days label{border:1px solid rgba(255,255,255,0.08);"
+      // "padding:5px 10px;border-radius:9px;background:rgba(255,255,255,0.02);transition:background 0.2s ease,color 0.2s ease;}"
+      // ".card:has(#DaysSelect) .select-days input[type=checkbox]{accent-color:#4CAF50;}"
+            ".card:has(#DaysSelect) .select-days{--day-accent:#4cc3ff;}"
       ".stats-card{display:flex;flex-direction:column;gap:14px;} "
       ".stat-group{display:flex;flex-direction:column;gap:8px;} "
       ".stat-heading{font-size:0.82em;color:#9fb4c8;letter-spacing:0.05em;text-transform:uppercase;padding-left:2px;} "
@@ -845,6 +898,7 @@ private:
               else if(e.id=="RandomVal") val = String(RandomVal);
               else if(e.id=="ModeSelect") val = ModeSelect;
               else if(e.id=="SetLamp") val = SetLamp;
+               else if(e.id=="SetRGB") val = SetRGB;
               else if(e.id=="DaysSelect") val = DaysSelect;
               else if(e.id=="RangeSlider") {
                   RangeMin = loadValue<int>("RangeMin", RangeMin);
@@ -991,10 +1045,12 @@ private:
               else if(e.type=="selectdays"){
                   html += "<label>"+e.label+"</label>";
                   html += "<div id='"+e.id+"' class='select-days'>";
-                  const char* days[] = {"Mon","Tue","Wed","Thu","Fri","Sat","Sun"};
+                                    const char* dayValues[] = {"Mon","Tue","Wed","Thu","Fri","Sat","Sun"};
+                  const char* dayLabels[] = {"ПН","ВТ","СР","ЧТ","ПТ","СБ","ВС"};
                   for(int i=0;i<7;i++){
-                      bool checked = val.indexOf(days[i])>=0;
-                      html += "<label><input type='checkbox' value='"+String(days[i])+"' "+(checked?"checked":"")+">"+days[i]+"</label>";
+                      bool checked = val.indexOf(dayValues[i])>=0;
+                      html += "<label class='day-pill'><input type='checkbox' value='"+String(dayValues[i])+"' "
+                          +(checked?"checked":"")+"><span>"+String(dayLabels[i])+"</span></label>";
                   }
                   html += "</div>"; // ????????? select-days
               }
@@ -1919,7 +1975,8 @@ window.addEventListener('resize', ()=>{
     if(typeof j.LedAutoplayDuration !== 'undefined') updateSliderDisplay('LedAutoplayDuration', j.LedAutoplayDuration);
     if(typeof j.ModeSelect !== 'undefined') updateSelectValue('ModeSelect', j.ModeSelect);
         if(typeof j.SetLamp !== 'undefined') updateSelectValue('SetLamp', j.SetLamp);
-    if(typeof j.DaysSelect !== 'undefined') updateDaysSelection('DaysSelect', j.DaysSelect);
+       if(typeof j.SetRGB !== 'undefined') updateSelectValue('SetRGB', j.SetRGB);
+        if(typeof j.DaysSelect !== 'undefined') updateDaysSelection('DaysSelect', j.DaysSelect);
     if(typeof j.IntInput !== 'undefined') updateInputValue('IntInput', j.IntInput);
     if(typeof j.FloatInput !== 'undefined') updateInputValue('FloatInput', j.FloatInput);
 
@@ -2016,6 +2073,30 @@ function setImg(x){
                   saveButtonState("button_Lamp", Lamp ? 1 : 0);
                   saveValue<int>("Lamp_autosvet", Lamp_autosvet ? 1 : 0);
                   saveValue<int>("Power_Time1", Power_Time1 ? 1 : 0);
+                }
+                  else if(key=="SetRGB") {
+                  SetRGB = valStr;
+                  if (SetRGB == "on") {
+                    Pow_WS2815 = true;
+                    Pow_WS2815_autosvet = false;
+                    WS2815_Time1 = false;
+                  } else if (SetRGB == "auto") {
+                    Pow_WS2815 = false;
+                    Pow_WS2815_autosvet = true;
+                    WS2815_Time1 = false;
+                  } else if (SetRGB == "timer") {
+                    Pow_WS2815 = false;
+                    Pow_WS2815_autosvet = false;
+                    WS2815_Time1 = true;
+                  } else {
+                    Pow_WS2815 = false;
+                    Pow_WS2815_autosvet = false;
+                    WS2815_Time1 = false;
+                  }
+                  saveValue<String>(key.c_str(), SetRGB);
+                  saveButtonState("button_WS2815", Pow_WS2815 ? 1 : 0);
+                  saveValue<int>("Pow_WS2815_autosvet", Pow_WS2815_autosvet ? 1 : 0);
+                  saveValue<int>("WS2815_Time1", WS2815_Time1 ? 1 : 0);
                 }
                 //   else if(key=="SetLamp") {
                 //   SetLamp = valStr;
@@ -2150,8 +2231,9 @@ function setImg(x){
                 +",\"LEDColor\":\""+LEDColor+"\",\"LedPattern\":\""+LedPattern+"\",\"LedColorMode\":\""+LedColorMode+"\",\"LedColorOrder\":\""+LedColorOrder+"\",\"LedBrightness\":"+String(LedBrightness)
                +",\"LedAutoplay\":"+String(LedAutoplay ? 1 : 0)+",\"LedAutoplayDuration\":"+String(LedAutoplayDuration)
                +",\"ModeSelect\":\""+ModeSelect+"\",\"DaysSelect\":\""+DaysSelect+"\""
-                              +",\"ModeSelect\":\""+ModeSelect+"\",\"SetLamp\":\""+SetLamp+"\",\"DaysSelect\":\""+DaysSelect+"\""
-               +",\"IntInput\":"+String(IntInput)+",\"FloatInput\":"+String(FloatInput)
+                              // +",\"ModeSelect\":\""+ModeSelect+"\",\"SetLamp\":\""+SetLamp+"\",\"DaysSelect\":\""+DaysSelect+"\""
+                                            +",\"ModeSelect\":\""+ModeSelect+"\",\"SetLamp\":\""+SetLamp+"\",\"SetRGB\":\""+SetRGB+"\",\"DaysSelect\":\""+DaysSelect+"\""
+                              +",\"IntInput\":"+String(IntInput)+",\"FloatInput\":"+String(FloatInput)
               +",\"Timer1\":\""+Timer1+"\",\"Power_Time1\":"+String(Power_Time1 ? 1 : 0)
                +",\"Lamp_timeON1\":\""+Lamp_timeON1+"\",\"Lamp_timeOFF1\":\""+Lamp_timeOFF1
                +"\",\"WS2815_Time1\":"+String(WS2815_Time1 ? 1 : 0)
