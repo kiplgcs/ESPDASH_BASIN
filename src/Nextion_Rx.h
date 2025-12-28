@@ -109,6 +109,30 @@ void read_lamp_sw0_sw1_sw2(){
     // jee.var("Lamp_autosvet", Lamp_autosvet ? "true" : "false"); //jee.var("Lamp_autosvet", String(Lamp_autosvet));
 
 
+    bool powerChanged = Power_Time1 != Saved_Power_Time1;
+    bool autoChanged = Lamp_autosvet != Saved_Lamp_autosvet;
+    if (Power_Time1 && Lamp_autosvet) {
+      if (powerChanged && !autoChanged) {
+        Lamp_autosvet = false;
+      } else if (autoChanged && !powerChanged) {
+        Power_Time1 = false;
+      } else {
+        Lamp_autosvet = false;
+      }
+    }
+
+    if (Power_Time1 != Saved_Power_Time1 || Lamp_autosvet != Saved_Lamp_autosvet) {
+      myNex.writeStr("page set_lamp");
+      if (Power_Time1 != Saved_Power_Time1) {
+        myNex.writeNum("set_lamp.sw0.val", Power_Time1 ? 1 : 0);
+        Saved_Power_Time1 = Power_Time1;
+      }
+      if (Lamp_autosvet != Saved_Lamp_autosvet) {
+        myNex.writeNum("set_lamp.sw1.val", Lamp_autosvet ? 1 : 0);
+        Saved_Lamp_autosvet = Lamp_autosvet;
+      }
+    }
+
     if (Power_Time1) {
       SetLamp = "timer";
     } else if (Lamp_autosvet) {
@@ -118,6 +142,7 @@ void read_lamp_sw0_sw1_sw2(){
     }
 
     saveButtonState("button_Lamp", Lamp ? 1 : 0);
+    saveValue<int>("Lamp_autosvet", Lamp_autosvet ? 1 : 0);
     saveValue<int>("Power_Time1", Power_Time1 ? 1 : 0);
     saveValue<String>("SetLamp", SetLamp);
 

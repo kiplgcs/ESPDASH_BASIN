@@ -50,6 +50,7 @@ inline void interface(){
     oab.page();
     oab.text("InfoString2", InfoString2, "x:45%;y:1%;fontSize:22;color:#00ff00");
     // oab.button("button_Lamp", "red", "Включить / Отключить : Лампу в бассейне ");
+    // oab.button("button_Lamp", "gray", "Лампа в бассейне (факт)");
     // oab.option("button_Lamp", "Лампа отключена постоянно");
     // oab.option("button_Lamp", "Лампа включена постоянно");
     // oab.option("Lamp_autosvet", "Включение по датчику освещенности");
