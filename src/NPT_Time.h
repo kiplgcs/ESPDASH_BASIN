@@ -1,8 +1,12 @@
 // Подключаем необходимые библиотеки
+#pragma once
+
 #include <WiFiUdp.h> // Библиотека для работы с UDP-протоколом
 #include <NTPClient.h> // Библиотека для работы с NTP-клиентом
 #include "EasyNextionLibrary.h"
 #include <Wire.h>
+#include <time.h>
+#include "wifi_manager.h"
 //#include <RTClib.h>
 //#include <TimeLib.h>
 //#include <Adafruit_I2CDevice.h
@@ -13,7 +17,7 @@ const char *ntpServer2 = "time.google.com";
 //int gmtOffset_correct = 3; //GMT+3:00, Москва/Краснодар
 const int daylightOffset = 0; // Смещение летнего времени (0 - отключено)
 
-int period_get_NPT_Time = 5000; // 10сек./3мин - время через которое будет обновлятся время из интерента
+inline int period_get_NPT_Time = 5000; // 10сек./3мин - время через которое будет обновлятся время из интерента
 
 // Внешние зависимости из других модулей
 extern WiFiUDP ntpUDP;
@@ -22,18 +26,23 @@ extern int Saved_gmtOffset_correct;
 extern int gmtOffset_correct;
 
 // Переменные времени по умолчанию
-int npt_seconds, seconds;
-int npt_minutes, minutes;
-int npt_hours, hours;
-int npt_Day, Day;        //День месяца
-int npt_Month, Month;      //Месяц
-int npt_Year, Year;       //Год
+inline int npt_seconds, seconds;
+inline int npt_minutes, minutes;
+inline int npt_hours, hours;
+inline int npt_Day, Day;        //День месяца
+inline int npt_Month, Month;      //Месяц
+inline int npt_Year, Year;       //Год
 
-int npt_DayOfWeek=1, DayOfWeek=1;  //День недели - Значение от 1 (Понедельник) до 7 (воскресенье)
+inline int npt_DayOfWeek=1, DayOfWeek=1;  //День недели - Значение от 1 (Понедельник) до 7 (воскресенье)
 const char* daysOfWeek[] = {"ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ", "ВС"};
 
 
 const int kNextionInvalidValue = 777777;
+inline const char *kLastEpochKey = "lastEpoch"; // Ключ в NVS для хранения последнего известного времени (epoch)
+inline time_t baseEpoch = 0;                    // Базовый epoch, от которого ведем отсчет
+inline unsigned long baseEpochMillis = 0;       // millis() в момент установки baseEpoch
+inline bool baseEpochReady = false;             // Флаг, что базовое время валидно
+inline time_t lastSavedEpoch = 0;               // Последний epoch, сохраненный в NVS
 
 bool isValidDateTime(int year, int month, int day, int hour, int minute, int second) {
   if (year < 2024 || year > 2040) return false;
@@ -48,7 +57,83 @@ bool isValidDateTime(int year, int month, int day, int hour, int minute, int sec
 bool isValidDayOfWeek(int dayOfWeek) {
   return dayOfWeek >= 1 && dayOfWeek <= 7;
 }
+// Собираем epoch из компонентов даты/времени, чтобы работать единым форматом времени
+time_t buildEpoch(int year, int month, int day, int hour, int minute, int second) {
+  struct tm timeInfo = {};
+  timeInfo.tm_year = year - 1900;
+  timeInfo.tm_mon = month - 1;
+  timeInfo.tm_mday = day;
+  timeInfo.tm_hour = hour;
+  timeInfo.tm_min = minute;
+  timeInfo.tm_sec = second;
+  return mktime(&timeInfo);
+}
+// Раскладываем epoch обратно в компоненты даты/времени для UI/логики
+void syncComponentsFromEpoch(time_t epoch) {
+  struct tm *tmInfo = localtime(&epoch);
+  if (!tmInfo) return;
+  seconds = tmInfo->tm_sec;
+  minutes = tmInfo->tm_min;
+  hours = tmInfo->tm_hour;
+  Day = tmInfo->tm_mday;
+  Month = tmInfo->tm_mon + 1;
+  Year = tmInfo->tm_year + 1900;
+  int normalizedDayOfWeek = (tmInfo->tm_wday + 6) % 7 + 1;
+  DayOfWeek = normalizedDayOfWeek;
+}
+// Устанавливаем базовое время: фиксируем epoch, стартовую метку millis и сохраняем в NVS
+// Сохраняем не чаще раза в минуту, чтобы не изнашивать память
+void setBaseEpoch(time_t epoch) {
+  if (epoch <= 0) return;
+  baseEpoch = epoch;
+  baseEpochMillis = millis();
+  baseEpochReady = true;
+  syncComponentsFromEpoch(epoch);
+  if (lastSavedEpoch == 0 || epoch > lastSavedEpoch + 60 || epoch + 60 < lastSavedEpoch) {
+    saveValue<int>(kLastEpochKey, static_cast<int>(epoch));
+    lastSavedEpoch = epoch;
+  }
+}
+// Загружаем последнее известное время из NVS (если нет Nextion/Интернета)
+bool loadBaseEpochFromStorage() {
+  int storedEpoch = loadValue<int>(kLastEpochKey, 0);
+  if (storedEpoch > 0) {
+    setBaseEpoch(static_cast<time_t>(storedEpoch));
+    return true;
+  }
+  return false;
+}
+// Получаем текущее время: baseEpoch + прошедшие секунды от millis
+time_t getCurrentEpoch() {
+  if (!baseEpochReady) return 0;
+  unsigned long elapsedSeconds = (millis() - baseEpochMillis) / 1000;
+  return baseEpoch + elapsedSeconds;
+}
+// Вспомогательная функция для расписаний (часы/минуты из единого источника времени)
+bool getCurrentHourMinute(int &currentHour, int &currentMinute) {
+  time_t epoch = getCurrentEpoch();
+  if (epoch <= 0) return false;
+  struct tm *tmInfo = localtime(&epoch);
+  if (!tmInfo) return false;
+  currentHour = tmInfo->tm_hour;
+  currentMinute = tmInfo->tm_min;
+  return true;
+}
+// Форматирование epoch в строку для веб-интерфейса
+String formatEpoch(time_t epoch) {
+  if (epoch <= 0) return String("--");
+  struct tm *tmInfo = localtime(&epoch);
+  if (!tmInfo) return String("--");
+  char buf[20];
+  strftime(buf, sizeof(buf), "%d.%m.%Y %H:%M:%S", tmInfo);
+  return String(buf);
+}
+// Текущее время в строковом виде для UI
+String getCurrentDateTime() {
+  return formatEpoch(getCurrentEpoch());
+}
 
+// Читаем время из Nextion RTC и валидируем значения
 bool fetchNextionTime(int &readSeconds, int &readMinutes, int &readHours, int &readDay,
                       int &readMonth, int &readYear, int &readDayOfWeek) {
   int hoursValue = myNex.readNumber("rtc3");
@@ -86,7 +171,7 @@ bool fetchNextionTime(int &readSeconds, int &readMinutes, int &readHours, int &r
   readDayOfWeek = normalizedDayOfWeek;
   return true;
 }
-
+// Пробуем взять время из Nextion и сразу установить baseEpoch
 bool readNextionTime() {
   int readSeconds = 0;
   int readMinutes = 0;
@@ -99,13 +184,11 @@ bool readNextionTime() {
     return false;
   }
 
-  seconds = readSeconds;
-  minutes = readMinutes;
-  hours = readHours;
-  Day = readDay;
-  Month = readMonth;
-  Year = readYear;
-  DayOfWeek = readDayOfWeek;
+  time_t epoch = buildEpoch(readYear, readMonth, readDay, readHours, readMinutes, readSeconds);
+  if (epoch <= 0) {
+    return false;
+  }
+  setBaseEpoch(epoch);
   return true;
 }
 
@@ -116,7 +199,6 @@ bool isSameTimeDate(int hourA, int minuteA, int secondA, int dayA, int monthA, i
 }
 
 int iii=1; //переменная для счета до отправки на Web -Обновляенм время на первой странице
-
 void getTimeFromRTC(int interval_TimeFromRTC) {
   static unsigned long timer;
 if (interval_TimeFromRTC + timer > millis()) return; 
@@ -179,7 +261,11 @@ bool checkInternetAvailability() {
   }
 }
 
-
+// Основная синхронизация времени.
+// Порядок действий:
+// 1) Пытаемся прочитать время из Nextion (если доступен) и использовать как базу.
+// 2) Если есть Интернет — запрашиваем NTP и обновляем базу (и при необходимости Nextion).
+// 3) Если Интернета нет и Nextion недоступен — поднимаем время из NVS.
 void NPT_Time(int interval_NPT_Time){ // переодически синхронизируем время из Интеренета
 static unsigned long timer;
 if (interval_NPT_Time + timer > millis()) return; 
@@ -187,7 +273,24 @@ timer = millis();
 //---------------------------------------------------------------------------------
 //---------------------------------------------------------------------------------
 //---------------------------------------------------------------------------------
-  if (checkInternetAvailability()) { //Если Интерент доступен
+  int nextionSeconds = 0;
+  int nextionMinutes = 0;
+  int nextionHours = 0;
+  int nextionDay = 0;
+  int nextionMonth = 0;
+  int nextionYear = 0;
+  int nextionDayOfWeek = 0;
+    // 1) Пытаемся читать время из Nextion (RTC) — это приоритетный локальный источник
+  bool nextionAvailable = fetchNextionTime(nextionSeconds, nextionMinutes, nextionHours, nextionDay, nextionMonth, nextionYear, nextionDayOfWeek);
+  if (nextionAvailable) {
+    time_t nextionEpoch = buildEpoch(nextionYear, nextionMonth, nextionDay, nextionHours, nextionMinutes, nextionSeconds);
+    if (nextionEpoch > 0) {
+      setBaseEpoch(nextionEpoch);
+    }
+  }
+
+// 2) Если Интернет доступен — берём NTP и синхронизируем всё
+if (checkInternetAvailability()) { //Если Интерент доступен
 
     int gmtOffsetNextion = myNex.readNumber("pageRTC.n5.val"); delay(50);
     if (gmtOffsetNextion != kNextionInvalidValue) {
@@ -206,100 +309,56 @@ timer = millis();
     timeClient1.begin();
     timeClient1.update();
 
-    // Проверка на корректность времени с первого сервера
-    if (timeClient1.getEpochTime() != 0) {
-    
-      npt_hours = timeClient1.getHours();
-      npt_minutes = timeClient1.getMinutes();
-      npt_seconds = timeClient1.getSeconds();
-      
-      // Извлекаем месяц и год из эпохального времени
-      time_t epochTime = timeClient1.getEpochTime();
-      tm *timeInfo = localtime(&epochTime);
+    time_t epochTime = timeClient1.getEpochTime();
+    if (epochTime == 0) {
+      timeClient2.begin();
+      timeClient2.update();
+      epochTime = timeClient2.getEpochTime();
+    }
 
-      npt_DayOfWeek = (timeInfo->tm_wday + 6) % 7 + 1; // Преобразуем значения от 0-6 в 1-7 (понедельник-воскресенье)
-      npt_Day = timeInfo->tm_mday;
-      npt_Month = timeInfo->tm_mon + 1;  // Месяцы в C начинаются с 0, поэтому добавляем 1
-      npt_Year = timeInfo->tm_year + 1900;  // Добавляем 1900, так как struct tm хранит год с 1900
-
-    } else {
-      // Если время с первого сервера некорректно, запрашиваем с второго сервера
       timeClient2.begin();
       timeClient2.update();
 
-      // Проверка на корректность времени с второго сервера
-      if (timeClient2.getEpochTime() != 0) {
-      
-        npt_hours = timeClient2.getHours();
-        npt_minutes = timeClient2.getMinutes();
-        npt_seconds = timeClient2.getSeconds();
-
-        // Извлекаем месяц и год из эпохального времени
-        time_t epochTime = timeClient2.getEpochTime();
-        tm *timeInfo = localtime(&epochTime);
-        
-     
-        npt_DayOfWeek = (timeInfo->tm_wday + 1) % 7 + 1; // Преобразуем значения от 0-6 в 1-7 (понедельник-воскресенье)
+    if (epochTime != 0) {
+      tm *timeInfo = localtime(&epochTime);
+      if (timeInfo != nullptr) {
+        npt_hours = timeInfo->tm_hour;
+        npt_minutes = timeInfo->tm_min;
+        npt_seconds = timeInfo->tm_sec;
         npt_Day = timeInfo->tm_mday;
-        npt_Month = timeInfo->tm_mon + 1;  // Месяцы в C начинаются с 0, поэтому добавляем 1
-        npt_Year = timeInfo->tm_year + 1900;  // Добавляем 1900, так как struct tm хранит год с 1900
-        
-      }  
-    }//Закрываем функцию проверки успешности получения эпохального времени
-    
+        npt_Month = timeInfo->tm_mon + 1;
+        npt_Year = timeInfo->tm_year + 1900;
+        npt_DayOfWeek = (timeInfo->tm_wday + 6) % 7 + 1;
+      }
+    }
 
-        //проверяем правильно ли получено время (по году) из интернета. 
-      // if(npt_Year >= 2024 && npt_Year < 2040) { period_get_NPT_Time = 60000; //Большой таймер повторных запросов - если время считали правильно
-        
-      //   seconds = npt_seconds; myNex.writeStr("rtc5=" + String(seconds));
-      //   minutes = npt_minutes; myNex.writeStr("rtc4=" + String(minutes));
-      //   hours = npt_hours; myNex.writeStr("rtc3=" + String(hours));
-      //   Day = npt_Day; myNex.writeStr("rtc2=" + String(Day));
-      //   Month = npt_Month; myNex.writeStr("rtc1=" + String(Month));
-      //   Year = npt_Year; myNex.writeStr("rtc0=" + String(Year));
-      if(isValidDateTime(npt_Year, npt_Month, npt_Day, npt_hours, npt_minutes, npt_seconds)) { period_get_NPT_Time = 60000; //Большой таймер повторных запросов - если время считали правильно
-        int nextionSeconds = 0;
-        int nextionMinutes = 0;
-        int nextionHours = 0;
-        int nextionDay = 0;
-        int nextionMonth = 0;
-        int nextionYear = 0;
-        int nextionDayOfWeek = 0;
-        bool nextionAvailable = fetchNextionTime(nextionSeconds, nextionMinutes, nextionHours, nextionDay, nextionMonth, nextionYear, nextionDayOfWeek);
+if(isValidDateTime(npt_Year, npt_Month, npt_Day, npt_hours, npt_minutes, npt_seconds)) { period_get_NPT_Time = 60000; //Большой таймер повторных запросов - если время считали правильно
+      setBaseEpoch(epochTime);
+     // Если Nextion доступен и его время отличается — обновляем RTC на дисплее
+      bool shouldUpdateNextion = nextionAvailable && !isSameTimeDate(
+        npt_hours, npt_minutes, npt_seconds, npt_Day, npt_Month, npt_Year,
+        nextionHours, nextionMinutes, nextionSeconds, nextionDay, nextionMonth, nextionYear
+      );
 
-        bool shouldUpdateNextion = nextionAvailable && !isSameTimeDate(
-          npt_hours, npt_minutes, npt_seconds, npt_Day, npt_Month, npt_Year,
-          nextionHours, nextionMinutes, nextionSeconds, nextionDay, nextionMonth, nextionYear
-        );
-
-        seconds = npt_seconds;
-        minutes = npt_minutes;
-        hours = npt_hours;
-        Day = npt_Day;
-        Month = npt_Month;
-        Year = npt_Year;
-
-        DayOfWeek = npt_DayOfWeek; //Записываем корректный день недели
-          
-        
-        if (shouldUpdateNextion) {
-          myNex.writeStr("rtc5=" + String(seconds));
-          myNex.writeStr("rtc4=" + String(minutes));
-          myNex.writeStr("rtc3=" + String(hours));
-          myNex.writeStr("rtc2=" + String(Day));
-          myNex.writeStr("rtc1=" + String(Month));
-          myNex.writeStr("rtc0=" + String(Year));
-          myNex.writeStr("rtc6=" + String(DayOfWeek == 7 ? 0 : DayOfWeek));
-        }
-
-      } else {
-          period_get_NPT_Time = 5000; //Короткий таймер повторных запросов - если время считали не правильно или нет интернета
-        }
-
-  } else {//Если нет Интернета, то время запрашиваем из монитора Nextion:
-
-
-        readNextionTime();
+      DayOfWeek = npt_DayOfWeek; //Записываем корректный день недели
+      
+      if (shouldUpdateNextion) {
+        myNex.writeStr("rtc5=" + String(npt_seconds));
+        myNex.writeStr("rtc4=" + String(npt_minutes));
+        myNex.writeStr("rtc3=" + String(npt_hours));
+        myNex.writeStr("rtc2=" + String(npt_Day));
+        myNex.writeStr("rtc1=" + String(npt_Month));
+        myNex.writeStr("rtc0=" + String(npt_Year));
+        myNex.writeStr("rtc6=" + String(npt_DayOfWeek == 7 ? 0 : npt_DayOfWeek));
+      }
+    } else {
+      period_get_NPT_Time = 5000; //Короткий таймер повторных запросов - если время считали не правильно или нет интернета
+    }
+  } else {
+        // 3) Интернета нет: если Nextion не ответил и базового времени еще нет — берём из NVS
+    if (!nextionAvailable && !baseEpochReady) {
+      loadBaseEpochFromStorage();
+    }
   }
   
   

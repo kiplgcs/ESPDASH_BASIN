@@ -2,8 +2,6 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WiFiUdp.h>
-#include <NTPClient.h>
-#include <time.h>
 #include "NPT_Time.h"
 
 #include "wifi_manager.h"        // Логика Wi-Fi и сохранение параметров
@@ -36,17 +34,6 @@ Adafruit_ADS1115 ads2; // Второй ADS1115 - Хлор
 
 // ---------- NTP (синхронизация времени) ----------
 WiFiUDP ntpUDP;
-NTPClient timeClient(ntpUDP, "pool.ntp.org", 10800, 1000);
-// NTP сервер, смещение +3 часа (МСК), обновление каждые 1 секунду
-
-String formatDateTime(){
-  time_t epoch = timeClient.getEpochTime();
-  struct tm *tmInfo = localtime(&epoch);
-  if(tmInfo == nullptr) return timeClient.getFormattedTime();
-  char buf[20];
-  strftime(buf, sizeof(buf), "%d.%m.%Y %H:%M:%S", tmInfo);
-  return String(buf);
-}
 
 
 /* ---------- Setup ---------- */
@@ -66,8 +53,8 @@ void setup() {
   // Загрузка параметра jpg из файловой системы (по умолчанию 1)
   jpg = loadValue<int>("jpg", 1);
 
-  // Запуск NTP-клиента
-  timeClient.begin();
+  // Инициализация времени из сохраненного значения (если есть)
+  loadBaseEpochFromStorage();
 
   // Загрузка и применение MQTT параметров
   loadMqttSettings();
@@ -237,11 +224,9 @@ Serial.printf(
 /* ---------- Loop ---------- */
 void loop() {
   wifiModuleLoop();
-  // Обновление времени через NTP
-  if(wifiIsConnected()){
-    timeClient.update();
-  }
- CurrentTime = formatDateTime();   // Получение текущего времени
+  // Обновление времени через NTP/Nextion/память
+  NPT_Time(period_get_NPT_Time);
+  CurrentTime = getCurrentDateTime();   // Получение текущего времени
 
 TimerControlRelay(10000);  // TimerControlRelay(600); //Контроль включения реле по таймерам
 
@@ -359,5 +344,3 @@ TimerControlRelay(10000);  // TimerControlRelay(600); //Контроль вкл�
   slow(period_slow_Time); //Периодически отправляем данные для обратной связи - "period_slow_Time" Период обновления данных - зависит от "Nx_dim_id" nекущеuj - считанного значения яркости Nextion
 
 }
-
-

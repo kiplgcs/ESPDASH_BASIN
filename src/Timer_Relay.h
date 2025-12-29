@@ -1,9 +1,8 @@
 #pragma once
 #include <Arduino.h>
-#include <NTPClient.h>
 #include "web.h"
+#include "NPT_Time.h"
 
-extern NTPClient timeClient;
 // Функция для проверки времени в заданном интервале (минуты от 00:00)
 bool checkTimeInInterval(int currentHour, int currentMinute, uint16_t startMinutes, uint16_t endMinutes)
 {
@@ -134,8 +133,11 @@ void TimerControlRelay(int interval) {
   static unsigned long timer;
   if (interval + timer > millis()) return; 
   timer = millis();
-  int currentHour = timeClient.getHours();
-  int currentMinute = timeClient.getMinutes();
+  int currentHour = 0;
+  int currentMinute = 0;
+  if (!getCurrentHourMinute(currentHour, currentMinute)) {
+    return;
+  }
 // //---------------------------------------------------------------------------------
 // //---------------------------------------------------------------------------------
 // //---------------------------------------------------------------------------------
