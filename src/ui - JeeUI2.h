@@ -51,6 +51,13 @@ public:
     void time(const String &id, const String &label, const String &defaultValue=""){
         addElement("time", id, label, defaultValue);
     }
+    
+        void timer(const String &id, const String &label,
+               const std::function<void(uint16_t, uint16_t)> &callback){
+        ui.registerTimer(id, label, callback);
+        addElement("timer", id, label, "");
+    }
+
 
     void color(const String &id, const String &label, const String &defaultValue=""){
         addElement("color", id, label, defaultValue);
@@ -255,3 +262,6 @@ private:
 };
 
 inline OABuilder oab;
+
+#define UI_TIMER(id, label, callback) oab.timer(id, label, callback)
+#define UI_TIME(id, label) oab.time(id, label)

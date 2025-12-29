@@ -34,7 +34,8 @@ inline void interface(){
     oab.range("RangeSlider", 10, 40, 1, "Range Min-Max", true);
     oab.number("IntInput", "Enter Integer");
     oab.number("FloatInput", "Enter Float", true);
-    oab.time("Timer1", "Start Time");
+    // oab.time("Timer1", "Start Time");
+        UI_TIME("Timer1", "Start Time");
     oab.text("Comment", "Comment");
 
     // Настройка фильтрации, Промывка фильтра
@@ -42,18 +43,22 @@ inline void interface(){
     // oab.selectDays("DaysSelect", "Select Days");
     oab.checkbox("Power_Filtr", "Фильтрация (вручную)");
     oab.checkbox("Filtr_Time1", "Таймер фильтрации №1");
-    oab.time("Filtr_timeON1", "Время включения фильтрации №1");
-    oab.time("Filtr_timeOFF1", "Время отключения фильтрации №1");
+    // oab.time("Filtr_timeON1", "Время включения фильтрации №1");
+    // oab.time("Filtr_timeOFF1", "Время отключения фильтрации №1");
+        UI_TIMER("FiltrTimer1", "Таймер фильтрации №1", noopTimerCallback);
     oab.checkbox("Filtr_Time2", "Таймер фильтрации №2");
-    oab.time("Filtr_timeON2", "Время включения фильтрации №2");
-    oab.time("Filtr_timeOFF2", "Время отключения фильтрации №2");
+    // oab.time("Filtr_timeON2", "Время включения фильтрации №2");
+    // oab.time("Filtr_timeOFF2", "Время отключения фильтрации №2");
+        UI_TIMER("FiltrTimer2", "Таймер фильтрации №2", noopTimerCallback);
     oab.checkbox("Filtr_Time3", "Таймер фильтрации №3");
-    oab.time("Filtr_timeON3", "Время включения фильтрации №3");
-    oab.time("Filtr_timeOFF3", "Время отключения фильтрации №3");
+    // oab.time("Filtr_timeON3", "Время включения фильтрации №3");
+    // oab.time("Filtr_timeOFF3", "Время отключения фильтрации №3");
+    UI_TIMER("FiltrTimer3", "Таймер фильтрации №3", noopTimerCallback);
     oab.checkbox("Power_Clean", "Промывка фильтра (вручную)");
     oab.checkbox("Clean_Time1", "Таймер промывки");
-    oab.time("Clean_timeON1", "Время включения промывки");
-    oab.time("Clean_timeOFF1", "Время отключения промывки");
+    // oab.time("Clean_timeON1", "Время включения промывки");
+    // oab.time("Clean_timeOFF1", "Время отключения промывки");
+        UI_TIMER("CleanTimer1", "Таймер промывки", noopTimerCallback);
     oab.selectDays("DaysSelect", "Дни промывки");
     // oab.number("IntInput", "Enter Integer");
     // oab.number("FloatInput", "Enter Float", true);
@@ -78,8 +83,9 @@ inline void interface(){
     oab.select("SetLamp", "Режим света");
     oab.text("Lumen_Ul", "Освещенность на улице, %");
     // oab.checkbox("Power_Time1", "Таймер лампы"); //Галочка - активания/деактивация таймера
-	oab.time("Lamp_timeON1", "Время включения по таймеру"); //Задать время включения часы/минуты
-	oab.time("Lamp_timeOFF1", "Время отключения по таймеру"); //Задать время отключения часы/минуты
+	// oab.time("Lamp_timeON1", "Время включения по таймеру"); //Задать время включения часы/минуты
+	// oab.time("Lamp_timeOFF1", "Время отключения по таймеру"); //Задать время отключения часы/минуты
+    UI_TIMER("LampTimer", "Таймер лампы", onLampTimerChange);
 
     // Управление RGB подсветкой
     oab.page();
@@ -90,8 +96,9 @@ inline void interface(){
     oab.option("auto", "Включение по датчику освещенности (<20%)");
     oab.option("timer", "Включение по таймеру");
     oab.select("SetRGB", "Режим управления RGB подсветкой");
-    oab.time("timeON_WS2815", "Время включения по таймеру"); //Задать время включения часы/минуты
-	oab.time("timeOFF_WS2815", "Время отключения по таймеру"); //Задать время отключения часы/минуты
+    // oab.time("timeON_WS2815", "Время включения по таймеру"); //Задать время включения часы/минуты
+	// oab.time("timeOFF_WS2815", "Время отключения по таймеру"); //Задать время отключения часы/минуты
+        UI_TIMER("RgbTimer", "Таймер RGB ленты", noopTimerCallback);
     oab.color("LEDColor", "Цвет подсветки");
     oab.option("auto", "Автоматически");
     oab.option("manual", "Ручной цвет");

@@ -6,6 +6,7 @@
 #include <ESPAsyncWebServer.h>   // Асинхронный веб-сервер для ESP32
 #include <esp_system.h>
 #include <vector>                // STL вектор для хранения элементов UI
+#include <functional>
 #include <esp_chip_info.h>
 #include <esp_efuse.h>
 #include "graph.h"               // Пользовательские графики (кастомные)
@@ -78,8 +79,7 @@ unsigned long Timer_Callback; // Таймер опроса всех кнопок
 bool Lamp , Lamp1;		// Подсветка в бассейне -  Включение в ручную
 bool Lamp_autosvet , Saved_Lamp_autosvet;
 bool Power_Time1, Saved_Power_Time1;
-String Lamp_timeON1, Lamp_timeOFF1; // Утавки времени включения-отключения LED ленты
-String Saved_Lamp_timeON1, Saved_Lamp_timeOFF1;
+uint16_t Saved_Lamp_timeON1, Saved_Lamp_timeOFF1;
 
 
 // inline void applyLampModeFromSetLamp() {
@@ -114,8 +114,9 @@ String Saved_Lamp_timeON1, Saved_Lamp_timeOFF1;
 bool Pow_WS2815, Pow_WS28151;		// Включение в ручную
 bool Pow_WS2815_autosvet, Saved_Pow_WS2815_autosvet; 
 bool WS2815_Time1, Saved_WS2815_Time1;
-String timeON_WS2815, timeOFF_WS2815; // Утавки времени включения-отключения LED ленты
-String Saved_timeON_WS2815, Saved_timeOFF_WS2815;
+// String timeON_WS2815, timeOFF_WS2815; // Утавки времени включения-отключения LED ленты
+// String Saved_timeON_WS2815, Saved_timeOFF_WS2815;
+uint16_t Saved_timeON_WS2815, Saved_timeOFF_WS2815;
 
 
 bool ColorRGB = false;    //режим ручного задания цвета
@@ -136,13 +137,17 @@ Index21,Index22,Index23,Index24;
 bool Power_Filtr, Power_Filtr1;		// Фильтрация в бассейне -  Включение в ручную
 bool Filtr_Time1, Filtr_Time2, Filtr_Time3; // Разрешения работы включения по времени
 bool Saved_Filtr_Time1, Saved_Filtr_Time2, Saved_Filtr_Time3;
-String Filtr_timeON1, Filtr_timeOFF1, Filtr_timeON2, Filtr_timeOFF2, Filtr_timeON3, Filtr_timeOFF3; // Утавки времени включения
-String Saved_Filtr_timeON1, Saved_Filtr_timeOFF1, Saved_Filtr_timeON2, Saved_Filtr_timeOFF2, Saved_Filtr_timeON3, Saved_Filtr_timeOFF3; 
+// String Filtr_timeON1, Filtr_timeOFF1, Filtr_timeON2, Filtr_timeOFF2, Filtr_timeON3, Filtr_timeOFF3; // Утавки времени включения
+// String Saved_Filtr_timeON1, Saved_Filtr_timeOFF1, Saved_Filtr_timeON2, Saved_Filtr_timeOFF2, Saved_Filtr_timeON3, Saved_Filtr_timeOFF3; 
+uint16_t Saved_Filtr_timeON1, Saved_Filtr_timeOFF1, Saved_Filtr_timeON2, Saved_Filtr_timeOFF2, Saved_Filtr_timeON3, Saved_Filtr_timeOFF3; 
+
 
 bool Power_Clean, Power_Clean1; // Промывка фильтра
 bool Clean_Time1, Saved_Clean_Time1; // Разрешения работы включения по времени
-String Clean_timeON1, Clean_timeOFF1; // Утавки времени включения
-String Saved_Clean_timeON1, Saved_Clean_timeOFF1;
+// String Clean_timeON1, Clean_timeOFF1; // Утавки времени включения
+// String Saved_Clean_timeON1, Saved_Clean_timeOFF1;
+uint16_t Saved_Clean_timeON1, Saved_Clean_timeOFF1;
+
 bool chk1, chk2, chk3, chk4, chk5, chk6, chk7; //Дни недели ПН, ВТ, СР, ЧТ, ПТ, СБ, ВС - для включения таймера в нужные дни
 bool Saved_chk1, Saved_chk2, Saved_chk3, Saved_chk4, Saved_chk5, Saved_chk6, Saved_chk7;
 
@@ -166,6 +171,115 @@ inline void syncDaysSelectionFromClean(){
   }
   DaysSelect = next;
 }
+
+inline uint16_t parseTimeToMinutes(const String &value){
+  int sep = value.indexOf(':');
+  if(sep < 0) return 0;
+  int hours = value.substring(0, sep).toInt();
+  int minutes = value.substring(sep + 1).toInt();
+  hours = constrain(hours, 0, 23);
+  minutes = constrain(minutes, 0, 59);
+  return static_cast<uint16_t>(hours * 60 + minutes);
+}
+
+inline String formatMinutesToTime(uint16_t minutes){
+  minutes = minutes % 1440;
+  uint16_t hours = minutes / 60;
+  uint16_t mins = minutes % 60;
+  char buffer[6];
+  snprintf(buffer, sizeof(buffer), "%02u:%02u", hours, mins);
+  return String(buffer);
+}
+
+struct UITimerEntry {
+  String id;
+  String label;
+  uint16_t on = 0;
+  uint16_t off = 0;
+  std::function<void(uint16_t, uint16_t)> callback = nullptr;
+};
+
+class UIRegistry {
+public:
+  UITimerEntry &registerTimer(const String &id, const String &label,
+                              const std::function<void(uint16_t, uint16_t)> &cb){
+    UITimerEntry *entry = findTimer(id);
+    if(!entry){
+      UITimerEntry created;
+      created.id = id;
+      created.label = label;
+      created.on = static_cast<uint16_t>(loadValue<int>((id + "_ON").c_str(), 0));
+      created.off = static_cast<uint16_t>(loadValue<int>((id + "_OFF").c_str(), 0));
+      created.callback = cb;
+      timers.push_back(created);
+      entry = &timers.back();
+    } else {
+      entry->label = label;
+      entry->callback = cb;
+    }
+    return *entry;
+  }
+
+  UITimerEntry &timer(const String &id){
+    UITimerEntry *entry = findTimer(id);
+    if(!entry){
+      return registerTimer(id, id, nullptr);
+    }
+    return *entry;
+  }
+
+  bool updateTimerField(const String &fieldId, const String &value){
+    bool isOn = fieldId.endsWith("_ON");
+    bool isOff = fieldId.endsWith("_OFF");
+    if(!isOn && !isOff) return false;
+    String base = fieldId.substring(0, fieldId.length() - (isOn ? 3 : 4));
+    UITimerEntry *entry = findTimer(base);
+    if(!entry) return false;
+    uint16_t minutes = parseTimeToMinutes(value);
+    if(isOn) entry->on = minutes;
+    else entry->off = minutes;
+    saveValue<int>(fieldId.c_str(), minutes);
+    if(entry->callback) entry->callback(entry->on, entry->off);
+    return true;
+  }
+
+  void setTimerMinutes(const String &id, uint16_t onMinutes, uint16_t offMinutes, bool persist = true){
+    UITimerEntry &entry = timer(id);
+    entry.on = onMinutes;
+    entry.off = offMinutes;
+    if(persist){
+      saveValue<int>((id + "_ON").c_str(), entry.on);
+      saveValue<int>((id + "_OFF").c_str(), entry.off);
+    }
+    if(entry.callback) entry.callback(entry.on, entry.off);
+  }
+
+  const std::vector<UITimerEntry> &allTimers() const { return timers; }
+
+private:
+  std::vector<UITimerEntry> timers;
+
+  UITimerEntry *findTimer(const String &id){
+    for(auto &entry : timers){
+      if(entry.id == id) return &entry;
+    }
+    return nullptr;
+  }
+};
+
+inline UIRegistry ui;
+
+inline void noopTimerCallback(uint16_t onMinutes, uint16_t offMinutes){
+  (void)onMinutes;
+  (void)offMinutes;
+}
+
+inline void onLampTimerChange(uint16_t onMinutes, uint16_t offMinutes){
+  (void)onMinutes;
+  (void)offMinutes;
+}
+
+
 
 
 bool Power_Heat, Power_Heat1;
@@ -406,6 +520,15 @@ private:
       "padding:6px 12px;border-radius:12px;background:rgba(0,0,0,0.55);border:1px solid rgba(255,255,255,0.18);"
       "box-shadow:0 6px 14px rgba(0,0,0,0.4);"
       "color:#fff;text-shadow:0 0 10px rgba(0,0,0,0.55),0 1px 1px rgba(0,0,0,0.9);} "
+      
+            ".timer-card{gap:12px;}"
+      ".timer-card__header{font-size:0.85em;text-transform:uppercase;letter-spacing:0.08em;color:#9fb4c8;font-weight:600;}"
+      ".timer-card__grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;}"
+      ".timer-card__column{display:flex;flex-direction:column;gap:6px;}"
+      ".timer-card__column label{margin-bottom:0;font-size:0.78em;letter-spacing:0.08em;text-transform:uppercase;color:#c1d0e2;}"
+      ".timer-card input[type=time]{width:100%;margin:0;}"
+      "@media (max-width:640px){.timer-card__grid{grid-template-columns:1fr;}} "
+            
       "@keyframes rainbow-shift{0%{background-position:0% 50%;}100%{background-position:100% 50%;}} "
       "label{display:block;margin-bottom:5px;font-size:0.9em;} "
       "input,select{width:100%;padding:7px;margin-bottom:10px;background:#111;border:1px solid #333;color:#ddd;border-radius:6px;} "
@@ -770,6 +893,37 @@ private:
               html += "<div id='"+overlay.id+"' style='"+panelStyle+"'>"+overlay.label+"</div>";
           }
 
+          auto getValueForId = [&](const String &id) -> String {
+              String val;
+              if(id=="ThemeColor") val = ThemeColor;
+              else if(id=="LEDColor") val = LEDColor;
+              else if(id=="MotorSpeed") val = String(MotorSpeedSetting);
+              else if(id=="IntInput") val = String(IntInput);
+              else if(id=="FloatInput") val = String(FloatInput);
+              else if(id=="Timer1") val = Timer1;
+              else if(id=="WS2815_Time1") val = WS2815_Time1 ? "1" : "0";
+              else if(id=="Power_Filtr") val = Power_Filtr ? "1" : "0";
+              else if(id=="Filtr_Time1") val = Filtr_Time1 ? "1" : "0";
+              else if(id=="Filtr_Time2") val = Filtr_Time2 ? "1" : "0";
+              else if(id=="Filtr_Time3") val = Filtr_Time3 ? "1" : "0";
+              else if(id=="Power_Clean") val = Power_Clean ? "1" : "0";
+              else if(id=="Clean_Time1") val = Clean_Time1 ? "1" : "0";
+              else if(id=="Comment") val = Comment;
+              else if(id=="Lumen_Ul") val = Lumen_Ul;
+              else if(id=="RandomVal") val = String(RandomVal);
+              else if(id=="ModeSelect") val = ModeSelect;
+              else if(id=="SetLamp") val = SetLamp;
+              else if(id=="SetRGB") val = SetRGB;
+              else if(id=="DaysSelect") val = DaysSelect;
+              else if(id=="RangeSlider") {
+                  RangeMin = loadValue<int>("RangeMin", RangeMin);
+                  RangeMax = loadValue<int>("RangeMax", RangeMax);
+                  val = String(RangeMin) + "-" + String(RangeMax);
+              }
+              return val;
+          };
+
+
           for(auto &e : self->elements){
               if(e.tab != t.id) continue;
                            if(e.type=="displayStringAbsolute" || e.type=="image") continue;
@@ -903,50 +1057,27 @@ private:
                   html += "</table></div>";
                   continue;
               }
-              String val;
-
-              if(e.id=="ThemeColor") val = ThemeColor;
-              else if(e.id=="LEDColor") val = LEDColor;
-              else if(e.id=="MotorSpeed") val = String(MotorSpeedSetting);
-              else if(e.id=="IntInput") val = String(IntInput);
-              else if(e.id=="FloatInput") val = String(FloatInput);
-              else if(e.id=="Timer1") val = Timer1;
-              else if(e.id=="WS2815_Time1") val = WS2815_Time1 ? "1" : "0";
-              else if(e.id=="timeON_WS2815") val = timeON_WS2815;
-              else if(e.id=="timeOFF_WS2815") val = timeOFF_WS2815;
-              else if(e.id=="Power_Filtr") val = Power_Filtr ? "1" : "0";
-              else if(e.id=="Filtr_Time1") val = Filtr_Time1 ? "1" : "0";
-              else if(e.id=="Filtr_Time2") val = Filtr_Time2 ? "1" : "0";
-              else if(e.id=="Filtr_Time3") val = Filtr_Time3 ? "1" : "0";
-              else if(e.id=="Filtr_timeON1") val = Filtr_timeON1;
-              else if(e.id=="Filtr_timeOFF1") val = Filtr_timeOFF1;
-              else if(e.id=="Filtr_timeON2") val = Filtr_timeON2;
-              else if(e.id=="Filtr_timeOFF2") val = Filtr_timeOFF2;
-              else if(e.id=="Filtr_timeON3") val = Filtr_timeON3;
-              else if(e.id=="Filtr_timeOFF3") val = Filtr_timeOFF3;
-              else if(e.id=="Power_Clean") val = Power_Clean ? "1" : "0";
-              else if(e.id=="Clean_Time1") val = Clean_Time1 ? "1" : "0";
-              else if(e.id=="Clean_timeON1") val = Clean_timeON1;
-              else if(e.id=="Clean_timeOFF1") val = Clean_timeOFF1;
-              else if(e.id=="Comment") val = Comment;
-              else if(e.id=="Lumen_Ul") val = Lumen_Ul;
-
-              else if(e.id=="RandomVal") val = String(RandomVal);
-              else if(e.id=="ModeSelect") val = ModeSelect;
-              else if(e.id=="SetLamp") val = SetLamp;
-               else if(e.id=="SetRGB") val = SetRGB;
-              else if(e.id=="DaysSelect") val = DaysSelect;
-              else if(e.id=="RangeSlider") {
-                  RangeMin = loadValue<int>("RangeMin", RangeMin);
-                  RangeMax = loadValue<int>("RangeMax", RangeMax);
-                  val = String(RangeMin) + "-" + String(RangeMax);
-              }
+String val = getValueForId(e.id);
 
 
               if(e.type=="checkbox" && !val.length()){
                   int defaultVal = e.value.length() ? e.value.toInt() : 0;
                   val = String(loadValue<int>(e.id.c_str(), defaultVal));
               }
+              
+              if(e.type=="timer"){
+                  UITimerEntry &timer = ui.timer(e.id);
+                  html += "<div class='card timer-card'>";
+                  html += "<div class='timer-card__header'>" + e.label + "</div>";
+                  html += "<div class='timer-card__grid'>";
+                  html += "<div class='timer-card__column'><label for='" + e.id + "_ON'>Включение</label>"
+                          "<input id='" + e.id + "_ON' type='time' value='" + formatMinutesToTime(timer.on) + "'></div>";
+                  html += "<div class='timer-card__column'><label for='" + e.id + "_OFF'>Отключение</label>"
+                          "<input id='" + e.id + "_OFF' type='time' value='" + formatMinutesToTime(timer.off) + "'></div>";
+                  html += "</div></div>";
+                  continue;
+              }
+
 
               html += "<div class='card'>";
 
@@ -1216,6 +1347,18 @@ else if(e.type=="range"){ // Этот блок создает HTML для диа
 
 
       // ====== Основной скрипт страницы ======
+            String timerIdsScript = "<script>const timerIds = [";
+      bool firstTimerId = true;
+      for(const auto &element : self->elements){
+        if(element.type != "timer") continue;
+        if(!firstTimerId) timerIdsScript += ",";
+        timerIdsScript += "\"" + element.id + "\"";
+        firstTimerId = false;
+      }
+      timerIdsScript += "];</script>";
+      html += timerIdsScript;
+
+
       html += R"rawliteral(
   <script>
     let wifiStatusInterval = null;
@@ -2018,26 +2161,24 @@ window.addEventListener('resize', ()=>{
 
     if(typeof j.Timer1 !== 'undefined') updateInputValue('Timer1', j.Timer1);
     if(typeof j.Power_Time1 !== 'undefined') updateCheckboxValue('Power_Time1', j.Power_Time1);
-    if(typeof j.Lamp_timeON1 !== 'undefined') updateInputValue('Lamp_timeON1', j.Lamp_timeON1);
-    if(typeof j.Lamp_timeOFF1 !== 'undefined') updateInputValue('Lamp_timeOFF1', j.Lamp_timeOFF1);
+
     if(typeof j.WS2815_Time1 !== 'undefined') updateCheckboxValue('WS2815_Time1', j.WS2815_Time1);
-    if(typeof j.timeON_WS2815 !== 'undefined') updateInputValue('timeON_WS2815', j.timeON_WS2815);
-    if(typeof j.timeOFF_WS2815 !== 'undefined') updateInputValue('timeOFF_WS2815', j.timeOFF_WS2815); 
-    
+
         if(typeof j.Power_Filtr !== 'undefined') updateCheckboxValue('Power_Filtr', j.Power_Filtr);
     if(typeof j.Filtr_Time1 !== 'undefined') updateCheckboxValue('Filtr_Time1', j.Filtr_Time1);
     if(typeof j.Filtr_Time2 !== 'undefined') updateCheckboxValue('Filtr_Time2', j.Filtr_Time2);
     if(typeof j.Filtr_Time3 !== 'undefined') updateCheckboxValue('Filtr_Time3', j.Filtr_Time3);
-    if(typeof j.Filtr_timeON1 !== 'undefined') updateInputValue('Filtr_timeON1', j.Filtr_timeON1);
-    if(typeof j.Filtr_timeOFF1 !== 'undefined') updateInputValue('Filtr_timeOFF1', j.Filtr_timeOFF1);
-    if(typeof j.Filtr_timeON2 !== 'undefined') updateInputValue('Filtr_timeON2', j.Filtr_timeON2);
-    if(typeof j.Filtr_timeOFF2 !== 'undefined') updateInputValue('Filtr_timeOFF2', j.Filtr_timeOFF2);
-    if(typeof j.Filtr_timeON3 !== 'undefined') updateInputValue('Filtr_timeON3', j.Filtr_timeON3);
-    if(typeof j.Filtr_timeOFF3 !== 'undefined') updateInputValue('Filtr_timeOFF3', j.Filtr_timeOFF3);
+
     if(typeof j.Power_Clean !== 'undefined') updateCheckboxValue('Power_Clean', j.Power_Clean);
     if(typeof j.Clean_Time1 !== 'undefined') updateCheckboxValue('Clean_Time1', j.Clean_Time1);
-    if(typeof j.Clean_timeON1 !== 'undefined') updateInputValue('Clean_timeON1', j.Clean_timeON1);
-    if(typeof j.Clean_timeOFF1 !== 'undefined') updateInputValue('Clean_timeOFF1', j.Clean_timeOFF1);
+    if(Array.isArray(timerIds)){
+      timerIds.forEach(id=>{
+        const onKey = id + "_ON";
+        const offKey = id + "_OFF";
+        if(typeof j[onKey] !== 'undefined') updateInputValue(onKey, j[onKey]);
+        if(typeof j[offKey] !== 'undefined') updateInputValue(offKey, j[offKey]);
+      });
+    }
 
     if(typeof j.Comment !== 'undefined') updateInputValue('Comment', j.Comment);
     if(typeof j.Lumen_Ul !== 'undefined') updateInputValue('Lumen_Ul', j.Lumen_Ul);
@@ -2066,6 +2207,10 @@ function setImg(x){
       if(r->hasParam("key") && r->hasParam("val")){
         String key = r->getParam("key")->value();
         String valStr = r->getParam("val")->value();
+                if(ui.updateTimerField(key, valStr)){
+          r->send(200,"text/plain","OK");
+          return;
+        }
                 bool isCheckbox = false;
         for(const auto &element : self->elements){
           if(element.id == key && element.type == "checkbox"){
@@ -2091,25 +2236,17 @@ function setImg(x){
         else if(key=="FloatInput") { FloatInput = valStr.toFloat(); saveValue<float>(key.c_str(), FloatInput); }
         else if(key=="Timer1") { Timer1 = valStr; saveValue<String>(key.c_str(), Timer1); }
               else if(key=="Power_Time1") { Power_Time1 = valStr.toInt() != 0; saveValue<int>("Power_Time1", Power_Time1 ? 1 : 0); }
-        else if(key=="Lamp_timeON1") { Lamp_timeON1 = valStr; saveValue<String>("Lamp_timeON1", Lamp_timeON1); }
-        else if(key=="Lamp_timeOFF1") { Lamp_timeOFF1 = valStr; saveValue<String>("Lamp_timeOFF1", Lamp_timeOFF1); }
+
         else if(key=="WS2815_Time1") { WS2815_Time1 = valStr.toInt() != 0; saveValue<int>("WS2815_Time1", WS2815_Time1 ? 1 : 0); }
-        else if(key=="timeON_WS2815") { timeON_WS2815 = valStr; saveValue<String>("timeON_WS2815", timeON_WS2815); }
-        else if(key=="timeOFF_WS2815") { timeOFF_WS2815 = valStr; saveValue<String>("timeOFF_WS2815", timeOFF_WS2815); }
+
                 else if(key=="Power_Filtr") { Power_Filtr = valStr.toInt() != 0; saveValue<int>("Power_Filtr", Power_Filtr ? 1 : 0); }
         else if(key=="Filtr_Time1") { Filtr_Time1 = valStr.toInt() != 0; saveValue<int>("Filtr_Time1", Filtr_Time1 ? 1 : 0); }
         else if(key=="Filtr_Time2") { Filtr_Time2 = valStr.toInt() != 0; saveValue<int>("Filtr_Time2", Filtr_Time2 ? 1 : 0); }
         else if(key=="Filtr_Time3") { Filtr_Time3 = valStr.toInt() != 0; saveValue<int>("Filtr_Time3", Filtr_Time3 ? 1 : 0); }
-        else if(key=="Filtr_timeON1") { Filtr_timeON1 = valStr; saveValue<String>("Filtr_timeON1", Filtr_timeON1); }
-        else if(key=="Filtr_timeOFF1") { Filtr_timeOFF1 = valStr; saveValue<String>("Filtr_timeOFF1", Filtr_timeOFF1); }
-        else if(key=="Filtr_timeON2") { Filtr_timeON2 = valStr; saveValue<String>("Filtr_timeON2", Filtr_timeON2); }
-        else if(key=="Filtr_timeOFF2") { Filtr_timeOFF2 = valStr; saveValue<String>("Filtr_timeOFF2", Filtr_timeOFF2); }
-        else if(key=="Filtr_timeON3") { Filtr_timeON3 = valStr; saveValue<String>("Filtr_timeON3", Filtr_timeON3); }
-        else if(key=="Filtr_timeOFF3") { Filtr_timeOFF3 = valStr; saveValue<String>("Filtr_timeOFF3", Filtr_timeOFF3); }
+
         else if(key=="Power_Clean") { Power_Clean = valStr.toInt() != 0; saveValue<int>("Power_Clean", Power_Clean ? 1 : 0); }
         else if(key=="Clean_Time1") { Clean_Time1 = valStr.toInt() != 0; saveValue<int>("Clean_Time1", Clean_Time1 ? 1 : 0); }
-        else if(key=="Clean_timeON1") { Clean_timeON1 = valStr; saveValue<String>("Clean_timeON1", Clean_timeON1); }
-        else if(key=="Clean_timeOFF1") { Clean_timeOFF1 = valStr; saveValue<String>("Clean_timeOFF1", Clean_timeOFF1); }
+
 
         else if(key=="Comment") { Comment = valStr; saveValue<String>(key.c_str(), Comment); }
 
@@ -2296,6 +2433,12 @@ function setImg(x){
     });
 
     server.on("/live", HTTP_GET, [](AsyncWebServerRequest *r){
+          String timerJson;
+    for(const auto &timer : ui.allTimers()){
+      timerJson += ",\"" + timer.id + "_ON\":\"" + formatMinutesToTime(timer.on)
+                + "\",\"" + timer.id + "_OFF\":\"" + formatMinutesToTime(timer.off) + "\"";
+    }
+
     String s = "{\"CurrentTime\":\""+CurrentTime+"\",\"RandomVal\":"+String(RandomVal)
                +",\"InfoString\":\""+InfoString+"\",\"InfoString1\":\""+InfoString1+"\",\"InfoString2\":\""+InfoString2
                    +"\",\"button1\":"+String(button1)+",\"button2\":"+String(button2)+",\"button_Lamp\":"+String(Lamp ? 1 : 0)+",\"button_WS2815\":"+String(Pow_WS2815 ? 1 : 0)
@@ -2308,20 +2451,14 @@ function setImg(x){
                                             +",\"ModeSelect\":\""+ModeSelect+"\",\"SetLamp\":\""+SetLamp+"\",\"SetRGB\":\""+SetRGB+"\",\"DaysSelect\":\""+DaysSelect+"\""
                               +",\"IntInput\":"+String(IntInput)+",\"FloatInput\":"+String(FloatInput)
               +",\"Timer1\":\""+Timer1+"\",\"Power_Time1\":"+String(Power_Time1 ? 1 : 0)
-               +",\"Lamp_timeON1\":\""+Lamp_timeON1+"\",\"Lamp_timeOFF1\":\""+Lamp_timeOFF1
-               +"\",\"WS2815_Time1\":"+String(WS2815_Time1 ? 1 : 0)
-               +",\"timeON_WS2815\":\""+timeON_WS2815+"\",\"timeOFF_WS2815\":\""+timeOFF_WS2815+"\""
-
+               +timerJson
+               +",\"WS2815_Time1\":"+String(WS2815_Time1 ? 1 : 0)
                 +",\"Power_Filtr\":"+String(Power_Filtr ? 1 : 0)
                +",\"Filtr_Time1\":"+String(Filtr_Time1 ? 1 : 0)
                +",\"Filtr_Time2\":"+String(Filtr_Time2 ? 1 : 0)
                +",\"Filtr_Time3\":"+String(Filtr_Time3 ? 1 : 0)
-               +",\"Filtr_timeON1\":\""+Filtr_timeON1+"\",\"Filtr_timeOFF1\":\""+Filtr_timeOFF1+"\""
-               +",\"Filtr_timeON2\":\""+Filtr_timeON2+"\",\"Filtr_timeOFF2\":\""+Filtr_timeOFF2+"\""
-               +",\"Filtr_timeON3\":\""+Filtr_timeON3+"\",\"Filtr_timeOFF3\":\""+Filtr_timeOFF3+"\""
                +",\"Power_Clean\":"+String(Power_Clean ? 1 : 0)
                +",\"Clean_Time1\":"+String(Clean_Time1 ? 1 : 0)
-               +",\"Clean_timeON1\":\""+Clean_timeON1+"\",\"Clean_timeOFF1\":\""+Clean_timeOFF1+"\""
                +",\"Lumen_Ul\":\""+Lumen_Ul+"\""
                +",\"Comment\":\""+Comment+"\"}";
     r->send(200, "application/json", s);

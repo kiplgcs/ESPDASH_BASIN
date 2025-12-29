@@ -162,8 +162,9 @@ void trigger4(){ read_lamp_sw0_sw1_sw2();}
 void read_lamp_n0_n1(){
     in_hours = myNex.readNumber("set_lamp.n0.val"); in_minutes = myNex.readNumber("set_lamp.n1.val");
     //Lamp_timeON1 = String(hours / 10) + String(hours % 10) + ":" + String(minutes/ 10) + String(minutes % 10);
-    sprintf(buffer, "%02d:%02d", in_hours, in_minutes); Saved_Lamp_timeON1=Lamp_timeON1 = buffer;
-    saveValue<String>("Lamp_timeON1", Lamp_timeON1);
+    uint16_t minutes = static_cast<uint16_t>(in_hours * 60 + in_minutes);
+    ui.setTimerMinutes("LampTimer", minutes, ui.timer("LampTimer").off);
+    Saved_Lamp_timeON1 = minutes;
     // jee.var("Lamp_timeON1", Lamp_timeON1);
 }
 void trigger2(){read_lamp_n0_n1();}
@@ -177,8 +178,9 @@ void trigger2(){read_lamp_n0_n1();}
 // void trigger3(){read_lamp_n2_n3();}
 void read_lamp_n2_n3(){
     in_hours = myNex.readNumber("set_lamp.n2.val");  in_minutes = myNex.readNumber("set_lamp.n3.val");
-    sprintf(buffer, "%02d:%02d", in_hours, in_minutes); Saved_Lamp_timeOFF1=Lamp_timeOFF1 = buffer;
-    saveValue<String>("Lamp_timeOFF1", Lamp_timeOFF1);
+    uint16_t minutes = static_cast<uint16_t>(in_hours * 60 + in_minutes);
+    ui.setTimerMinutes("LampTimer", ui.timer("LampTimer").on, minutes);
+    Saved_Lamp_timeOFF1 = minutes;
     // jee.var("Lamp_timeOFF1", Lamp_timeOFF1);
 }
 void trigger3(){read_lamp_n2_n3();}
@@ -198,8 +200,9 @@ void trigger3(){read_lamp_n2_n3();}
 void read_RGB_n0_n1(){
     in_hours = myNex.readNumber("set_RGB.n0.val"); in_minutes = myNex.readNumber("set_RGB.n1.val");  
     //Lamp_timeON1 = String(hours / 10) + String(hours % 10) + ":" + String(minutes/ 10) + String(minutes % 10);
-    sprintf(buffer, "%02d:%02d", in_hours, in_minutes); Saved_timeON_WS2815=timeON_WS2815 = buffer;
-    saveValue<String>("timeON_WS2815", timeON_WS2815);
+    uint16_t minutes = static_cast<uint16_t>(in_hours * 60 + in_minutes);
+    ui.setTimerMinutes("RgbTimer", minutes, ui.timer("RgbTimer").off);
+    Saved_timeON_WS2815 = minutes;
     // jee.var("timeON_WS2815", timeON_WS2815);
 }
 void trigger5(){read_RGB_n0_n1();}
@@ -213,8 +216,9 @@ void trigger5(){read_RGB_n0_n1();}
 // void trigger6(){read_RGB_n2_n3();}
 void read_RGB_n2_n3(){
     in_hours = myNex.readNumber("set_RGB.n2.val"); in_minutes = myNex.readNumber("set_RGB.n3.val");
-    sprintf(buffer, "%02d:%02d", in_hours, in_minutes); Saved_timeOFF_WS2815=timeOFF_WS2815 = buffer;
-    saveValue<String>("timeOFF_WS2815", timeOFF_WS2815);
+    uint16_t minutes = static_cast<uint16_t>(in_hours * 60 + in_minutes);
+    ui.setTimerMinutes("RgbTimer", ui.timer("RgbTimer").on, minutes);
+    Saved_timeOFF_WS2815 = minutes;
     // jee.var("timeOFF_WS2815", timeOFF_WS2815);
 }
 void trigger6(){read_RGB_n2_n3();}
@@ -299,8 +303,9 @@ void trigger7(){read_RGB_sw0_sw2_sw3();}
 //printh 23 02 54 08 - "set-filtr" Присвоить n0 / n1 время вкл. по таймеру №1
 void read_filtr_n0_n1(){
     in_hours = myNex.readNumber("set_filtr.n0.val"); in_minutes = myNex.readNumber("set_filtr.n1.val");
-    sprintf(buffer, "%02d:%02d", in_hours, in_minutes); Saved_Filtr_timeON1=Filtr_timeON1 = buffer;
-    saveValue<String>("Filtr_timeON1", Filtr_timeON1);
+    uint16_t minutes = static_cast<uint16_t>(in_hours * 60 + in_minutes);
+    ui.setTimerMinutes("FiltrTimer1", minutes, ui.timer("FiltrTimer1").off);
+    Saved_Filtr_timeON1 = minutes;
 }
 void trigger8(){read_filtr_n0_n1();}
 
@@ -316,8 +321,9 @@ void trigger8(){read_filtr_n0_n1();}
 //printh 23 02 54 09 - "set-filtr" Присвоить n0 / n1 время откл. по таймеру №1
 void read_filtr_n2_n3(){
     in_hours = myNex.readNumber("set_filtr.n2.val"); in_minutes = myNex.readNumber("set_filtr.n3.val");
-    sprintf(buffer, "%02d:%02d", in_hours, in_minutes); Saved_Filtr_timeOFF1=Filtr_timeOFF1 = buffer;
-    saveValue<String>("Filtr_timeOFF1", Filtr_timeOFF1);
+    uint16_t minutes = static_cast<uint16_t>(in_hours * 60 + in_minutes);
+    ui.setTimerMinutes("FiltrTimer1", ui.timer("FiltrTimer1").on, minutes);
+    Saved_Filtr_timeOFF1 = minutes;
 }
 void trigger9(){read_filtr_n2_n3();}
 
@@ -332,8 +338,9 @@ void trigger9(){read_filtr_n2_n3();}
 //printh 23 02 54 0A - "set-filtr" Присвоить n4 / n5 время вкл. по таймеру №2
 void read_filtr_n4_n5(){
     in_hours = myNex.readNumber("set_filtr.n4.val"); in_minutes = myNex.readNumber("set_filtr.n5.val");
-    sprintf(buffer, "%02d:%02d", in_hours, in_minutes); Saved_Filtr_timeON2=Filtr_timeON2 = buffer;
-    saveValue<String>("Filtr_timeON2", Filtr_timeON2);
+    uint16_t minutes = static_cast<uint16_t>(in_hours * 60 + in_minutes);
+    ui.setTimerMinutes("FiltrTimer2", minutes, ui.timer("FiltrTimer2").off);
+    Saved_Filtr_timeON2 = minutes;
 }
 void trigger10(){read_filtr_n4_n5();}
 
@@ -356,8 +363,9 @@ void trigger10(){read_filtr_n4_n5();}
 //printh 23 02 54 0B - "set-filtr" Присвоить n6 / n7 время откл. по таймеру №2
 void read_filtr_n6_n7(){
     in_hours = myNex.readNumber("set_filtr.n6.val"); in_minutes = myNex.readNumber("set_filtr.n7.val");
-    sprintf(buffer, "%02d:%02d", in_hours, in_minutes); Saved_Filtr_timeOFF2=Filtr_timeOFF2 = buffer;
-    saveValue<String>("Filtr_timeOFF2", Filtr_timeOFF2);
+    uint16_t minutes = static_cast<uint16_t>(in_hours * 60 + in_minutes);
+    ui.setTimerMinutes("FiltrTimer2", ui.timer("FiltrTimer2").on, minutes);
+    Saved_Filtr_timeOFF2 = minutes;
 }
 void trigger11(){read_filtr_n6_n7();}
 
@@ -369,8 +377,9 @@ void trigger11(){read_filtr_n6_n7();}
 //printh 23 02 54 0C - "set-filtr" Присвоить n8 / n9 время вкл. по таймеру №3
 void read_filtr_n8_n9(){
     in_hours = myNex.readNumber("set_filtr.n8.val"); in_minutes = myNex.readNumber("set_filtr.n9.val");
-    sprintf(buffer, "%02d:%02d", in_hours, in_minutes); Saved_Filtr_timeON3=Filtr_timeON3 = buffer;
-    saveValue<String>("Filtr_timeON3", Filtr_timeON3);
+    uint16_t minutes = static_cast<uint16_t>(in_hours * 60 + in_minutes);
+    ui.setTimerMinutes("FiltrTimer3", minutes, ui.timer("FiltrTimer3").off);
+    Saved_Filtr_timeON3 = minutes;
 }
 void trigger12(){read_filtr_n8_n9();}
 
@@ -380,8 +389,9 @@ void trigger12(){read_filtr_n8_n9();}
 //printh 23 02 54 0D - "set-filtr" Присвоить n10 / n11 время откл. по таймеру №3
 void read_filtr_n10_n11(){   
     in_hours = myNex.readNumber("set_filtr.n10.val"); in_minutes = myNex.readNumber("set_filtr.n11.val");
-    sprintf(buffer, "%02d:%02d", in_hours, in_minutes); Saved_Filtr_timeOFF3=Filtr_timeOFF3 = buffer;
-    saveValue<String>("Filtr_timeOFF3", Filtr_timeOFF3);
+    uint16_t minutes = static_cast<uint16_t>(in_hours * 60 + in_minutes);
+    ui.setTimerMinutes("FiltrTimer3", ui.timer("FiltrTimer3").on, minutes);
+    Saved_Filtr_timeOFF3 = minutes;
 }
 void trigger13(){read_filtr_n10_n11();}
 
@@ -424,8 +434,9 @@ void trigger14(){read_filtr_sw0_sw1_sw2();}
 //printh 23 02 54 0F - "Clean"  считываем время таймера n0 / n1  насала промывки
 void read_Clean_n0_n1(){
     in_hours = myNex.readNumber("Clean.n0.val"); in_minutes = myNex.readNumber("Clean.n1.val");
-    sprintf(buffer, "%02d:%02d", in_hours, in_minutes); Saved_Clean_timeON1=Clean_timeON1 = buffer;
-    saveValue<String>("Clean_timeON1", Clean_timeON1);
+    uint16_t minutes = static_cast<uint16_t>(in_hours * 60 + in_minutes);
+    ui.setTimerMinutes("CleanTimer1", minutes, ui.timer("CleanTimer1").off);
+    Saved_Clean_timeON1 = minutes;
 }
 void trigger15(){read_Clean_n0_n1();}
 
@@ -440,8 +451,9 @@ void trigger15(){read_Clean_n0_n1();}
 //printh 23 02 54 10 - "Clean" считываем время таймера n2 / n3  отключения промывки
 void read_Clean_n2_n3(){
     in_hours = myNex.readNumber("Clean.n2.val"); in_minutes = myNex.readNumber("Clean.n3.val");
-    sprintf(buffer, "%02d:%02d", in_hours, in_minutes); Saved_Clean_timeOFF1=Clean_timeOFF1 = buffer;
-    saveValue<String>("Clean_timeOFF1", Clean_timeOFF1);
+    uint16_t minutes = static_cast<uint16_t>(in_hours * 60 + in_minutes);
+    ui.setTimerMinutes("CleanTimer1", ui.timer("CleanTimer1").on, minutes);
+    Saved_Clean_timeOFF1 = minutes;
 }
 void trigger16(){read_Clean_n2_n3();} 
 
@@ -799,5 +811,3 @@ read_lamp_sw0_sw1_sw2();
 
 
 }
-
-

@@ -103,18 +103,20 @@ if (Saved_Power_Time1 != Power_Time1 && !triggerRestartNextion){ Saved_Power_Tim
   myNex.writeNum("set_lamp.sw0.val", Power_Time1 ? 1 : 0); 
 }
 
-if (Saved_Lamp_timeON1 != Lamp_timeON1 && !triggerRestartNextion) {Saved_Lamp_timeON1 = Lamp_timeON1;
-  myNex.writeStr("dim=50");
+UITimerEntry &lampTimer = ui.timer("LampTimer");
+if (Saved_Lamp_timeON1 != lampTimer.on && !triggerRestartNextion) {Saved_Lamp_timeON1 = lampTimer.on;  myNex.writeStr("dim=50");
   myNex.writeStr("page set_lamp");
-  myNex.writeNum("set_lamp.n0.val", getSubstring(Lamp_timeON1, 0, 1));
-  myNex.writeNum("set_lamp.n1.val", getSubstring(Lamp_timeON1, 3, 4));
+  String lampOnStr = formatMinutesToTime(lampTimer.on);
+  myNex.writeNum("set_lamp.n0.val", getSubstring(lampOnStr, 0, 1));
+  myNex.writeNum("set_lamp.n1.val", getSubstring(lampOnStr, 3, 4));
 }
 
-if (Saved_Lamp_timeOFF1 != Lamp_timeOFF1 && !triggerRestartNextion) {Saved_Lamp_timeOFF1 = Lamp_timeOFF1;
+if (Saved_Lamp_timeOFF1 != lampTimer.off && !triggerRestartNextion) {Saved_Lamp_timeOFF1 = lampTimer.off;
   myNex.writeStr("dim=50");
   myNex.writeStr("page set_lamp");
-  myNex.writeNum("set_lamp.n2.val", getSubstring(Lamp_timeOFF1, 0, 1));
-  myNex.writeNum("set_lamp.n3.val", getSubstring(Lamp_timeOFF1, 3, 4));
+  String lampOffStr = formatMinutesToTime(lampTimer.off);
+  myNex.writeNum("set_lamp.n2.val", getSubstring(lampOffStr, 0, 1));
+  myNex.writeNum("set_lamp.n3.val", getSubstring(lampOffStr, 3, 4));
 }
 
 
@@ -160,18 +162,21 @@ if (Saved_WS2815_Time1 != WS2815_Time1 && !triggerRestartNextion){ Saved_WS2815_
 }
 
 
-if (Saved_timeON_WS2815 != timeON_WS2815 && !triggerRestartNextion){Saved_timeON_WS2815 = timeON_WS2815;
+UITimerEntry &rgbTimer = ui.timer("RgbTimer");
+if (Saved_timeON_WS2815 != rgbTimer.on && !triggerRestartNextion){Saved_timeON_WS2815 = rgbTimer.on;
   myNex.writeStr("dim=50");
   myNex.writeStr("page set_RGB"); //отобразить страницу
-  myNex.writeNum("set_RGB.n0.val", getSubstring(timeON_WS2815, 0, 1));
-  myNex.writeNum("set_RGB.n1.val", getSubstring(timeON_WS2815, 3, 4));
+  String rgbOnStr = formatMinutesToTime(rgbTimer.on);
+  myNex.writeNum("set_RGB.n0.val", getSubstring(rgbOnStr, 0, 1));
+  myNex.writeNum("set_RGB.n1.val", getSubstring(rgbOnStr, 3, 4));
 } 
 
-if (Saved_timeOFF_WS2815 != timeOFF_WS2815 && !triggerRestartNextion){Saved_timeOFF_WS2815 = timeOFF_WS2815;
+if (Saved_timeOFF_WS2815 != rgbTimer.off && !triggerRestartNextion){Saved_timeOFF_WS2815 = rgbTimer.off;
   myNex.writeStr("dim=50");
   myNex.writeStr("page set_RGB");//отобразить страницу
-  myNex.writeNum("set_RGB.n2.val", getSubstring(timeOFF_WS2815, 0, 1));
-  myNex.writeNum("set_RGB.n3.val", getSubstring(timeOFF_WS2815, 3, 4));
+  String rgbOffStr = formatMinutesToTime(rgbTimer.off);
+  myNex.writeNum("set_RGB.n2.val", getSubstring(rgbOffStr, 0, 1));
+  myNex.writeNum("set_RGB.n3.val", getSubstring(rgbOffStr, 3, 4));
 } 
 
 // /////////////////////////************* page set_filtr **************/////////////////////////////
@@ -239,11 +244,13 @@ if (Saved_Filtr_Time3 != Filtr_Time3 && !triggerRestartNextion){Saved_Filtr_Time
 //   myNex.writeNum("set_filtr.n1.val", getSubstring(Filtr_timeON1, 3, 4));
 // }
 
-if (Saved_Filtr_timeON1 != Filtr_timeON1 && !triggerRestartNextion) {Saved_Filtr_timeON1 = Filtr_timeON1;
+UITimerEntry &filtrTimer1 = ui.timer("FiltrTimer1");
+if (Saved_Filtr_timeON1 != filtrTimer1.on && !triggerRestartNextion) {Saved_Filtr_timeON1 = filtrTimer1.on;
   myNex.writeStr("dim=50");
   myNex.writeStr("page set_filtr");
-  myNex.writeNum("set_filtr.n0.val", getSubstring(Filtr_timeON1, 0, 1));
-  myNex.writeNum("set_filtr.n1.val", getSubstring(Filtr_timeON1, 3, 4));
+  String filtrOn1Str = formatMinutesToTime(filtrTimer1.on);
+  myNex.writeNum("set_filtr.n0.val", getSubstring(filtrOn1Str, 0, 1));
+  myNex.writeNum("set_filtr.n1.val", getSubstring(filtrOn1Str, 3, 4));
 }
 
 // if (Saved_Filtr_timeOFF1 != Filtr_timeOFF1 && !triggerRestartNextion) {Saved_Filtr_timeOFF1 = Filtr_timeOFF1;
@@ -253,11 +260,12 @@ if (Saved_Filtr_timeON1 != Filtr_timeON1 && !triggerRestartNextion) {Saved_Filtr
 //   myNex.writeNum("set_filtr.n3.val", getSubstring(Filtr_timeOFF1, 3, 4));
 // }
 
-if (Saved_Filtr_timeOFF1 != Filtr_timeOFF1 && !triggerRestartNextion) {Saved_Filtr_timeOFF1 = Filtr_timeOFF1;
+if (Saved_Filtr_timeOFF1 != filtrTimer1.off && !triggerRestartNextion) {Saved_Filtr_timeOFF1 = filtrTimer1.off;
   myNex.writeStr("dim=50");
   myNex.writeStr("page set_filtr");
-  myNex.writeNum("set_filtr.n2.val", getSubstring(Filtr_timeOFF1, 0, 1));
-  myNex.writeNum("set_filtr.n3.val", getSubstring(Filtr_timeOFF1, 3, 4));
+  String filtrOff1Str = formatMinutesToTime(filtrTimer1.off);
+  myNex.writeNum("set_filtr.n2.val", getSubstring(filtrOff1Str, 0, 1));
+  myNex.writeNum("set_filtr.n3.val", getSubstring(filtrOff1Str, 3, 4));
 }
 
 // if (Saved_Filtr_timeON2 != Filtr_timeON2 && !triggerRestartNextion) {Saved_Filtr_timeON2 = Filtr_timeON2;
@@ -267,11 +275,13 @@ if (Saved_Filtr_timeOFF1 != Filtr_timeOFF1 && !triggerRestartNextion) {Saved_Fil
 //   myNex.writeNum("set_filtr.n5.val", getSubstring(Filtr_timeON2, 3, 4));
 // }
 
-if (Saved_Filtr_timeON2 != Filtr_timeON2 && !triggerRestartNextion) {Saved_Filtr_timeON2 = Filtr_timeON2;
+UITimerEntry &filtrTimer2 = ui.timer("FiltrTimer2");
+if (Saved_Filtr_timeON2 != filtrTimer2.on && !triggerRestartNextion) {Saved_Filtr_timeON2 = filtrTimer2.on;
   myNex.writeStr("dim=50");
   myNex.writeStr("page set_filtr");
-  myNex.writeNum("set_filtr.n4.val", getSubstring(Filtr_timeON2, 0, 1));
-  myNex.writeNum("set_filtr.n5.val", getSubstring(Filtr_timeON2, 3, 4));
+  String filtrOn2Str = formatMinutesToTime(filtrTimer2.on);
+  myNex.writeNum("set_filtr.n4.val", getSubstring(filtrOn2Str, 0, 1));
+  myNex.writeNum("set_filtr.n5.val", getSubstring(filtrOn2Str, 3, 4));
 }
 
 // if (Saved_Filtr_timeOFF2 != Filtr_timeOFF2 && !triggerRestartNextion) {Saved_Filtr_timeOFF2 = Filtr_timeOFF2;
@@ -288,11 +298,13 @@ if (Saved_Filtr_timeON2 != Filtr_timeON2 && !triggerRestartNextion) {Saved_Filtr
 //   myNex.writeNum("set_filtr.n9.val", getSubstring(Filtr_timeON3, 3, 4));
 // }
 
-if (Saved_Filtr_timeON3 != Filtr_timeON3 && !triggerRestartNextion) {Saved_Filtr_timeON3 = Filtr_timeON3;
+UITimerEntry &filtrTimer3 = ui.timer("FiltrTimer3");
+if (Saved_Filtr_timeON3 != filtrTimer3.on && !triggerRestartNextion) {Saved_Filtr_timeON3 = filtrTimer3.on;
   myNex.writeStr("dim=50");
   myNex.writeStr("page set_filtr");
-  myNex.writeNum("set_filtr.n8.val", getSubstring(Filtr_timeON3, 0, 1));
-  myNex.writeNum("set_filtr.n9.val", getSubstring(Filtr_timeON3, 3, 4));
+  String filtrOn3Str = formatMinutesToTime(filtrTimer3.on);
+  myNex.writeNum("set_filtr.n8.val", getSubstring(filtrOn3Str, 0, 1));
+  myNex.writeNum("set_filtr.n9.val", getSubstring(filtrOn3Str, 3, 4));
 }
 
 // if (Saved_Filtr_timeOFF3 != Filtr_timeOFF3 && !triggerRestartNextion) {Saved_Filtr_timeOFF3 = Filtr_timeOFF3;
@@ -302,11 +314,12 @@ if (Saved_Filtr_timeON3 != Filtr_timeON3 && !triggerRestartNextion) {Saved_Filtr
 //   myNex.writeNum("set_filtr.n11.val", getSubstring(Filtr_timeOFF3, 3, 4));
 // }
 
-if (Saved_Filtr_timeOFF3 != Filtr_timeOFF3 && !triggerRestartNextion) {Saved_Filtr_timeOFF3 = Filtr_timeOFF3;
+if (Saved_Filtr_timeOFF3 != filtrTimer3.off && !triggerRestartNextion) {Saved_Filtr_timeOFF3 = filtrTimer3.off;
   myNex.writeStr("dim=50");
   myNex.writeStr("page set_filtr");
-  myNex.writeNum("set_filtr.n10.val", getSubstring(Filtr_timeOFF3, 0, 1));
-  myNex.writeNum("set_filtr.n11.val", getSubstring(Filtr_timeOFF3, 3, 4));
+  String filtrOff3Str = formatMinutesToTime(filtrTimer3.off);
+  myNex.writeNum("set_filtr.n10.val", getSubstring(filtrOff3Str, 0, 1));
+  myNex.writeNum("set_filtr.n11.val", getSubstring(filtrOff3Str, 3, 4));
 }
 // /////////////////////////************* page Clean **************/////////////////////////////
 // ////////////////////////************* page Clean **************//////////////////////////////
@@ -346,11 +359,13 @@ if (Saved_Clean_Time1 != Clean_Time1 && !triggerRestartNextion) {Saved_Clean_Tim
 //   myNex.writeNum("Clean.n1.val", getSubstring(Clean_timeON1, 3, 4));
 // }
 
-if (Saved_Clean_timeON1 != Clean_timeON1 && !triggerRestartNextion) {Saved_Clean_timeON1 = Clean_timeON1;
+UITimerEntry &cleanTimer = ui.timer("CleanTimer1");
+if (Saved_Clean_timeON1 != cleanTimer.on && !triggerRestartNextion) {Saved_Clean_timeON1 = cleanTimer.on;
   myNex.writeStr("dim=50");
   myNex.writeStr("page Clean");
-  myNex.writeNum("Clean.n0.val", getSubstring(Clean_timeON1, 0, 1));
-  myNex.writeNum("Clean.n1.val", getSubstring(Clean_timeON1, 3, 4));
+  String cleanOnStr = formatMinutesToTime(cleanTimer.on);
+  myNex.writeNum("Clean.n0.val", getSubstring(cleanOnStr, 0, 1));
+  myNex.writeNum("Clean.n1.val", getSubstring(cleanOnStr, 3, 4));
 }
 
 // if (Saved_Clean_timeOFF1 != Clean_timeOFF1 && !triggerRestartNextion) {Saved_Clean_timeOFF1 = Clean_timeOFF1;
@@ -359,11 +374,12 @@ if (Saved_Clean_timeON1 != Clean_timeON1 && !triggerRestartNextion) {Saved_Clean
 //   myNex.writeNum("Clean.n2.val", getSubstring(Clean_timeOFF1, 0, 1));
 //   myNex.writeNum("Clean.n3.val", getSubstring(Clean_timeOFF1, 3, 4));
 // }
-if (Saved_Clean_timeOFF1 != Clean_timeOFF1 && !triggerRestartNextion) {Saved_Clean_timeOFF1 = Clean_timeOFF1;
+if (Saved_Clean_timeOFF1 != cleanTimer.off && !triggerRestartNextion) {Saved_Clean_timeOFF1 = cleanTimer.off;
   myNex.writeStr("dim=50");
   myNex.writeStr("page Clean");
-  myNex.writeNum("Clean.n2.val", getSubstring(Clean_timeOFF1, 0, 1));
-  myNex.writeNum("Clean.n3.val", getSubstring(Clean_timeOFF1, 3, 4));
+  String cleanOffStr = formatMinutesToTime(cleanTimer.off);
+  myNex.writeNum("Clean.n2.val", getSubstring(cleanOffStr, 0, 1));
+  myNex.writeNum("Clean.n3.val", getSubstring(cleanOffStr, 3, 4));
 }
 
 // if (Saved_chk1 != chk1 && !triggerRestartNextion) {Saved_chk1 = chk1;
@@ -626,11 +642,3 @@ if (Saved_chk7 != chk7 && !triggerRestartNextion) {Saved_chk7 = chk7;
 
 
 }
-
-
-
-
-
-
-
-

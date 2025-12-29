@@ -1,37 +1,22 @@
 #pragma once
 #include <Arduino.h>
 #include <NTPClient.h>
+#include "web.h"
 
 extern NTPClient timeClient;
-// Функция для проверки времени в заданном интервале
-bool checkTimeInInterval(int currentHour, int currentMinute, const String& startTime, const String& endTime)
+// Функция для проверки времени в заданном интервале (минуты от 00:00)
+bool checkTimeInInterval(int currentHour, int currentMinute, uint16_t startMinutes, uint16_t endMinutes)
 {
-  int startHour = startTime.substring(0, 2).toInt();
-  int startMinute = startTime.substring(3).toInt();
-  int endHour = endTime.substring(0, 2).toInt();
-  int endMinute = endTime.substring(3).toInt();
+  int current = currentHour * 60 + currentMinute;
+  startMinutes %= 1440;
+  endMinutes %= 1440;
 
-  // Проверка перехода через 00:00
-  if (endHour < startHour || (endHour == startHour && endMinute < startMinute))
+  if (endMinutes < startMinutes)
   {
-    // Время окончания на следующий день
-    if ((currentHour > startHour || (currentHour == startHour && currentMinute >= startMinute)) ||
-        (currentHour < endHour || (currentHour == endHour && currentMinute < endMinute)))
-    {
-      return true;
-    }
-  }
-  else
-  {
-    // Время окончания в тот же день
-    if ((currentHour > startHour || (currentHour == startHour && currentMinute >= startMinute)) &&
-        (currentHour < endHour || (currentHour == endHour && currentMinute < endMinute)))
-    {
-      return true;
-    }
+    return (current >= startMinutes) || (current < endMinutes);
   }
 
-  return false;
+  return (current >= startMinutes) && (current < endMinutes);
 }
 
   
@@ -160,25 +145,28 @@ void TimerControlRelay(int interval) {
                 //   if (checkTimeInInterval(currentHour, currentMinute, Lamp_timeON1, Lamp_timeOFF1)&&Power_Time1==true) {
                 //     Lamp=true;
                 //   } else if (Power_Time1==true) {Lamp=false; } // Выключаем
-                 //Проверяем режим освещения и применяем логику включения лампы
-                if (SetLamp == "off") {
+            //Проверяем режим освещения и применяем логику включения лампы
+                UITimerEntry &lampTimer = ui.timer("LampTimer");
+                UITimerEntry &rgbTimer = ui.timer("RgbTimer");
+
+                 if (SetLamp == "off") {
                   Lamp = false;
                 } else if (SetLamp == "on") {
                   Lamp = true;
                 } else if (SetLamp == "timer") {
-                  Lamp = checkTimeInInterval(currentHour, currentMinute, Lamp_timeON1, Lamp_timeOFF1);
+                  Lamp = checkTimeInInterval(currentHour, currentMinute, lampTimer.on, lampTimer.off);
                 } else if (SetLamp == "auto") {
                   Lamp = Lumen_Ul < 20;
                 } else {
                   // Резервная логика для совместимости со старым управлением
                   if (Power_Time1) {
-                    Lamp = checkTimeInInterval(currentHour, currentMinute, Lamp_timeON1, Lamp_timeOFF1);
+                    Lamp = checkTimeInInterval(currentHour, currentMinute, lampTimer.on, lampTimer.off);
                   } else if (Lamp_autosvet) {
                     Lamp = Lumen_Ul < 20;
                   }
                 }    
    
-                  if (checkTimeInInterval(currentHour, currentMinute, timeON_WS2815, timeOFF_WS2815)&&WS2815_Time1==true) {
+                    if (checkTimeInInterval(currentHour, currentMinute, rgbTimer.on, rgbTimer.off)&&WS2815_Time1==true) {
                       Pow_WS2815=true;
                     } else if (WS2815_Time1==true) {Pow_WS2815=false;} // Выключаем
                       

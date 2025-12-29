@@ -159,16 +159,16 @@ void setup() {
   Filtr_Time1 = loadValue<int>("Filtr_Time1", 0) != 0;
   Filtr_Time2 = loadValue<int>("Filtr_Time2", 0) != 0;
   Filtr_Time3 = loadValue<int>("Filtr_Time3", 0) != 0;
-  Filtr_timeON1 = loadValue<String>("Filtr_timeON1", "00:00");
-  Filtr_timeOFF1 = loadValue<String>("Filtr_timeOFF1", "00:00");
-  Filtr_timeON2 = loadValue<String>("Filtr_timeON2", "00:00");
-  Filtr_timeOFF2 = loadValue<String>("Filtr_timeOFF2", "00:00");
-  Filtr_timeON3 = loadValue<String>("Filtr_timeON3", "00:00");
-  Filtr_timeOFF3 = loadValue<String>("Filtr_timeOFF3", "00:00");
+  // Filtr_timeON1 = loadValue<String>("Filtr_timeON1", "00:00");
+  // Filtr_timeOFF1 = loadValue<String>("Filtr_timeOFF1", "00:00");
+  // Filtr_timeON2 = loadValue<String>("Filtr_timeON2", "00:00");
+  // Filtr_timeOFF2 = loadValue<String>("Filtr_timeOFF2", "00:00");
+  // Filtr_timeON3 = loadValue<String>("Filtr_timeON3", "00:00");
+  // Filtr_timeOFF3 = loadValue<String>("Filtr_timeOFF3", "00:00");
   Power_Clean = loadValue<int>("Power_Clean", 0) != 0;
   Clean_Time1 = loadValue<int>("Clean_Time1", 0) != 0;
-  Clean_timeON1 = loadValue<String>("Clean_timeON1", "00:00");
-  Clean_timeOFF1 = loadValue<String>("Clean_timeOFF1", "00:00");
+  // Clean_timeON1 = loadValue<String>("Clean_timeON1", "00:00");
+  // Clean_timeOFF1 = loadValue<String>("Clean_timeOFF1", "00:00");
   syncCleanDaysFromSelection();
 
 
@@ -177,8 +177,8 @@ void setup() {
   Pow_WS2815 = loadButtonState("button_WS2815", 1) != 0;
     Pow_WS2815_autosvet = loadValue<int>("Pow_WS2815_autosvet", 0) != 0;
   WS2815_Time1 = loadValue<int>("WS2815_Time1", 0) != 0;
-  timeON_WS2815 = loadValue<String>("timeON_WS2815", "00:00");
-  timeOFF_WS2815 = loadValue<String>("timeOFF_WS2815", "00:00");
+  // timeON_WS2815 = loadValue<String>("timeON_WS2815", "00:00");
+  // timeOFF_WS2815 = loadValue<String>("timeOFF_WS2815", "00:00");
     SetRGB = loadValue<String>("SetRGB", "off");
   ColorLED = loadValue<String>("LEDColor","#00ff00");      // WS2815
   LedPattern = loadValue<String>("LedPattern", LedPattern);
@@ -197,8 +197,8 @@ void setup() {
   // Lamp_autosvet = false;
   Lamp_autosvet = loadValue<int>("Lamp_autosvet", 0) != 0;
   Power_Time1 = loadValue<int>("Power_Time1", 0) != 0;
-  Lamp_timeON1 = loadValue<String>("Lamp_timeON1", "00:00");
-  Lamp_timeOFF1 = loadValue<String>("Lamp_timeOFF1", "00:00");
+  // Lamp_timeON1 = loadValue<String>("Lamp_timeON1", "00:00");
+  // Lamp_timeOFF1 = loadValue<String>("Lamp_timeOFF1", "00:00");
   // if (SetLamp.length()) {
   //   applyLampModeFromSetLamp();
   // } else {
@@ -359,9 +359,5 @@ TimerControlRelay(10000);  // TimerControlRelay(600); //Контроль вкл�
   slow(period_slow_Time); //Периодически отправляем данные для обратной связи - "period_slow_Time" Период обновления данных - зависит от "Nx_dim_id" nекущеuj - считанного значения яркости Nextion
 
 }
-  
-
-
-
 
 
