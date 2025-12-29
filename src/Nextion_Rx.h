@@ -519,7 +519,9 @@ void trigger18(){read_Clean_chk();}
 
 // //printh 23 02 54 13  -"heat" - свчитываем уставку (n0.val=h0.val) темепературы воды в бассейне
 // void read_heat_h0(){
-
+// printh 23 02 54 13  -"heat" - свчитываем уставку (n0.val=h0.val) темепературы воды в бассейне
+void read_heat_h0(){
+    int Sider_heat_on = myNex.readNumber("heat.h0.val");
 //     int Sider_heat_on = myNex.readNumber("heat.h0.val");
 
 //     if(Sider_heat_on < 31 && Sider_heat_on >= 0) { // Sider_heat  != 777777){ 
@@ -529,7 +531,12 @@ void trigger18(){read_Clean_chk();}
 //     } 
 // }
 // void trigger19(){ read_heat_h0();}
-
+    if(Sider_heat_on < 31 && Sider_heat_on >= 0) {
+        Sider_heat1 = Sider_heat = Sider_heat_on;
+        saveValue<int>("Sider_heat", Sider_heat);
+    }
+}
+void trigger19(){ read_heat_h0();}
 
 // //printh 23 02 54 14 -"heat" - свчитываем состояние кнопки SW0
 // void read_heat_sw0(){
@@ -537,7 +544,12 @@ void trigger18(){read_Clean_chk();}
 //     jee.var("Activation_Heat", Activation_Heat ? "true" : "false"); 
 // }
 // void trigger20(){read_heat_sw0();}
-
+// printh 23 02 54 14 -"heat" - свчитываем состояние кнопки SW0
+void read_heat_sw0(){
+    Activation_Heat1 = Activation_Heat = myNex.readNumber("heat.sw0.val");
+    saveValue<int>("Activation_Heat", Activation_Heat ? 1 : 0);
+}
+void trigger20(){read_heat_sw0();}
 
 
 // //////////////////////////******** Дозаторы - Dispensers **********///////////////////////////
@@ -807,7 +819,5 @@ read_lamp_sw0_sw1_sw2();
 // /////////////////////////************* page pageRTC **************/////////////////////////////
 // ////////////////////////************* page pageRTC **************//////////////////////////////
 // read_RTC_n5();
-
-
 
 }

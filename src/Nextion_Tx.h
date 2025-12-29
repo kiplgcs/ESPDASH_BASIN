@@ -489,7 +489,22 @@ if (Saved_chk7 != chk7 && !triggerRestartNextion) {Saved_chk7 = chk7;
 //   }
 
 //   Power_Heat = controlTemperature (DS1, Sider_heat, Activation_Heat); //Контроль температуры и отправка myNex.writeNum("page0.va0.val", Heat_ON_OFF ? 1 : 0);
+  if (Sider_heat != Sider_heat1 && !triggerRestartNextion){
+    myNex.writeStr("dim=50"); delay(50);
+    myNex.writeStr("page heat"); delay(50);
+    myNex.writeNum("heat.h0.val", Sider_heat); delay(50);
+    myNex.writeNum("heat.n0.val", Sider_heat); delay(50);
 
+    // Проверяем записалось ли значение:
+    Sider_heat1 = myNex.readNumber("heat.n0.val");
+  }
+
+  if (Activation_Heat != Activation_Heat1 && !triggerRestartNextion) {
+    Activation_Heat1 = Activation_Heat;
+    myNex.writeStr("dim=50");
+    myNex.writeStr("page heat"); delay(150);
+    myNex.writeNum("heat.sw0.val", Activation_Heat); delay(150);
+  }
 
 // /////////////////////////************* set_topping  **************/////////////////////////////
 // ////////////////////////************* set_topping **************//////////////////////////////

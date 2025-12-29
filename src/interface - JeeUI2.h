@@ -151,11 +151,18 @@ inline void interface(){
 
    // Контроль температуры
     oab.page();
-        oab.displayGraph("SpeedTrend", "Speed Trend",
-        "value:Speed;updatePeriod_of_Time:180;updateStep:3;maxPoints:20;width:100%;height:240;"
-        "xLabel:Time;yLabel:Speed;pointColor:#ffd166;lineColor:#4CAF50;"
-        "lineWidth:1;pointRadius:3;smooth:false", Speed);
-
+        // oab.displayGraph("SpeedTrend", "Speed Trend",
+        // "value:Speed;updatePeriod_of_Time:180;updateStep:3;maxPoints:20;width:100%;height:240;"
+        // "xLabel:Time;yLabel:Speed;pointColor:#ffd166;lineColor:#4CAF50;"
+        // "lineWidth:1;pointRadius:3;smooth:false", Speed);
+        oab.display("DS1", "Температура воды, °C");
+        oab.number("Sider_heat", "Уставка нагрева, °C");
+        oab.checkbox("Activation_Heat", "Контроль нагрева");
+        oab.display("Power_Heat", "Состояние нагрева");
+        oab.displayGraph("PoolTempTrend", "Температура бассейна",
+        "value:Temperatura;updatePeriod_of_Time:180;updateStep:3;maxPoints:20;width:100%;height:240;"
+        "xLabel:Time;yLabel:Temperature;pointColor:#ffd166;lineColor:#4CAF50;"
+        "lineWidth:1;pointRadius:3;smooth:false", Temperatura);
     // Контроль PH (NaOCl)
     oab.page();
 

@@ -50,6 +50,8 @@ inline int jpg = 1;              // Флаг JPG отображения (нап�
 inline String dashAppTitle = "MiniDash"; // Название приложения
 inline bool dashInterfaceInitialized = false; // Флаг, что интерфейс уже инициализирован
 
+extern float DS1;
+extern float DS2;
 
 
 
@@ -910,6 +912,12 @@ private:
               else if(id=="Clean_Time1") val = Clean_Time1 ? "1" : "0";
               else if(id=="Comment") val = Comment;
               else if(id=="Lumen_Ul") val = Lumen_Ul;
+              
+                            else if(id=="DS1") val = String(DS1, 1) + " °C";
+              else if(id=="Sider_heat") val = String(Sider_heat);
+              else if(id=="Activation_Heat") val = Activation_Heat ? "1" : "0";
+              else if(id=="Power_Heat") val = Power_Heat ? "Нагрев" : "Откл.";
+              
               else if(id=="RandomVal") val = String(RandomVal);
               else if(id=="ModeSelect") val = ModeSelect;
               else if(id=="SetLamp") val = SetLamp;
@@ -2182,8 +2190,13 @@ window.addEventListener('resize', ()=>{
 
     if(typeof j.Comment !== 'undefined') updateInputValue('Comment', j.Comment);
     if(typeof j.Lumen_Ul !== 'undefined') updateInputValue('Lumen_Ul', j.Lumen_Ul);
-  });
-}
+      if(typeof j.DS1 !== 'undefined') updateStat('DS1', j.DS1);
+    if(typeof j.Sider_heat !== 'undefined') updateInputValue('Sider_heat', j.Sider_heat);
+    if(typeof j.Activation_Heat !== 'undefined') updateCheckboxValue('Activation_Heat', j.Activation_Heat);
+    if(typeof j.Power_Heat !== 'undefined') updateStat('Power_Heat', j.Power_Heat);
+
+    });
+  }
 setInterval(fetchLive, 1000);
 setInterval(tickPageDateTime, 1000);
 fetchMqttConfig();
@@ -2247,6 +2260,8 @@ function setImg(x){
         else if(key=="Power_Clean") { Power_Clean = valStr.toInt() != 0; saveValue<int>("Power_Clean", Power_Clean ? 1 : 0); }
         else if(key=="Clean_Time1") { Clean_Time1 = valStr.toInt() != 0; saveValue<int>("Clean_Time1", Clean_Time1 ? 1 : 0); }
 
+                else if(key=="Sider_heat") { Sider_heat = valStr.toInt(); saveValue<int>("Sider_heat", Sider_heat); }
+        else if(key=="Activation_Heat") { Activation_Heat = valStr.toInt() != 0; saveValue<int>("Activation_Heat", Activation_Heat ? 1 : 0); }
 
         else if(key=="Comment") { Comment = valStr; saveValue<String>(key.c_str(), Comment); }
 
@@ -2453,12 +2468,19 @@ function setImg(x){
               +",\"Timer1\":\""+Timer1+"\",\"Power_Time1\":"+String(Power_Time1 ? 1 : 0)
                +timerJson
                +",\"WS2815_Time1\":"+String(WS2815_Time1 ? 1 : 0)
-                +",\"Power_Filtr\":"+String(Power_Filtr ? 1 : 0)
+
+                 +",\"Power_Filtr\":"+String(Power_Filtr ? 1 : 0)
+
                +",\"Filtr_Time1\":"+String(Filtr_Time1 ? 1 : 0)
                +",\"Filtr_Time2\":"+String(Filtr_Time2 ? 1 : 0)
                +",\"Filtr_Time3\":"+String(Filtr_Time3 ? 1 : 0)
                +",\"Power_Clean\":"+String(Power_Clean ? 1 : 0)
                +",\"Clean_Time1\":"+String(Clean_Time1 ? 1 : 0)
+                              +",\"DS1\":\""+String(DS1, 1)+" °C\""
+               +",\"Sider_heat\":"+String(Sider_heat)
+               +",\"Activation_Heat\":"+String(Activation_Heat ? 1 : 0)
+               +",\"Power_Heat\":\""+String(Power_Heat ? "Нагрев" : "Откл.")+"\""
+               
                +",\"Lumen_Ul\":\""+Lumen_Ul+"\""
                +",\"Comment\":\""+Comment+"\"}";
     r->send(200, "application/json", s);
