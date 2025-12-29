@@ -1,6 +1,7 @@
 // Подключаем необходимые библиотеки
-//#include <WiFiUdp.h> // Библиотека для работы с UDP-протоколом
+#include <WiFiUdp.h> // Библиотека для работы с UDP-протоколом
 #include <NTPClient.h> // Библиотека для работы с NTP-клиентом
+#include "EasyNextionLibrary.h"
 #include <Wire.h>
 //#include <RTClib.h>
 //#include <TimeLib.h>
@@ -14,12 +15,11 @@ const int daylightOffset = 0; // Смещение летнего времени 
 
 int period_get_NPT_Time = 5000; // 10сек./3мин - время через которое будет обновлятся время из интерента
 
-
-// Объект NTP-клиента для обновления времени из Интернета
-WiFiUDP ntpUDP;
-// NTPClient timeClient1(ntpUDP, ntpServer1, 3600 * gmtOffset_correct, daylightOffset);
-// NTPClient timeClient2(ntpUDP, ntpServer2, 3600 * gmtOffset_correct, daylightOffset);
-
+// Внешние зависимости из других модулей
+extern WiFiUDP ntpUDP;
+extern EasyNex myNex;
+extern int Saved_gmtOffset_correct;
+extern int gmtOffset_correct;
 
 // Переменные времени по умолчанию
 int npt_seconds, seconds;
@@ -33,13 +33,87 @@ int npt_DayOfWeek=1, DayOfWeek=1;  //День недели - Значение о
 const char* daysOfWeek[] = {"ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ", "ВС"};
 
 
+const int kNextionInvalidValue = 777777;
 
-// void setup_rtc() {
-// //setTime(0, 0, 0, 1, 1, 2023); // Установка времени 00:00:00 1 января 2023 года
-// // Настройка и запуск NTP-клиента
-// //timeClient.begin();
-// //configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
-// }
+bool isValidDateTime(int year, int month, int day, int hour, int minute, int second) {
+  if (year < 2024 || year > 2040) return false;
+  if (month < 1 || month > 12) return false;
+  if (day < 1 || day > 31) return false;
+  if (hour < 0 || hour > 23) return false;
+  if (minute < 0 || minute > 59) return false;
+  if (second < 0 || second > 59) return false;
+  return true;
+}
+
+bool isValidDayOfWeek(int dayOfWeek) {
+  return dayOfWeek >= 1 && dayOfWeek <= 7;
+}
+
+bool fetchNextionTime(int &readSeconds, int &readMinutes, int &readHours, int &readDay,
+                      int &readMonth, int &readYear, int &readDayOfWeek) {
+  int hoursValue = myNex.readNumber("rtc3");
+  if (hoursValue == kNextionInvalidValue) {
+    return false;
+  }
+
+  int secondsValue = myNex.readNumber("rtc5"); delay(50);
+  int minutesValue = myNex.readNumber("rtc4"); delay(50);
+  int dayValue = myNex.readNumber("rtc2"); delay(50);
+  int monthValue = myNex.readNumber("rtc1"); delay(50);
+  int yearValue = myNex.readNumber("rtc0");
+  int day_OfWeek = myNex.readNumber("rtc6");
+
+  if (secondsValue == kNextionInvalidValue || minutesValue == kNextionInvalidValue ||
+      dayValue == kNextionInvalidValue || monthValue == kNextionInvalidValue ||
+      yearValue == kNextionInvalidValue || day_OfWeek == kNextionInvalidValue) {
+    return false;
+  }
+
+  int normalizedDayOfWeek = day_OfWeek == 0 ? 7 : day_OfWeek;
+  if (!isValidDateTime(yearValue, monthValue, dayValue, hoursValue, minutesValue, secondsValue)) {
+    return false;
+  }
+  if (!isValidDayOfWeek(normalizedDayOfWeek)) {
+    return false;
+  }
+
+  readSeconds = secondsValue;
+  readMinutes = minutesValue;
+  readHours = hoursValue;
+  readDay = dayValue;
+  readMonth = monthValue;
+  readYear = yearValue;
+  readDayOfWeek = normalizedDayOfWeek;
+  return true;
+}
+
+bool readNextionTime() {
+  int readSeconds = 0;
+  int readMinutes = 0;
+  int readHours = 0;
+  int readDay = 0;
+  int readMonth = 0;
+  int readYear = 0;
+  int readDayOfWeek = 0;
+  if (!fetchNextionTime(readSeconds, readMinutes, readHours, readDay, readMonth, readYear, readDayOfWeek)) {
+    return false;
+  }
+
+  seconds = readSeconds;
+  minutes = readMinutes;
+  hours = readHours;
+  Day = readDay;
+  Month = readMonth;
+  Year = readYear;
+  DayOfWeek = readDayOfWeek;
+  return true;
+}
+
+bool isSameTimeDate(int hourA, int minuteA, int secondA, int dayA, int monthA, int yearA,
+                    int hourB, int minuteB, int secondB, int dayB, int monthB, int yearB) {
+  return hourA == hourB && minuteA == minuteB && secondA == secondB &&
+         dayA == dayB && monthA == monthB && yearA == yearB;
+}
 
 int iii=1; //переменная для счета до отправки на Web -Обновляенм время на первой странице
 
@@ -71,8 +145,7 @@ timer = millis();
 
 
   iii++;
-  if(iii>=3) {iii=1; jee.var("Time", ""); delay(5); if(!Act_PH && !Act_Cl) jee.var("Time", String(hours) + ":" + String(minutes) + ":" + String(seconds) + ", " + String(Day) + ":" + String(Month) + ":" + String(Year) + "г, " + String(daysOfWeek[DayOfWeek - 1]));}
-  
+  if(iii>=3) {iii=1; delay(5);}
 }
 
 
@@ -116,11 +189,12 @@ timer = millis();
 //---------------------------------------------------------------------------------
   if (checkInternetAvailability()) { //Если Интерент доступен
 
+    int gmtOffsetNextion = myNex.readNumber("pageRTC.n5.val"); delay(50);
+    if (gmtOffsetNextion != kNextionInvalidValue) {
+      Saved_gmtOffset_correct = gmtOffset_correct = gmtOffsetNextion;
+    }
 
-   
-    Saved_gmtOffset_correct = gmtOffset_correct = myNex.readNumber("pageRTC.n5.val"); delay(50);
-
-    if(gmtOffset_correct > 1 && gmtOffset_correct < 10){jee.var("gmtOffset_correct", String(gmtOffset_correct)); } else {gmtOffset_correct=3;}
+    if(gmtOffset_correct <= 1 || gmtOffset_correct >= 10){gmtOffset_correct=3;}
 
     // NTPClient timeClient(ntpUDP, ntpServer, 3600*gmtOffset_correct, daylightOffset); //Для корректировки часового пояса, если вдруг другой часовой установлен
     NTPClient timeClient1(ntpUDP, ntpServer1, 3600 * gmtOffset_correct, daylightOffset);
@@ -175,16 +249,49 @@ timer = millis();
     
 
         //проверяем правильно ли получено время (по году) из интернета. 
-      if(npt_Year >= 2024 && npt_Year < 2040) { period_get_NPT_Time = 60000; //Большой таймер повторных запросов - если время считали правильно
+      // if(npt_Year >= 2024 && npt_Year < 2040) { period_get_NPT_Time = 60000; //Большой таймер повторных запросов - если время считали правильно
         
-        seconds = npt_seconds; myNex.writeStr("rtc5=" + String(seconds));
-        minutes = npt_minutes; myNex.writeStr("rtc4=" + String(minutes));
-        hours = npt_hours; myNex.writeStr("rtc3=" + String(hours));
-        Day = npt_Day; myNex.writeStr("rtc2=" + String(Day));
-        Month = npt_Month; myNex.writeStr("rtc1=" + String(Month));
-        Year = npt_Year; myNex.writeStr("rtc0=" + String(Year));
+      //   seconds = npt_seconds; myNex.writeStr("rtc5=" + String(seconds));
+      //   minutes = npt_minutes; myNex.writeStr("rtc4=" + String(minutes));
+      //   hours = npt_hours; myNex.writeStr("rtc3=" + String(hours));
+      //   Day = npt_Day; myNex.writeStr("rtc2=" + String(Day));
+      //   Month = npt_Month; myNex.writeStr("rtc1=" + String(Month));
+      //   Year = npt_Year; myNex.writeStr("rtc0=" + String(Year));
+      if(isValidDateTime(npt_Year, npt_Month, npt_Day, npt_hours, npt_minutes, npt_seconds)) { period_get_NPT_Time = 60000; //Большой таймер повторных запросов - если время считали правильно
+        int nextionSeconds = 0;
+        int nextionMinutes = 0;
+        int nextionHours = 0;
+        int nextionDay = 0;
+        int nextionMonth = 0;
+        int nextionYear = 0;
+        int nextionDayOfWeek = 0;
+        bool nextionAvailable = fetchNextionTime(nextionSeconds, nextionMinutes, nextionHours, nextionDay, nextionMonth, nextionYear, nextionDayOfWeek);
+
+        bool shouldUpdateNextion = nextionAvailable && !isSameTimeDate(
+          npt_hours, npt_minutes, npt_seconds, npt_Day, npt_Month, npt_Year,
+          nextionHours, nextionMinutes, nextionSeconds, nextionDay, nextionMonth, nextionYear
+        );
+
+        seconds = npt_seconds;
+        minutes = npt_minutes;
+        hours = npt_hours;
+        Day = npt_Day;
+        Month = npt_Month;
+        Year = npt_Year;
+
         DayOfWeek = npt_DayOfWeek; //Записываем корректный день недели
-           
+          
+        
+        if (shouldUpdateNextion) {
+          myNex.writeStr("rtc5=" + String(seconds));
+          myNex.writeStr("rtc4=" + String(minutes));
+          myNex.writeStr("rtc3=" + String(hours));
+          myNex.writeStr("rtc2=" + String(Day));
+          myNex.writeStr("rtc1=" + String(Month));
+          myNex.writeStr("rtc0=" + String(Year));
+          myNex.writeStr("rtc6=" + String(DayOfWeek == 7 ? 0 : DayOfWeek));
+        }
+
       } else {
           period_get_NPT_Time = 5000; //Короткий таймер повторных запросов - если время считали не правильно или нет интернета
         }
@@ -192,26 +299,9 @@ timer = millis();
   } else {//Если нет Интернета, то время запрашиваем из монитора Nextion:
 
 
-    if (myNex.readNumber("rtc3") != 777777) {
-        
-
-    seconds = myNex.readNumber("rtc5"); delay(50);
-    minutes = myNex.readNumber("rtc4"); delay(50);
-    hours = myNex.readNumber("rtc3"); delay(50);
-    Day = myNex.readNumber("rtc2"); delay(50);
-    Month = myNex.readNumber("rtc1"); delay(50);
-    Year = myNex.readNumber("rtc0"); 
-
-     int day_OfWeek = myNex.readNumber("rtc6"); // Читаем день недели - Значение от 0 (воскресенье) до 6 (суббота)
-    //DayOfWeek = (day_OfWeek == 0) ? 7 : day_OfWeek; // Преобразуем значения от 0-6 в 1-7 (понедельник-воскресенье) - вызывает перезагрузку ЦП в вледствии несовпадения данные если Nextion отключен
-    
-    if (day_OfWeek == 0) {DayOfWeek = 7;} else if (day_OfWeek > 1 && day_OfWeek < 7) {DayOfWeek = day_OfWeek;}// Преобразуем значения от 0-6 в 1-7 (понедельник-воскресенье)
-
-    }
+        readNextionTime();
   }
   
   
   
 } //Закрываем общую функцию таймера синхронизации времени
-
-

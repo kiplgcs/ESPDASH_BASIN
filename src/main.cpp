@@ -4,6 +4,7 @@
 #include <WiFiUdp.h>
 #include <NTPClient.h>
 #include <time.h>
+#include "NPT_Time.h"
 
 #include "wifi_manager.h"        // Логика Wi-Fi и сохранение параметров
 #include "fs_utils.h"    // Функции для работы с файловой системой SPIFFS
