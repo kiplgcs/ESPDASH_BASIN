@@ -154,6 +154,22 @@ void setup() {
   RangeMin = loadValue<int>("RangeMin", RangeMin);        // Минимум диапазона
   RangeMax = loadValue<int>("RangeMax", RangeMax);        // Максимум диапазона
 
+  Power_Filtr = loadValue<int>("Power_Filtr", 0) != 0;
+  Filtr_Time1 = loadValue<int>("Filtr_Time1", 0) != 0;
+  Filtr_Time2 = loadValue<int>("Filtr_Time2", 0) != 0;
+  Filtr_Time3 = loadValue<int>("Filtr_Time3", 0) != 0;
+  Filtr_timeON1 = loadValue<String>("Filtr_timeON1", "00:00");
+  Filtr_timeOFF1 = loadValue<String>("Filtr_timeOFF1", "00:00");
+  Filtr_timeON2 = loadValue<String>("Filtr_timeON2", "00:00");
+  Filtr_timeOFF2 = loadValue<String>("Filtr_timeOFF2", "00:00");
+  Filtr_timeON3 = loadValue<String>("Filtr_timeON3", "00:00");
+  Filtr_timeOFF3 = loadValue<String>("Filtr_timeOFF3", "00:00");
+  Power_Clean = loadValue<int>("Power_Clean", 0) != 0;
+  Clean_Time1 = loadValue<int>("Clean_Time1", 0) != 0;
+  Clean_timeON1 = loadValue<String>("Clean_timeON1", "00:00");
+  Clean_timeOFF1 = loadValue<String>("Clean_timeOFF1", "00:00");
+  syncCleanDaysFromSelection();
+
 
 
 
@@ -284,8 +300,8 @@ TimerControlRelay(10000);  // TimerControlRelay(600); //Контроль вкл�
 //   ModeSelect = String(modes[random(0,3)]);
 
   // ---------- Рандомный выбор дней недели ----------
-  DaysSelect = ({ String out=""; String d[7]={"Mon","Tue","Wed","Thu","Fri","Sat","Sun"}; 
-    for(int i=0;i<7;i++) if(random(0,2)) out += (out==""?"":",") + d[i]; out == "" ? "Mon" : out; });
+  // DaysSelect = ({ String out=""; String d[7]={"Mon","Tue","Wed","Thu","Fri","Sat","Sun"}; 
+  //   for(int i=0;i<7;i++) if(random(0,2)) out += (out==""?"":",") + d[i]; out == "" ? "Mon" : out; });
   // const char* weekDays[] = {"Mon","Tue","Wed","Thu","Fri","Sat","Sun"};
   // String selectedDays;
   // for(int i=0; i<7; i++){

@@ -39,7 +39,22 @@ inline void interface(){
 
     // Настройка фильтрации, Промывка фильтра
     oab.page();
-    oab.selectDays("DaysSelect", "Select Days");
+    // oab.selectDays("DaysSelect", "Select Days");
+    oab.checkbox("Power_Filtr", "Фильтрация (вручную)");
+    oab.checkbox("Filtr_Time1", "Таймер фильтрации №1");
+    oab.time("Filtr_timeON1", "Время включения фильтрации №1");
+    oab.time("Filtr_timeOFF1", "Время отключения фильтрации №1");
+    oab.checkbox("Filtr_Time2", "Таймер фильтрации №2");
+    oab.time("Filtr_timeON2", "Время включения фильтрации №2");
+    oab.time("Filtr_timeOFF2", "Время отключения фильтрации №2");
+    oab.checkbox("Filtr_Time3", "Таймер фильтрации №3");
+    oab.time("Filtr_timeON3", "Время включения фильтрации №3");
+    oab.time("Filtr_timeOFF3", "Время отключения фильтрации №3");
+    oab.checkbox("Power_Clean", "Промывка фильтра (вручную)");
+    oab.checkbox("Clean_Time1", "Таймер промывки");
+    oab.time("Clean_timeON1", "Время включения промывки");
+    oab.time("Clean_timeOFF1", "Время отключения промывки");
+    oab.selectDays("DaysSelect", "Дни промывки");
     // oab.number("IntInput", "Enter Integer");
     // oab.number("FloatInput", "Enter Float", true);
 

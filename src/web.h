@@ -146,6 +146,28 @@ String Saved_Clean_timeON1, Saved_Clean_timeOFF1;
 bool chk1, chk2, chk3, chk4, chk5, chk6, chk7; //Дни недели ПН, ВТ, СР, ЧТ, ПТ, СБ, ВС - для включения таймера в нужные дни
 bool Saved_chk1, Saved_chk2, Saved_chk3, Saved_chk4, Saved_chk5, Saved_chk6, Saved_chk7;
 
+inline void syncCleanDaysFromSelection(){
+  const char* tokens[] = {"Mon","Tue","Wed","Thu","Fri","Sat","Sun"};
+  bool *flags[] = {&chk1, &chk2, &chk3, &chk4, &chk5, &chk6, &chk7};
+  for(size_t i = 0; i < 7; i++){
+    *flags[i] = DaysSelect.indexOf(tokens[i]) >= 0;
+  }
+}
+
+inline void syncDaysSelectionFromClean(){
+  const char* tokens[] = {"Mon","Tue","Wed","Thu","Fri","Sat","Sun"};
+  const bool flags[] = {chk1, chk2, chk3, chk4, chk5, chk6, chk7};
+  String next;
+  for(size_t i = 0; i < 7; i++){
+    if(flags[i]){
+      if(next.length()) next += ",";
+      next += tokens[i];
+    }
+  }
+  DaysSelect = next;
+}
+
+
 bool Power_Heat, Power_Heat1;
 bool Activation_Heat, Activation_Heat1; // Включение и Активация контроля включения нагрева воды
 int Sider_heat,  Sider_heat1; 			// Sider_heat1; bool Sider_Heat; // Переменная для получения или передачи из в  Nextion c  сидера монитора уставки нагрева воды
@@ -892,6 +914,20 @@ private:
               else if(e.id=="WS2815_Time1") val = WS2815_Time1 ? "1" : "0";
               else if(e.id=="timeON_WS2815") val = timeON_WS2815;
               else if(e.id=="timeOFF_WS2815") val = timeOFF_WS2815;
+              else if(e.id=="Power_Filtr") val = Power_Filtr ? "1" : "0";
+              else if(e.id=="Filtr_Time1") val = Filtr_Time1 ? "1" : "0";
+              else if(e.id=="Filtr_Time2") val = Filtr_Time2 ? "1" : "0";
+              else if(e.id=="Filtr_Time3") val = Filtr_Time3 ? "1" : "0";
+              else if(e.id=="Filtr_timeON1") val = Filtr_timeON1;
+              else if(e.id=="Filtr_timeOFF1") val = Filtr_timeOFF1;
+              else if(e.id=="Filtr_timeON2") val = Filtr_timeON2;
+              else if(e.id=="Filtr_timeOFF2") val = Filtr_timeOFF2;
+              else if(e.id=="Filtr_timeON3") val = Filtr_timeON3;
+              else if(e.id=="Filtr_timeOFF3") val = Filtr_timeOFF3;
+              else if(e.id=="Power_Clean") val = Power_Clean ? "1" : "0";
+              else if(e.id=="Clean_Time1") val = Clean_Time1 ? "1" : "0";
+              else if(e.id=="Clean_timeON1") val = Clean_timeON1;
+              else if(e.id=="Clean_timeOFF1") val = Clean_timeOFF1;
               else if(e.id=="Comment") val = Comment;
               else if(e.id=="Lumen_Ul") val = Lumen_Ul;
 
@@ -1988,6 +2024,21 @@ window.addEventListener('resize', ()=>{
     if(typeof j.timeON_WS2815 !== 'undefined') updateInputValue('timeON_WS2815', j.timeON_WS2815);
     if(typeof j.timeOFF_WS2815 !== 'undefined') updateInputValue('timeOFF_WS2815', j.timeOFF_WS2815); 
     
+        if(typeof j.Power_Filtr !== 'undefined') updateCheckboxValue('Power_Filtr', j.Power_Filtr);
+    if(typeof j.Filtr_Time1 !== 'undefined') updateCheckboxValue('Filtr_Time1', j.Filtr_Time1);
+    if(typeof j.Filtr_Time2 !== 'undefined') updateCheckboxValue('Filtr_Time2', j.Filtr_Time2);
+    if(typeof j.Filtr_Time3 !== 'undefined') updateCheckboxValue('Filtr_Time3', j.Filtr_Time3);
+    if(typeof j.Filtr_timeON1 !== 'undefined') updateInputValue('Filtr_timeON1', j.Filtr_timeON1);
+    if(typeof j.Filtr_timeOFF1 !== 'undefined') updateInputValue('Filtr_timeOFF1', j.Filtr_timeOFF1);
+    if(typeof j.Filtr_timeON2 !== 'undefined') updateInputValue('Filtr_timeON2', j.Filtr_timeON2);
+    if(typeof j.Filtr_timeOFF2 !== 'undefined') updateInputValue('Filtr_timeOFF2', j.Filtr_timeOFF2);
+    if(typeof j.Filtr_timeON3 !== 'undefined') updateInputValue('Filtr_timeON3', j.Filtr_timeON3);
+    if(typeof j.Filtr_timeOFF3 !== 'undefined') updateInputValue('Filtr_timeOFF3', j.Filtr_timeOFF3);
+    if(typeof j.Power_Clean !== 'undefined') updateCheckboxValue('Power_Clean', j.Power_Clean);
+    if(typeof j.Clean_Time1 !== 'undefined') updateCheckboxValue('Clean_Time1', j.Clean_Time1);
+    if(typeof j.Clean_timeON1 !== 'undefined') updateInputValue('Clean_timeON1', j.Clean_timeON1);
+    if(typeof j.Clean_timeOFF1 !== 'undefined') updateInputValue('Clean_timeOFF1', j.Clean_timeOFF1);
+
     if(typeof j.Comment !== 'undefined') updateInputValue('Comment', j.Comment);
     if(typeof j.Lumen_Ul !== 'undefined') updateInputValue('Lumen_Ul', j.Lumen_Ul);
   });
@@ -2045,6 +2096,21 @@ function setImg(x){
         else if(key=="WS2815_Time1") { WS2815_Time1 = valStr.toInt() != 0; saveValue<int>("WS2815_Time1", WS2815_Time1 ? 1 : 0); }
         else if(key=="timeON_WS2815") { timeON_WS2815 = valStr; saveValue<String>("timeON_WS2815", timeON_WS2815); }
         else if(key=="timeOFF_WS2815") { timeOFF_WS2815 = valStr; saveValue<String>("timeOFF_WS2815", timeOFF_WS2815); }
+                else if(key=="Power_Filtr") { Power_Filtr = valStr.toInt() != 0; saveValue<int>("Power_Filtr", Power_Filtr ? 1 : 0); }
+        else if(key=="Filtr_Time1") { Filtr_Time1 = valStr.toInt() != 0; saveValue<int>("Filtr_Time1", Filtr_Time1 ? 1 : 0); }
+        else if(key=="Filtr_Time2") { Filtr_Time2 = valStr.toInt() != 0; saveValue<int>("Filtr_Time2", Filtr_Time2 ? 1 : 0); }
+        else if(key=="Filtr_Time3") { Filtr_Time3 = valStr.toInt() != 0; saveValue<int>("Filtr_Time3", Filtr_Time3 ? 1 : 0); }
+        else if(key=="Filtr_timeON1") { Filtr_timeON1 = valStr; saveValue<String>("Filtr_timeON1", Filtr_timeON1); }
+        else if(key=="Filtr_timeOFF1") { Filtr_timeOFF1 = valStr; saveValue<String>("Filtr_timeOFF1", Filtr_timeOFF1); }
+        else if(key=="Filtr_timeON2") { Filtr_timeON2 = valStr; saveValue<String>("Filtr_timeON2", Filtr_timeON2); }
+        else if(key=="Filtr_timeOFF2") { Filtr_timeOFF2 = valStr; saveValue<String>("Filtr_timeOFF2", Filtr_timeOFF2); }
+        else if(key=="Filtr_timeON3") { Filtr_timeON3 = valStr; saveValue<String>("Filtr_timeON3", Filtr_timeON3); }
+        else if(key=="Filtr_timeOFF3") { Filtr_timeOFF3 = valStr; saveValue<String>("Filtr_timeOFF3", Filtr_timeOFF3); }
+        else if(key=="Power_Clean") { Power_Clean = valStr.toInt() != 0; saveValue<int>("Power_Clean", Power_Clean ? 1 : 0); }
+        else if(key=="Clean_Time1") { Clean_Time1 = valStr.toInt() != 0; saveValue<int>("Clean_Time1", Clean_Time1 ? 1 : 0); }
+        else if(key=="Clean_timeON1") { Clean_timeON1 = valStr; saveValue<String>("Clean_timeON1", Clean_timeON1); }
+        else if(key=="Clean_timeOFF1") { Clean_timeOFF1 = valStr; saveValue<String>("Clean_timeOFF1", Clean_timeOFF1); }
+
         else if(key=="Comment") { Comment = valStr; saveValue<String>(key.c_str(), Comment); }
 
         
@@ -2104,9 +2170,16 @@ function setImg(x){
                 //   saveValue<String>(key.c_str(), SetLamp);
                 //   saveButtonState("button_Lamp", Lamp ? 1 : 0);
                 //   saveValue<int>("Power_Time1", Power_Time1 ? 1 : 0);
-                // }      
-                else if(key=="DaysSelect") { DaysSelect = valStr; saveValue<String>(key.c_str(), DaysSelect); }
-        else if(key=="graphMainMaxPoints") {
+                // }     
+
+                // else if(key=="DaysSelect") { DaysSelect = valStr; saveValue<String>(key.c_str(), DaysSelect); }
+                else if(key=="DaysSelect") {
+                  DaysSelect = valStr;
+                  syncCleanDaysFromSelection();
+                  saveValue<String>(key.c_str(), DaysSelect);
+                }
+
+                else if(key=="graphMainMaxPoints") {
           int valInt = valStr.toInt();
           if(valInt < minGraphPoints) valInt = minGraphPoints;
           if(valInt > maxGraphPoints) valInt = maxGraphPoints;
@@ -2238,6 +2311,17 @@ function setImg(x){
                +",\"Lamp_timeON1\":\""+Lamp_timeON1+"\",\"Lamp_timeOFF1\":\""+Lamp_timeOFF1
                +"\",\"WS2815_Time1\":"+String(WS2815_Time1 ? 1 : 0)
                +",\"timeON_WS2815\":\""+timeON_WS2815+"\",\"timeOFF_WS2815\":\""+timeOFF_WS2815+"\""
+
+                +",\"Power_Filtr\":"+String(Power_Filtr ? 1 : 0)
+               +",\"Filtr_Time1\":"+String(Filtr_Time1 ? 1 : 0)
+               +",\"Filtr_Time2\":"+String(Filtr_Time2 ? 1 : 0)
+               +",\"Filtr_Time3\":"+String(Filtr_Time3 ? 1 : 0)
+               +",\"Filtr_timeON1\":\""+Filtr_timeON1+"\",\"Filtr_timeOFF1\":\""+Filtr_timeOFF1+"\""
+               +",\"Filtr_timeON2\":\""+Filtr_timeON2+"\",\"Filtr_timeOFF2\":\""+Filtr_timeOFF2+"\""
+               +",\"Filtr_timeON3\":\""+Filtr_timeON3+"\",\"Filtr_timeOFF3\":\""+Filtr_timeOFF3+"\""
+               +",\"Power_Clean\":"+String(Power_Clean ? 1 : 0)
+               +",\"Clean_Time1\":"+String(Clean_Time1 ? 1 : 0)
+               +",\"Clean_timeON1\":\""+Clean_timeON1+"\",\"Clean_timeOFF1\":\""+Clean_timeOFF1+"\""
                +",\"Lumen_Ul\":\""+Lumen_Ul+"\""
                +",\"Comment\":\""+Comment+"\"}";
     r->send(200, "application/json", s);

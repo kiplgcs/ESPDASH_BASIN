@@ -189,6 +189,12 @@ if (Saved_timeOFF_WS2815 != timeOFF_WS2815 && !triggerRestartNextion){Saved_time
 //     Error err = RS485.addRequest(40001,1,0x05,8, Power_Filtr ? devices[0].value : devices[1].value);
 // }   //pcfRelays.digitalWrite(P2, Power_Filtr ? LOW : HIGH);
 
+if (Power_Filtr1 != Power_Filtr && !triggerRestartNextion) {Power_Filtr1 = Power_Filtr;
+    myNex.writeStr("dim=50");
+    myNex.writeNum("page0.b1.pic", Power_Filtr ? 4 : 3);
+    myNex.writeStr("page set_filtr");
+    myNex.writeNum("set_filtr.sw3.val", Power_Filtr ? 1 : 0);
+}   //pcfRelays.digitalWrite(P2, Power_Filtr ? LOW : HIGH);
 
 // if (Saved_Filtr_Time1 != Filtr_Time1 && !triggerRestartNextion){Saved_Filtr_Time1 = Filtr_Time1;
 //   myNex.writeStr("dim=50");
@@ -196,17 +202,35 @@ if (Saved_timeOFF_WS2815 != timeOFF_WS2815 && !triggerRestartNextion){Saved_time
 //   myNex.writeNum("set_filtr.sw0.val", Filtr_Time1 ? 1 : 0); 
 // }
 
+if (Saved_Filtr_Time1 != Filtr_Time1 && !triggerRestartNextion){Saved_Filtr_Time1 = Filtr_Time1;
+  myNex.writeStr("dim=50");
+  myNex.writeStr("page set_filtr");
+  myNex.writeNum("set_filtr.sw0.val", Filtr_Time1 ? 1 : 0); 
+}
+
 // if (Saved_Filtr_Time2 != Filtr_Time2 && !triggerRestartNextion){Saved_Filtr_Time2 = Filtr_Time2;
 //   myNex.writeStr("dim=50");
 //   myNex.writeStr("page set_filtr");
 //   myNex.writeNum("set_filtr.sw2.val", Filtr_Time2 ? 1 : 0); 
 // }
 
+if (Saved_Filtr_Time2 != Filtr_Time2 && !triggerRestartNextion){Saved_Filtr_Time2 = Filtr_Time2;
+  myNex.writeStr("dim=50");
+  myNex.writeStr("page set_filtr");
+  myNex.writeNum("set_filtr.sw2.val", Filtr_Time2 ? 1 : 0); 
+}
+
 // if (Saved_Filtr_Time3 != Filtr_Time3 && !triggerRestartNextion){Saved_Filtr_Time3 = Filtr_Time3;
 //   myNex.writeStr("dim=50");
 //   myNex.writeStr("page set_filtr");
 //   myNex.writeNum("set_filtr.sw1.val", Filtr_Time3 ? 1 : 0); 
 // }
+
+if (Saved_Filtr_Time3 != Filtr_Time3 && !triggerRestartNextion){Saved_Filtr_Time3 = Filtr_Time3;
+  myNex.writeStr("dim=50");
+  myNex.writeStr("page set_filtr");
+  myNex.writeNum("set_filtr.sw1.val", Filtr_Time3 ? 1 : 0); 
+}
 
 // if (Saved_Filtr_timeON1 != Filtr_timeON1 && !triggerRestartNextion) {Saved_Filtr_timeON1 = Filtr_timeON1;
 //   myNex.writeStr("dim=50");
@@ -215,6 +239,13 @@ if (Saved_timeOFF_WS2815 != timeOFF_WS2815 && !triggerRestartNextion){Saved_time
 //   myNex.writeNum("set_filtr.n1.val", getSubstring(Filtr_timeON1, 3, 4));
 // }
 
+if (Saved_Filtr_timeON1 != Filtr_timeON1 && !triggerRestartNextion) {Saved_Filtr_timeON1 = Filtr_timeON1;
+  myNex.writeStr("dim=50");
+  myNex.writeStr("page set_filtr");
+  myNex.writeNum("set_filtr.n0.val", getSubstring(Filtr_timeON1, 0, 1));
+  myNex.writeNum("set_filtr.n1.val", getSubstring(Filtr_timeON1, 3, 4));
+}
+
 // if (Saved_Filtr_timeOFF1 != Filtr_timeOFF1 && !triggerRestartNextion) {Saved_Filtr_timeOFF1 = Filtr_timeOFF1;
 //   myNex.writeStr("dim=50");
 //   myNex.writeStr("page set_filtr");
@@ -222,12 +253,26 @@ if (Saved_timeOFF_WS2815 != timeOFF_WS2815 && !triggerRestartNextion){Saved_time
 //   myNex.writeNum("set_filtr.n3.val", getSubstring(Filtr_timeOFF1, 3, 4));
 // }
 
+if (Saved_Filtr_timeOFF1 != Filtr_timeOFF1 && !triggerRestartNextion) {Saved_Filtr_timeOFF1 = Filtr_timeOFF1;
+  myNex.writeStr("dim=50");
+  myNex.writeStr("page set_filtr");
+  myNex.writeNum("set_filtr.n2.val", getSubstring(Filtr_timeOFF1, 0, 1));
+  myNex.writeNum("set_filtr.n3.val", getSubstring(Filtr_timeOFF1, 3, 4));
+}
+
 // if (Saved_Filtr_timeON2 != Filtr_timeON2 && !triggerRestartNextion) {Saved_Filtr_timeON2 = Filtr_timeON2;
 //   myNex.writeStr("dim=50");
 //   myNex.writeStr("page set_filtr");
 //   myNex.writeNum("set_filtr.n4.val", getSubstring(Filtr_timeON2, 0, 1));
 //   myNex.writeNum("set_filtr.n5.val", getSubstring(Filtr_timeON2, 3, 4));
 // }
+
+if (Saved_Filtr_timeON2 != Filtr_timeON2 && !triggerRestartNextion) {Saved_Filtr_timeON2 = Filtr_timeON2;
+  myNex.writeStr("dim=50");
+  myNex.writeStr("page set_filtr");
+  myNex.writeNum("set_filtr.n4.val", getSubstring(Filtr_timeON2, 0, 1));
+  myNex.writeNum("set_filtr.n5.val", getSubstring(Filtr_timeON2, 3, 4));
+}
 
 // if (Saved_Filtr_timeOFF2 != Filtr_timeOFF2 && !triggerRestartNextion) {Saved_Filtr_timeOFF2 = Filtr_timeOFF2;
 //   myNex.writeStr("dim=50");
@@ -243,6 +288,13 @@ if (Saved_timeOFF_WS2815 != timeOFF_WS2815 && !triggerRestartNextion){Saved_time
 //   myNex.writeNum("set_filtr.n9.val", getSubstring(Filtr_timeON3, 3, 4));
 // }
 
+if (Saved_Filtr_timeON3 != Filtr_timeON3 && !triggerRestartNextion) {Saved_Filtr_timeON3 = Filtr_timeON3;
+  myNex.writeStr("dim=50");
+  myNex.writeStr("page set_filtr");
+  myNex.writeNum("set_filtr.n8.val", getSubstring(Filtr_timeON3, 0, 1));
+  myNex.writeNum("set_filtr.n9.val", getSubstring(Filtr_timeON3, 3, 4));
+}
+
 // if (Saved_Filtr_timeOFF3 != Filtr_timeOFF3 && !triggerRestartNextion) {Saved_Filtr_timeOFF3 = Filtr_timeOFF3;
 //   myNex.writeStr("dim=50");
 //   myNex.writeStr("page set_filtr");
@@ -250,7 +302,12 @@ if (Saved_timeOFF_WS2815 != timeOFF_WS2815 && !triggerRestartNextion){Saved_time
 //   myNex.writeNum("set_filtr.n11.val", getSubstring(Filtr_timeOFF3, 3, 4));
 // }
 
-
+if (Saved_Filtr_timeOFF3 != Filtr_timeOFF3 && !triggerRestartNextion) {Saved_Filtr_timeOFF3 = Filtr_timeOFF3;
+  myNex.writeStr("dim=50");
+  myNex.writeStr("page set_filtr");
+  myNex.writeNum("set_filtr.n10.val", getSubstring(Filtr_timeOFF3, 0, 1));
+  myNex.writeNum("set_filtr.n11.val", getSubstring(Filtr_timeOFF3, 3, 4));
+}
 // /////////////////////////************* page Clean **************/////////////////////////////
 // ////////////////////////************* page Clean **************//////////////////////////////
 // ///////////////////////************* page Clean **************///////////////////////////////
@@ -263,11 +320,24 @@ if (Saved_timeOFF_WS2815 != timeOFF_WS2815 && !triggerRestartNextion){Saved_time
 //   Error err = RS485.addRequest(40001,1,0x05,3, Power_Clean ? devices[0].value : devices[1].value);
 // }  //pcfRelays.digitalWrite(P3, Power_Clean ? LOW : HIGH);
 
+if (Power_Clean1 != Power_Clean && !triggerRestartNextion) {Power_Clean1 = Power_Clean;
+    myNex.writeStr("dim=50");
+    myNex.writeNum("page0.b2.pic", Power_Clean ? 6 : 5); delay(50);
+    myNex.writeStr("page Clean");
+    myNex.writeNum("Clean.sw1.val", Power_Clean ? 1 : 0);
+}  //pcfRelays.digitalWrite(P3, Power_Clean ? LOW : HIGH);
+
 // if (Saved_Clean_Time1 != Clean_Time1 && !triggerRestartNextion) {Saved_Clean_Time1=Clean_Time1;
 //     myNex.writeStr("dim=50");
 //     myNex.writeStr("page Clean");
 //     myNex.writeNum("Clean.sw0.val", Clean_Time1 ? 1 : 0);
 // }
+
+if (Saved_Clean_Time1 != Clean_Time1 && !triggerRestartNextion) {Saved_Clean_Time1=Clean_Time1;
+    myNex.writeStr("dim=50");
+    myNex.writeStr("page Clean");
+    myNex.writeNum("Clean.sw0.val", Clean_Time1 ? 1 : 0);
+}
 
 // if (Saved_Clean_timeON1 != Clean_timeON1 && !triggerRestartNextion) {Saved_Clean_timeON1 = Clean_timeON1;
 //   myNex.writeStr("dim=50");
@@ -276,12 +346,25 @@ if (Saved_timeOFF_WS2815 != timeOFF_WS2815 && !triggerRestartNextion){Saved_time
 //   myNex.writeNum("Clean.n1.val", getSubstring(Clean_timeON1, 3, 4));
 // }
 
+if (Saved_Clean_timeON1 != Clean_timeON1 && !triggerRestartNextion) {Saved_Clean_timeON1 = Clean_timeON1;
+  myNex.writeStr("dim=50");
+  myNex.writeStr("page Clean");
+  myNex.writeNum("Clean.n0.val", getSubstring(Clean_timeON1, 0, 1));
+  myNex.writeNum("Clean.n1.val", getSubstring(Clean_timeON1, 3, 4));
+}
+
 // if (Saved_Clean_timeOFF1 != Clean_timeOFF1 && !triggerRestartNextion) {Saved_Clean_timeOFF1 = Clean_timeOFF1;
 //   myNex.writeStr("dim=50");
 //   myNex.writeStr("page Clean");
 //   myNex.writeNum("Clean.n2.val", getSubstring(Clean_timeOFF1, 0, 1));
 //   myNex.writeNum("Clean.n3.val", getSubstring(Clean_timeOFF1, 3, 4));
 // }
+if (Saved_Clean_timeOFF1 != Clean_timeOFF1 && !triggerRestartNextion) {Saved_Clean_timeOFF1 = Clean_timeOFF1;
+  myNex.writeStr("dim=50");
+  myNex.writeStr("page Clean");
+  myNex.writeNum("Clean.n2.val", getSubstring(Clean_timeOFF1, 0, 1));
+  myNex.writeNum("Clean.n3.val", getSubstring(Clean_timeOFF1, 3, 4));
+}
 
 // if (Saved_chk1 != chk1 && !triggerRestartNextion) {Saved_chk1 = chk1;
 //     myNex.writeStr("dim=50");
@@ -289,11 +372,23 @@ if (Saved_timeOFF_WS2815 != timeOFF_WS2815 && !triggerRestartNextion){Saved_time
 //     myNex.writeNum("Clean.bt0.val", chk1? 1 : 0);
 // }
 
+if (Saved_chk1 != chk1 && !triggerRestartNextion) {Saved_chk1 = chk1;
+    myNex.writeStr("dim=50");
+    myNex.writeStr("page Clean");
+    myNex.writeNum("Clean.bt0.val", chk1? 1 : 0);
+}
+
 // if (Saved_chk2 != chk2 && !triggerRestartNextion) {Saved_chk2 = chk2;
 //     myNex.writeStr("dim=50");
 //     myNex.writeStr("page Clean");
 //     myNex.writeNum("Clean.bt1.val", chk2? 1 : 0);
 // }
+
+if (Saved_chk2 != chk2 && !triggerRestartNextion) {Saved_chk2 = chk2;
+    myNex.writeStr("dim=50");
+    myNex.writeStr("page Clean");
+    myNex.writeNum("Clean.bt1.val", chk2? 1 : 0);
+}
 
 // if (Saved_chk3 != chk3 && !triggerRestartNextion) {Saved_chk3 = chk3;
 //     myNex.writeStr("dim=50");
@@ -301,23 +396,46 @@ if (Saved_timeOFF_WS2815 != timeOFF_WS2815 && !triggerRestartNextion){Saved_time
 //     myNex.writeNum("Clean.bt2.val", chk3? 1 : 0);
 // }
 
+if (Saved_chk3 != chk3 && !triggerRestartNextion) {Saved_chk3 = chk3;
+    myNex.writeStr("dim=50");
+    myNex.writeStr("page Clean");
+    myNex.writeNum("Clean.bt2.val", chk3? 1 : 0);
+}
+
 // if (Saved_chk4 != chk4 && !triggerRestartNextion) {Saved_chk4 = chk4;
 //     myNex.writeStr("dim=50");
 //     myNex.writeStr("page Clean");
 //     myNex.writeNum("Clean.bt3.val", chk4? 1 : 0);
 // }
 
+if (Saved_chk4 != chk4 && !triggerRestartNextion) {Saved_chk4 = chk4;
+    myNex.writeStr("dim=50");
+    myNex.writeStr("page Clean");
+    myNex.writeNum("Clean.bt3.val", chk4? 1 : 0);
+}
+
 // if (Saved_chk5 != chk5 && !triggerRestartNextion) {Saved_chk5 = chk5;
 //     myNex.writeStr("dim=50");
 //     myNex.writeStr("page Clean");
 //     myNex.writeNum("Clean.bt4.val", chk5? 1 : 0);
 // }
+if (Saved_chk5 != chk5 && !triggerRestartNextion) {Saved_chk5 = chk5;
+    myNex.writeStr("dim=50");
+    myNex.writeStr("page Clean");
+    myNex.writeNum("Clean.bt4.val", chk5? 1 : 0);
+}
+
 
 // if (Saved_chk6 != chk6 && !triggerRestartNextion) {Saved_chk6 = chk6;
 //     myNex.writeStr("dim=50");
 //     myNex.writeStr("page Clean");
 //     myNex.writeNum("Clean.bt5.val", chk6? 1 : 0);
 // }
+if (Saved_chk6 != chk6 && !triggerRestartNextion) {Saved_chk6 = chk6;
+    myNex.writeStr("dim=50");
+    myNex.writeStr("page Clean");
+    myNex.writeNum("Clean.bt5.val", chk6? 1 : 0);
+}
 
 // if (Saved_chk7 != chk7 && !triggerRestartNextion) {Saved_chk7 = chk7;
 //     myNex.writeStr("dim=50");
@@ -325,6 +443,11 @@ if (Saved_timeOFF_WS2815 != timeOFF_WS2815 && !triggerRestartNextion){Saved_time
 //     myNex.writeNum("Clean.bt6.val", chk7? 1 : 0);
 // }
 
+if (Saved_chk7 != chk7 && !triggerRestartNextion) {Saved_chk7 = chk7;
+    myNex.writeStr("dim=50");
+    myNex.writeStr("page Clean");
+    myNex.writeNum("Clean.bt6.val", chk7? 1 : 0);
+}
 
 // /////////////////////////************* page heat  **************/////////////////////////////
 // ////////////////////////************* page heat **************//////////////////////////////

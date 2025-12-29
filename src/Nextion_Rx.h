@@ -296,6 +296,13 @@ void trigger7(){read_RGB_sw0_sw2_sw3();}
 // }
 // void trigger9(){read_filtr_n2_n3();}
 
+//printh 23 02 54 08 - "set-filtr" Присвоить n0 / n1 время вкл. по таймеру №1
+void read_filtr_n0_n1(){
+    in_hours = myNex.readNumber("set_filtr.n0.val"); in_minutes = myNex.readNumber("set_filtr.n1.val");
+    sprintf(buffer, "%02d:%02d", in_hours, in_minutes); Saved_Filtr_timeON1=Filtr_timeON1 = buffer;
+    saveValue<String>("Filtr_timeON1", Filtr_timeON1);
+}
+void trigger8(){read_filtr_n0_n1();}
 
 
 // //printh 23 02 54 0A - "set-filtr" Присвоить n4 / n5 время вкл. по таймеру №2
@@ -306,6 +313,13 @@ void trigger7(){read_RGB_sw0_sw2_sw3();}
 // }
 // void trigger10(){read_filtr_n4_n5();}
 
+//printh 23 02 54 09 - "set-filtr" Присвоить n0 / n1 время откл. по таймеру №1
+void read_filtr_n2_n3(){
+    in_hours = myNex.readNumber("set_filtr.n2.val"); in_minutes = myNex.readNumber("set_filtr.n3.val");
+    sprintf(buffer, "%02d:%02d", in_hours, in_minutes); Saved_Filtr_timeOFF1=Filtr_timeOFF1 = buffer;
+    saveValue<String>("Filtr_timeOFF1", Filtr_timeOFF1);
+}
+void trigger9(){read_filtr_n2_n3();}
 
 // //printh 23 02 54 0B - "set-filtr" Присвоить n6 / n7 время откл. по таймеру №2
 // void read_filtr_n6_n7(){
@@ -315,6 +329,13 @@ void trigger7(){read_RGB_sw0_sw2_sw3();}
 // }
 // void trigger11(){read_filtr_n6_n7();}
 
+//printh 23 02 54 0A - "set-filtr" Присвоить n4 / n5 время вкл. по таймеру №2
+void read_filtr_n4_n5(){
+    in_hours = myNex.readNumber("set_filtr.n4.val"); in_minutes = myNex.readNumber("set_filtr.n5.val");
+    sprintf(buffer, "%02d:%02d", in_hours, in_minutes); Saved_Filtr_timeON2=Filtr_timeON2 = buffer;
+    saveValue<String>("Filtr_timeON2", Filtr_timeON2);
+}
+void trigger10(){read_filtr_n4_n5();}
 
 // //printh 23 02 54 0C - "set-filtr" Присвоить n8 / n9 время вкл. по таймеру №3
 // void read_filtr_n8_n9(){
@@ -332,14 +353,37 @@ void trigger7(){read_RGB_sw0_sw2_sw3();}
 // }
 // void trigger13(){read_filtr_n10_n11();} 
 
+//printh 23 02 54 0B - "set-filtr" Присвоить n6 / n7 время откл. по таймеру №2
+void read_filtr_n6_n7(){
+    in_hours = myNex.readNumber("set_filtr.n6.val"); in_minutes = myNex.readNumber("set_filtr.n7.val");
+    sprintf(buffer, "%02d:%02d", in_hours, in_minutes); Saved_Filtr_timeOFF2=Filtr_timeOFF2 = buffer;
+    saveValue<String>("Filtr_timeOFF2", Filtr_timeOFF2);
+}
+void trigger11(){read_filtr_n6_n7();}
 
 // //printh 23 02 54 0E - "set-filtr" Присвоить все кнопки SW0, SW1, SW2
 // void read_filtr_sw0_sw1_sw2(){
 //     Saved_Filtr_Time1=Filtr_Time1 = myNex.readNumber("set_filtr.sw0.val");
 //     jee.var("Filtr_Time1", Filtr_Time1 ? "true" : "false"); 
 
+//printh 23 02 54 0C - "set-filtr" Присвоить n8 / n9 время вкл. по таймеру №3
+void read_filtr_n8_n9(){
+    in_hours = myNex.readNumber("set_filtr.n8.val"); in_minutes = myNex.readNumber("set_filtr.n9.val");
+    sprintf(buffer, "%02d:%02d", in_hours, in_minutes); Saved_Filtr_timeON3=Filtr_timeON3 = buffer;
+    saveValue<String>("Filtr_timeON3", Filtr_timeON3);
+}
+void trigger12(){read_filtr_n8_n9();}
+
 //     Saved_Filtr_Time2=Filtr_Time2 = myNex.readNumber("set_filtr.sw2.val");
 //     jee.var("Filtr_Time2", Filtr_Time2 ? "true" : "false"); 
+
+//printh 23 02 54 0D - "set-filtr" Присвоить n10 / n11 время откл. по таймеру №3
+void read_filtr_n10_n11(){   
+    in_hours = myNex.readNumber("set_filtr.n10.val"); in_minutes = myNex.readNumber("set_filtr.n11.val");
+    sprintf(buffer, "%02d:%02d", in_hours, in_minutes); Saved_Filtr_timeOFF3=Filtr_timeOFF3 = buffer;
+    saveValue<String>("Filtr_timeOFF3", Filtr_timeOFF3);
+}
+void trigger13(){read_filtr_n10_n11();}
 
 //     Saved_Filtr_Time3=Filtr_Time3 = myNex.readNumber("set_filtr.sw1.val");
 //     jee.var("Filtr_Time3", Filtr_Time3 ? "true" : "false"); 
@@ -347,10 +391,23 @@ void trigger7(){read_RGB_sw0_sw2_sw3();}
 //     Power_Filtr1=Power_Filtr = myNex.readNumber("set_filtr.sw3.val");
 //     jee.var("Power_Filtr", Power_Filtr ? "true" : "false");
 
+//printh 23 02 54 0E - "set-filtr" Присвоить все кнопки SW0, SW1, SW2
+void read_filtr_sw0_sw1_sw2(){
+    Saved_Filtr_Time1=Filtr_Time1 = myNex.readNumber("set_filtr.sw0.val");
+    Saved_Filtr_Time2=Filtr_Time2 = myNex.readNumber("set_filtr.sw2.val");
+    Saved_Filtr_Time3=Filtr_Time3 = myNex.readNumber("set_filtr.sw1.val");
+    Power_Filtr1=Power_Filtr = myNex.readNumber("set_filtr.sw3.val");
+
 //     Error err = RS485.addRequest(40001,1,0x05,8, Power_Filtr ? devices[0].value : devices[1].value);
 // }
 // void trigger14(){read_filtr_sw0_sw1_sw2();}
 
+    saveValue<int>("Filtr_Time1", Filtr_Time1 ? 1 : 0);
+    saveValue<int>("Filtr_Time2", Filtr_Time2 ? 1 : 0);
+    saveValue<int>("Filtr_Time3", Filtr_Time3 ? 1 : 0);
+    saveValue<int>("Power_Filtr", Power_Filtr ? 1 : 0);
+}
+void trigger14(){read_filtr_sw0_sw1_sw2();}
 
 // /////////////////////////************* page Clean **************/////////////////////////////
 // ////////////////////////************* page Clean **************//////////////////////////////
@@ -364,6 +421,13 @@ void trigger7(){read_RGB_sw0_sw2_sw3();}
 // }
 // void trigger15(){read_Clean_n0_n1();}
 
+//printh 23 02 54 0F - "Clean"  считываем время таймера n0 / n1  насала промывки
+void read_Clean_n0_n1(){
+    in_hours = myNex.readNumber("Clean.n0.val"); in_minutes = myNex.readNumber("Clean.n1.val");
+    sprintf(buffer, "%02d:%02d", in_hours, in_minutes); Saved_Clean_timeON1=Clean_timeON1 = buffer;
+    saveValue<String>("Clean_timeON1", Clean_timeON1);
+}
+void trigger15(){read_Clean_n0_n1();}
 
 // //printh 23 02 54 10 - "Clean" считываем время таймера n2 / n3  отключения промывки
 // void read_Clean_n2_n3(){
@@ -373,6 +437,13 @@ void trigger7(){read_RGB_sw0_sw2_sw3();}
 // }
 // void trigger16(){read_Clean_n2_n3();} 
 
+//printh 23 02 54 10 - "Clean" считываем время таймера n2 / n3  отключения промывки
+void read_Clean_n2_n3(){
+    in_hours = myNex.readNumber("Clean.n2.val"); in_minutes = myNex.readNumber("Clean.n3.val");
+    sprintf(buffer, "%02d:%02d", in_hours, in_minutes); Saved_Clean_timeOFF1=Clean_timeOFF1 = buffer;
+    saveValue<String>("Clean_timeOFF1", Clean_timeOFF1);
+}
+void trigger16(){read_Clean_n2_n3();} 
 
 // //printh 23 02 54 11 - "Clean" считываем состояние кнопок промывки SW0, SW1
 // void read_Clean_sw0_sw1(){
@@ -381,6 +452,11 @@ void trigger7(){read_RGB_sw0_sw2_sw3();}
 
 //     Power_Clean1=Power_Clean = myNex.readNumber("Clean.sw1.val");
 //     jee.var("Power_Clean", Power_Clean ? "true" : "false"); 
+
+//printh 23 02 54 11 - "Clean" считываем состояние кнопок промывки SW0, SW1
+void read_Clean_sw0_sw1(){
+    Saved_Clean_Time1=Clean_Time1 = myNex.readNumber("Clean.sw0.val");
+    Power_Clean1=Power_Clean = myNex.readNumber("Clean.sw1.val");
 
 //     Error err = RS485.addRequest(40001,1,0x05,3, Power_Clean ? devices[0].value : devices[1].value);
 // }
@@ -405,6 +481,25 @@ void trigger7(){read_RGB_sw0_sw2_sw3();}
 // }
 // void trigger18(){read_Clean_chk();} 
 
+
+    saveValue<int>("Clean_Time1", Clean_Time1 ? 1 : 0);
+    saveValue<int>("Power_Clean", Power_Clean ? 1 : 0);
+}
+void trigger17(){read_Clean_sw0_sw1();} 
+
+//printh 23 02 54 12 - "Clean" Считываем кнопки ПН,ВТ,СР,ЧТ,ПТ,СБ,ВС для таймера
+void read_Clean_chk(){
+   Saved_chk1=chk1 = myNex.readNumber("Clean.bt0.val"); delay(50);
+   Saved_chk2=chk2 = myNex.readNumber("Clean.bt1.val"); delay(50);
+   Saved_chk3=chk3 = myNex.readNumber("Clean.bt2.val"); delay(50);
+   Saved_chk4=chk4 = myNex.readNumber("Clean.bt3.val"); delay(50);
+   Saved_chk5=chk5 = myNex.readNumber("Clean.bt4.val"); delay(50);
+   Saved_chk6=chk6 = myNex.readNumber("Clean.bt5.val"); delay(50);
+   Saved_chk7=chk7 = myNex.readNumber("Clean.bt6.val");
+   syncDaysSelectionFromClean();
+   saveValue<String>("DaysSelect", DaysSelect);
+}
+void trigger18(){read_Clean_chk();} 
 // /////////////////////////************* page heat  **************/////////////////////////////
 // ////////////////////////************* page heat **************//////////////////////////////
 // ///////////////////////************* page heat  **************///////////////////////////////
