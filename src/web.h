@@ -2191,7 +2191,8 @@ window.addEventListener('resize', ()=>{
     if(typeof j.Comment !== 'undefined') updateInputValue('Comment', j.Comment);
     if(typeof j.Lumen_Ul !== 'undefined') updateInputValue('Lumen_Ul', j.Lumen_Ul);
       if(typeof j.DS1 !== 'undefined') updateStat('DS1', j.DS1);
-    if(typeof j.Sider_heat !== 'undefined') updateInputValue('Sider_heat', j.Sider_heat);
+    // if(typeof j.Sider_heat !== 'undefined') updateInputValue('Sider_heat', j.Sider_heat);
+        if(typeof j.Sider_heat !== 'undefined') updateSliderDisplay('Sider_heat', j.Sider_heat);
     if(typeof j.Activation_Heat !== 'undefined') updateCheckboxValue('Activation_Heat', j.Activation_Heat);
     if(typeof j.Power_Heat !== 'undefined') updateStat('Power_Heat', j.Power_Heat);
 
