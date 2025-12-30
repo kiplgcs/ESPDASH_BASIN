@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <NeoPixelBus.h>
 #include <NeoPixelBrightnessBus.h>
+#include "web.h"
 #include <stdlib.h>
 #include <math.h>
 

@@ -360,6 +360,8 @@ int ORP_setting; // = 500;   // Нижний предел для включен�
 
 
 extern void interface();
+String uiValueForId(const String &id);
+bool uiApplyValueForId(const String &id, const String &value);
 
 // Безопасное экранирование строк для JSON ответов
 String jsonEscape(const String &input){
@@ -895,41 +897,6 @@ private:
               html += "<div id='"+overlay.id+"' style='"+panelStyle+"'>"+overlay.label+"</div>";
           }
 
-          auto getValueForId = [&](const String &id) -> String {
-              String val;
-              if(id=="ThemeColor") val = ThemeColor;
-              else if(id=="LEDColor") val = LEDColor;
-              else if(id=="MotorSpeed") val = String(MotorSpeedSetting);
-              else if(id=="IntInput") val = String(IntInput);
-              else if(id=="FloatInput") val = String(FloatInput);
-              else if(id=="Timer1") val = Timer1;
-              else if(id=="WS2815_Time1") val = WS2815_Time1 ? "1" : "0";
-              else if(id=="Power_Filtr") val = Power_Filtr ? "1" : "0";
-              else if(id=="Filtr_Time1") val = Filtr_Time1 ? "1" : "0";
-              else if(id=="Filtr_Time2") val = Filtr_Time2 ? "1" : "0";
-              else if(id=="Filtr_Time3") val = Filtr_Time3 ? "1" : "0";
-              else if(id=="Power_Clean") val = Power_Clean ? "1" : "0";
-              else if(id=="Clean_Time1") val = Clean_Time1 ? "1" : "0";
-              else if(id=="Comment") val = Comment;
-              else if(id=="Lumen_Ul") val = Lumen_Ul;
-              
-                            else if(id=="DS1") val = String(DS1, 1) + " °C";
-              else if(id=="Sider_heat") val = String(Sider_heat);
-              else if(id=="Activation_Heat") val = Activation_Heat ? "1" : "0";
-              else if(id=="Power_Heat") val = Power_Heat ? "Нагрев" : "Откл.";
-              
-              else if(id=="RandomVal") val = String(RandomVal);
-              else if(id=="ModeSelect") val = ModeSelect;
-              else if(id=="SetLamp") val = SetLamp;
-              else if(id=="SetRGB") val = SetRGB;
-              else if(id=="DaysSelect") val = DaysSelect;
-              else if(id=="RangeSlider") {
-                  RangeMin = loadValue<int>("RangeMin", RangeMin);
-                  RangeMax = loadValue<int>("RangeMax", RangeMax);
-                  val = String(RangeMin) + "-" + String(RangeMax);
-              }
-              return val;
-          };
 
 
           for(auto &e : self->elements){
@@ -1065,14 +1032,7 @@ private:
                   html += "</table></div>";
                   continue;
               }
-String val = getValueForId(e.id);
-
-
-              if(e.type=="checkbox" && !val.length()){
-                  int defaultVal = e.value.length() ? e.value.toInt() : 0;
-                  val = String(loadValue<int>(e.id.c_str(), defaultVal));
-              }
-              
+              String val = uiValueForId(e.id);
               if(e.type=="timer"){
                   UITimerEntry &timer = ui.timer(e.id);
                   html += "<div class='card timer-card'>";
@@ -1128,9 +1088,7 @@ String val = getValueForId(e.id);
                   html += "<label>"+e.label+"</label><input id='"+e.id+"' type='range' min='"+String(minCfg)+"' max='"+String(maxCfg)+"' step='"+String(stepCfg)+"' value='"+val+"' oninput='updateSlider(this)'><span id='"+e.id+"Val'> "+val+"</span>";
               }
               else if(e.type=="button"){
-                  int defaultState = (e.id == "button_WS2815") ? 1 : 0;
-                  int currentState = loadButtonState(e.id.c_str(), defaultState);
-                  String state = String(currentState);
+                  String state = val.length() ? val : "0";
                   String text = (state == "1") ? "ON" : "OFF";
                   String cssState = (state == "1") ? " on" : " off";
 
@@ -1229,46 +1187,73 @@ String val = getValueForId(e.id);
                   }
                   html += "</div>"; // ????????? select-days
               }
-else if(e.type=="range"){ // Этот блок создает HTML для диапазонного слайдера с двумя ползунками (минимум и максимум)
-    // Загружаем минимальное и максимальное значения слайдера из NVS
-    // Если значения отсутствуют, используются переменные RangeMin и RangeMax
-    int minVal = loadValue<int>("RangeMin", RangeMin); 
-    int maxVal = loadValue<int>("RangeMax", RangeMax);
+else if(e.type=="range"){ // Диапазонный слайдер с двумя ползунками (минимум и максимум)
+    String cfg = e.value;
+    auto readRangeCfg = [&](const String &prop)->String {
+        String token = prop + "=";
+        int start = cfg.indexOf(token);
+        if(start < 0) return "";
+        start += token.length();
+        int end = cfg.indexOf(';', start);
+        if(end < 0) end = cfg.length();
+        return cfg.substring(start, end);
+    };
+    float minCfg = 0;
+    float maxCfg = 100;
+    float stepCfg = 1;
+    String minStr = readRangeCfg("min");
+    if(minStr.length()) minCfg = minStr.toFloat();
+    String maxStr = readRangeCfg("max");
+    if(maxStr.length()) maxCfg = maxStr.toFloat();
+    String stepStr = readRangeCfg("step");
+    if(stepStr.length()) stepCfg = stepStr.toFloat();
 
-    // Подготавливаем подпись для слайдера. Если e.label пустой, используем "Range Slider"
+    int minVal = static_cast<int>(minCfg);
+    int maxVal = static_cast<int>(maxCfg);
+    if(val.length()){
+        int sep = val.indexOf('-');
+        if(sep >= 0){
+            minVal = val.substring(0, sep).toInt();
+            maxVal = val.substring(sep + 1).toInt();
+        }
+    }
+
+
     String rangeLabel = e.label.length() ? e.label : "Range Slider";
-    // Создаем HTML-код для слайдера:
+    String rangeId = e.id;
     html += "<label>"+rangeLabel+"</label>"
-            "<div class='range-slider' id='RangeSlider'>"
-            "<input type='range' id='RangeSliderMin' min='0' max='100' value='" + String(minVal) + "'>"
-            "<input type='range' id='RangeSliderMax' min='0' max='100' value='" + String(maxVal) + "'>"
+            "<div class='range-slider' id='"+rangeId+"'>"
+            "<input type='range' id='"+rangeId+"Min' min='"+String(minCfg)+"' max='"+String(maxCfg)+"' step='"+String(stepCfg)+"' value='" + String(minVal) + "'>"
+            "<input type='range' id='"+rangeId+"Max' min='"+String(minCfg)+"' max='"+String(maxCfg)+"' step='"+String(stepCfg)+"' value='" + String(maxVal) + "'>"
             "<div class='slider-track'></div>"
             "</div>"
-            "<div>Range: <span id='RangeSliderVal'>" + String(minVal) + " - " + String(maxVal) + "</span>%</div>"
-    // CSS-стили для слайдера
+            "<div>Range: <span id='"+rangeId+"Val'>" + String(minVal) + " - " + String(maxVal) + "</span>%</div>"
             "<style>"
             ".range-slider { position: relative; width: 100%; height: 10px; }"
             ".range-slider input[type=range] { position: absolute; width: 100%; pointer-events: none; -webkit-appearance: none; background: none; }"
             ".range-slider input[type=range]::-webkit-slider-thumb { pointer-events: all; width: 20px; height: 20px; border-radius: 50%; background: #1e88e5; -webkit-appearance: none; cursor: pointer; position: relative; z-index: 3; }"
             ".slider-track { position: absolute; height: 6px; top: 50%; transform: translateY(-50%); background: #444; border-radius: 3px; width: 100%; }"
             "</style>"
-    // JavaScript для управления слайдером
             "<script>"
-            "function updateRangeSlider(){"
-            "  const minEl = document.getElementById('RangeSliderMin');"
-            "  const maxEl = document.getElementById('RangeSliderMax');"
-            "  let min = parseInt(minEl.value);"
-            "  let max = parseInt(maxEl.value);"
-            "  if(min > max) { [min, max] = [max, min]; minEl.value=min; maxEl.value=max; }"
-            "  document.getElementById('RangeSliderVal').innerText = min + ' - ' + max;"
-            "  document.querySelector('#RangeSlider .slider-track').style.background = "
-            "    `linear-gradient(to right, #444 ${min}%, #1e88e5 ${min}%, #1e88e5 ${max}%, #444 ${max}%)`;"
-            "  fetch('/save?key=RangeSliderMin&val='+min);"
-            "  fetch('/save?key=RangeSliderMax&val='+max);"
-            "}"
-            "document.getElementById('RangeSliderMin').addEventListener('input', updateRangeSlider);"
-            "document.getElementById('RangeSliderMax').addEventListener('input', updateRangeSlider);"
-            "updateRangeSlider();"
+            "(() => {"
+            "  const rangeId = '"+rangeId+"';"
+            "  const minEl = document.getElementById(rangeId + 'Min');"
+            "  const maxEl = document.getElementById(rangeId + 'Max');"
+            "  const track = document.querySelector('#' + rangeId + ' .slider-track');"
+            "  const display = document.getElementById(rangeId + 'Val');"
+            "  if(!minEl || !maxEl) return;"
+            "  const updateRangeSlider = () => {"
+            "    let min = parseFloat(minEl.value);"
+            "    let max = parseFloat(maxEl.value);"
+            "    if(min > max){ [min, max] = [max, min]; minEl.value=min; maxEl.value=max; }"
+            "    if(display) display.innerText = min + ' - ' + max;"
+            "    if(track) track.style.background = `linear-gradient(to right, #444 ${min}%, #1e88e5 ${min}%, #1e88e5 ${max}%, #444 ${max}%)`;"
+            "    fetch('/save?key=' + encodeURIComponent(rangeId) + '&val=' + encodeURIComponent(min + '-' + max));"
+            "  };"
+            "  minEl.addEventListener('input', updateRangeSlider);"
+            "  maxEl.addEventListener('input', updateRangeSlider);"
+            "  updateRangeSlider();"
+            "})();"
             "</script>";
 }
 
@@ -1714,13 +1699,15 @@ function setRangeSliderUI(id, minVal, maxVal){
   const minEl = document.getElementById(id+"Min");
   const maxEl = document.getElementById(id+"Max");
   if(!minEl || !maxEl) return;
-  if(minVal > maxVal) [minVal, maxVal] = [maxVal, minVal];
-  minEl.value = minVal;
-  maxEl.value = maxVal;
+  let min = parseFloat(minVal);
+  let max = parseFloat(maxVal);
+  if(min > max) [min, max] = [max, min];
+  minEl.value = min;
+  maxEl.value = max;
   const display = document.getElementById(id+"Val");
-  if(display) display.innerText = minVal + ' - ' + maxVal;
+  if(display) display.innerText = min + ' - ' + max;
   const track = document.querySelector('#'+id+' .slider-track');
-  if(track) track.style.background = `linear-gradient(to right, #444 ${minVal}%, #1e88e5 ${minVal}%, #1e88e5 ${maxVal}%, #444 ${maxVal}%)`;
+  if(track) track.style.background = `linear-gradient(to right, #444 ${min}%, #1e88e5 ${min}%, #1e88e5 ${max}%, #444 ${max}%)`;
 }
 
 function syncDashButton(id, state){
@@ -2225,112 +2212,12 @@ function setImg(x){
           r->send(200,"text/plain","OK");
           return;
         }
-                bool isCheckbox = false;
-        for(const auto &element : self->elements){
-          if(element.id == key && element.type == "checkbox"){
-            isCheckbox = true;
-            break;
-          }
+        if(uiApplyValueForId(key, valStr)){
+          r->send(200,"text/plain","OK");
+          return;
         }
+
            if(key=="ThemeColor") { ThemeColor = valStr; saveValue<String>(key.c_str(), valStr); }
-        else if(key=="LEDColor") { LEDColor = valStr; saveValue<String>(key.c_str(), valStr); }
-        else if(key=="LedColorMode") { LedColorMode = valStr; ColorRGB = LedColorMode.equalsIgnoreCase("manual"); saveValue<String>("LedColorMode", LedColorMode); }
-        else if(key=="LedColorOrder") { LedColorOrder = valStr; saveValue<String>("LedColorOrder", LedColorOrder); }
-        else if(key=="LedBrightness") { LedBrightness = constrain(valStr.toInt(), 0, 255); new_bright = LedBrightness; saveValue<int>("LedBrightness", LedBrightness); }
-        else if(key=="LedPattern") { LedPattern = valStr; saveValue<String>("LedPattern", LedPattern); }
-        else if(key=="LedAutoplay") { LedAutoplay = valStr.toInt() != 0; saveValue<int>("LedAutoplay", LedAutoplay ? 1 : 0); }
-        else if(key=="LedAutoplayDuration") {
-          int duration = valStr.toInt();
-          if(duration < 1) duration = 1;
-          LedAutoplayDuration = duration;
-          saveValue<int>("LedAutoplayDuration", LedAutoplayDuration);
-        }
-        else if(key=="MotorSpeed") { MotorSpeedSetting = valStr.toInt(); saveValue<int>(key.c_str(), MotorSpeedSetting); }
-        else if(key=="IntInput") { IntInput = valStr.toInt(); saveValue<int>(key.c_str(), IntInput); }
-        else if(key=="FloatInput") { FloatInput = valStr.toFloat(); saveValue<float>(key.c_str(), FloatInput); }
-        else if(key=="Timer1") { Timer1 = valStr; saveValue<String>(key.c_str(), Timer1); }
-              else if(key=="Power_Time1") { Power_Time1 = valStr.toInt() != 0; saveValue<int>("Power_Time1", Power_Time1 ? 1 : 0); }
-
-        else if(key=="WS2815_Time1") { WS2815_Time1 = valStr.toInt() != 0; saveValue<int>("WS2815_Time1", WS2815_Time1 ? 1 : 0); }
-
-                else if(key=="Power_Filtr") { Power_Filtr = valStr.toInt() != 0; saveValue<int>("Power_Filtr", Power_Filtr ? 1 : 0); }
-        else if(key=="Filtr_Time1") { Filtr_Time1 = valStr.toInt() != 0; saveValue<int>("Filtr_Time1", Filtr_Time1 ? 1 : 0); }
-        else if(key=="Filtr_Time2") { Filtr_Time2 = valStr.toInt() != 0; saveValue<int>("Filtr_Time2", Filtr_Time2 ? 1 : 0); }
-        else if(key=="Filtr_Time3") { Filtr_Time3 = valStr.toInt() != 0; saveValue<int>("Filtr_Time3", Filtr_Time3 ? 1 : 0); }
-
-        else if(key=="Power_Clean") { Power_Clean = valStr.toInt() != 0; saveValue<int>("Power_Clean", Power_Clean ? 1 : 0); }
-        else if(key=="Clean_Time1") { Clean_Time1 = valStr.toInt() != 0; saveValue<int>("Clean_Time1", Clean_Time1 ? 1 : 0); }
-
-                else if(key=="Sider_heat") { Sider_heat = valStr.toInt(); saveValue<int>("Sider_heat", Sider_heat); }
-        else if(key=="Activation_Heat") { Activation_Heat = valStr.toInt() != 0; saveValue<int>("Activation_Heat", Activation_Heat ? 1 : 0); }
-
-        else if(key=="Comment") { Comment = valStr; saveValue<String>(key.c_str(), Comment); }
-
-        
-        else if(key=="ModeSelect") { ModeSelect = valStr; saveValue<String>(key.c_str(), ModeSelect); }
-                // else if(key=="SetLamp") { SetLamp = valStr; saveValue<String>(key.c_str(), SetLamp); }
-                else if(key=="SetLamp") {
-                  SetLamp = valStr;
-                  if (SetLamp == "on") {
-                    Lamp = true;
-                    Lamp_autosvet = false;
-                    Power_Time1 = false;
-                  } else if (SetLamp == "auto") {
-                    Lamp = false;
-                    Lamp_autosvet = true;
-                    Power_Time1 = false;
-                  } else if (SetLamp == "timer") {
-                    Lamp = false;
-                    Lamp_autosvet = false;
-                    Power_Time1 = true;
-                  } else {
-                    Lamp = false;
-                    Lamp_autosvet = false;
-                    Power_Time1 = false;
-                  }
-                  saveValue<String>(key.c_str(), SetLamp);
-                  saveButtonState("button_Lamp", Lamp ? 1 : 0);
-                  saveValue<int>("Lamp_autosvet", Lamp_autosvet ? 1 : 0);
-                  saveValue<int>("Power_Time1", Power_Time1 ? 1 : 0);
-                }
-                  else if(key=="SetRGB") {
-                  SetRGB = valStr;
-                  if (SetRGB == "on") {
-                    Pow_WS2815 = true;
-                    Pow_WS2815_autosvet = false;
-                    WS2815_Time1 = false;
-                  } else if (SetRGB == "auto") {
-                    Pow_WS2815 = false;
-                    Pow_WS2815_autosvet = true;
-                    WS2815_Time1 = false;
-                  } else if (SetRGB == "timer") {
-                    Pow_WS2815 = false;
-                    Pow_WS2815_autosvet = false;
-                    WS2815_Time1 = true;
-                  } else {
-                    Pow_WS2815 = false;
-                    Pow_WS2815_autosvet = false;
-                    WS2815_Time1 = false;
-                  }
-                  saveValue<String>(key.c_str(), SetRGB);
-                  saveButtonState("button_WS2815", Pow_WS2815 ? 1 : 0);
-                  saveValue<int>("Pow_WS2815_autosvet", Pow_WS2815_autosvet ? 1 : 0);
-                  saveValue<int>("WS2815_Time1", WS2815_Time1 ? 1 : 0);
-                }
-                //   else if(key=="SetLamp") {
-                //   SetLamp = valStr;
-                //   applyLampModeFromSetLamp();
-                //   saveValue<String>(key.c_str(), SetLamp);
-                //   saveButtonState("button_Lamp", Lamp ? 1 : 0);
-                //   saveValue<int>("Power_Time1", Power_Time1 ? 1 : 0);
-                // }     
-
-                // else if(key=="DaysSelect") { DaysSelect = valStr; saveValue<String>(key.c_str(), DaysSelect); }
-                else if(key=="DaysSelect") {
-                  DaysSelect = valStr;
-                  syncCleanDaysFromSelection();
-                  saveValue<String>(key.c_str(), DaysSelect);
-                }
 
                 else if(key=="graphMainMaxPoints") {
           int valInt = valStr.toInt();
@@ -2383,11 +2270,9 @@ function setImg(x){
         }
         else if(key=="ssid") saveValue<String>(key.c_str(), valStr);
         else if(key=="pass") saveValue<String>(key.c_str(), valStr);
-        else if(key=="RangeSliderMin") { RangeMin = valStr.toInt(); saveValue<int>("RangeMin", RangeMin); }
-        else if(key=="RangeSliderMax") { RangeMax = valStr.toInt(); saveValue<int>("RangeMax", RangeMax); }
+        
         else if(key=="apSSID") { StoredAPSSID = valStr; saveValue<String>(key.c_str(), valStr); }
         else if(key=="apPASS") { StoredAPPASS = valStr; saveValue<String>(key.c_str(), valStr); }
-         else if(isCheckbox) { saveValue<int>(key.c_str(), valStr.toInt()); }
       }
       r->send(200,"text/plain","OK");
     });
@@ -2437,11 +2322,10 @@ function setImg(x){
       if(r->hasParam("id") && r->hasParam("state")){
         String id = r->getParam("id")->value();
         int state = r->getParam("state")->value().toInt();
-        if(id == "button1") button1 = state;
-        else if(id == "button2") button2 = state;
-                else if(id == "button_Lamp"){Lamp = state != 0;}
-        else if(id == "button_WS2815"){Pow_WS2815 = state != 0;}
-        saveButtonState(id.c_str(), state);
+       if(uiApplyValueForId(id, String(state))){
+          r->send(200, "text/plain", "OK");
+          return;
+        }
         r->send(200, "text/plain", "OK");
       } else {
         r->send(400, "text/plain", "Missing params");
