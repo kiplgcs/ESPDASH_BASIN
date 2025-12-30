@@ -577,7 +577,11 @@ void trigger20(){read_heat_sw0();}
 //     // jee.var("Timer_H2O2_Start", Timer_H2O2_Start);
 // }
 // void trigger22(){read_Dispensers_sw0_sw1();} 
-
+void read_Dispensers_sw0_sw1(){
+    Saved_PHControlACO = PH_Control_ACO = myNex.readNumber("Dispensers.sw0.val");
+    saveValue<int>("PH_Control_ACO", PH_Control_ACO ? 1 : 0);
+}
+void trigger22(){read_Dispensers_sw0_sw1();}
 // // printh 23 02 54 17  - Dispensers  свчитываем состояние ComboBox cb0.txt
 // void read_Dispensers_cb0(){
 //     //Отложенное повторное выполнение через 2 секунды - выполняем NextionDelay();
@@ -587,7 +591,12 @@ void trigger20(){read_heat_sw0();}
 //  Saved_ACO_Work = ACO_Work = myNex.readNumber("Dispensers.cb0.val") +1;  //Отложенное повторное выполнение через 1 секунду
 //  jee.var("ACO_Work", String(ACO_Work));
 // } 
-
+void read_Dispensers_cb0(){
+    Saved_ACO_Work = ACO_Work = myNex.readNumber("Dispensers.cb0.val") + 1;
+    if(ACO_Work < 1) ACO_Work = 1;
+    saveValue<int>("ACO_Work", ACO_Work);
+}
+void trigger23(){read_Dispensers_cb0();}
 // // printh 23 02 54 18 - Dispensers  свчитываем состояние n4 / n5
 // void read_Dispensers_sw2_sw3(){
 //     Saved_NaOCl_H2O2_Control = NaOCl_H2O2_Control = myNex.readNumber("Dispensers.sw2.val"); delay(10);
@@ -598,7 +607,11 @@ void trigger20(){read_heat_sw0();}
 
 // }
 // void trigger24(){read_Dispensers_sw2_sw3();} 
-
+void read_Dispensers_sw2_sw3(){
+    Saved_NaOCl_H2O2_Control = NaOCl_H2O2_Control = myNex.readNumber("Dispensers.sw2.val");
+    saveValue<int>("NaOCl_H2O2_Control", NaOCl_H2O2_Control ? 1 : 0);
+}
+void trigger24(){read_Dispensers_sw2_sw3();}
 
 // // printh 23 02 54 19 - Dispensers  свчитываем состояние n4 / n5
 // void read_Dispensers_cb1(){
@@ -611,7 +624,12 @@ void trigger20(){read_heat_sw0();}
 // jee.var("H2O2_Work", String(H2O2_Work));
 
 // } 
-
+void read_Dispensers_cb1(){
+    Saved_H2O2_Work = H2O2_Work = myNex.readNumber("Dispensers.cb1.val") + 1;
+    if(H2O2_Work < 1) H2O2_Work = 1;
+    saveValue<int>("H2O2_Work", H2O2_Work);
+}
+void trigger25(){read_Dispensers_cb1();}
 // // printh 23 02 54 1A -
 // void trigger26(){
 //     //////////// 
@@ -743,12 +761,16 @@ triggerActivated_Nextion = false; //Деактивируем вызов из loo
     case 22:  break;
     case 23: 
     Saved_ACO_Work = ACO_Work = myNex.readNumber("Dispensers.cb0.val") +1;  //Отложенное повторное выполнение через 1 секунду
+    if(ACO_Work < 1) ACO_Work = 1;
+    saveValue<int>("ACO_Work", ACO_Work);
     //Serial.println(ACO_Work);
     // jee.var("ACO_Work", String(ACO_Work));
     break;
     case 24:  break;
     case 25: 
     Saved_H2O2_Work = H2O2_Work = myNex.readNumber("Dispensers.cb1.val") +1;  //Отложенное повторное выполнение через 1 секунду
+    if(H2O2_Work < 1) H2O2_Work = 1;
+    saveValue<int>("H2O2_Work", H2O2_Work);
     //Serial.println(H2O2_Work);
     // jee.var("H2O2_Work", String(H2O2_Work));
     break;
@@ -807,6 +829,10 @@ read_lamp_sw0_sw1_sw2();
 // read_Dispensers_cb0();
 // read_Dispensers_sw2_sw3();
 // read_Dispensers_cb1();
+read_Dispensers_sw0_sw1();
+read_Dispensers_cb0();
+read_Dispensers_sw2_sw3();
+read_Dispensers_cb1();
 // // Saved_PHControlACO = PH_Control_ACO = myNex.readNumber("Dispensers.sw0.val"); jee.var("PH_Control_ACO", PH_Control_ACO ? "true" : "false"); delay(10);//Контроль PH  
 // // Saved_Activation_Timer_ACO = Activation_Timer_ACO = myNex.readNumber("Dispensers.sw1.val"); jee.var("Activation_Timer_ACO", String(Activation_Timer_ACO ? "true" : "false" ));  delay(10);  //Работа перельстатического насоса
 // // Saved_ACO_Work = ACO_Work = myNex.readNumber("Dispensers.cb0.val") +1; jee.var("ACO_Work", String(ACO_Work));  delay(10);  // Как часто включается перельстатический насос
@@ -819,5 +845,4 @@ read_lamp_sw0_sw1_sw2();
 // /////////////////////////************* page pageRTC **************/////////////////////////////
 // ////////////////////////************* page pageRTC **************//////////////////////////////
 // read_RTC_n5();
-
 }

@@ -565,6 +565,30 @@ if (Saved_chk7 != chk7 && !triggerRestartNextion) {Saved_chk7 = chk7;
 // //   myNex.writeStr("page Dispensers");
 // //   myNex.writeNum("Dispensers.cb0.val", ACO_Work-1); 
 // // }
+if (Saved_PHControlACO != PH_Control_ACO && !triggerRestartNextion) {Saved_PHControlACO = PH_Control_ACO;
+    myNex.writeStr("dim=50");
+    myNex.writeStr("page Dispensers");
+    myNex.writeNum("Dispensers.sw0.val", PH_Control_ACO ? 1 : 0);
+}
+
+if (ACO_Work != Saved_ACO_Work && !triggerRestartNextion) {Saved_ACO_Work = ACO_Work;
+  myNex.writeStr("dim=50");
+  myNex.writeStr("page Dispensers");
+  myNex.writeNum("Dispensers.cb0.val", ACO_Work - 1); 
+}
+
+if (Saved_NaOCl_H2O2_Control != NaOCl_H2O2_Control && !triggerRestartNextion) {
+    Saved_NaOCl_H2O2_Control = NaOCl_H2O2_Control;
+    myNex.writeStr("dim=50");
+    myNex.writeStr("page Dispensers");
+    myNex.writeNum("Dispensers.sw2.val", NaOCl_H2O2_Control ? 1 : 0);
+}
+
+if (H2O2_Work != Saved_H2O2_Work && !triggerRestartNextion) {Saved_H2O2_Work = H2O2_Work;
+  myNex.writeStr("dim=50");
+  myNex.writeStr("page Dispensers");
+  myNex.writeNum("Dispensers.cb1.val", H2O2_Work - 1); 
+}
 
 
 // if (Saved_ppmCl != ppmCl) {Saved_ppmCl = ppmCl;

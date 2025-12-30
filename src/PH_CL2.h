@@ -109,13 +109,7 @@ void loop_PH(int interval) {
     analogValuePH_Comp = (PH - b) / k;
 
 
-    if (Act_PH) {jee.var("PH_CAL", "PH"+ String(PH, 2) + " : " + String(analogValuePH_Comp)+"mV"); // передаем значение pH   //ацп: "+ String(analogValuePH) + "
-    }else{
-       jee.var("PH", String(PH, 2)); 
-    } 
-
- 
-                
+    // Calibration feedback was previously sent via JeeUI; PH value is now provided through the dashboard JSON.                
 }
 
 
@@ -329,11 +323,7 @@ void loop_CL2(int interval) {
 
 
   // Отображение в интерфейсе
-  if (Act_Cl) {
-    jee.var("Cl_Cal", String(corrected_ORP_Eh_mV) + "-" + String(CalRastvor256mV) + "=" + String(CalRastvor256mV - corrected_ORP_Eh_mV));
-  } else {
-    jee.var("Cl", String(corrected_ORP_Eh_mV) + "mV : " + String(ppmCl, 3) + "мг/л");
-  }
+  // Calibration/status UI updates are handled via the dashboard JSON now.
 }
 
 

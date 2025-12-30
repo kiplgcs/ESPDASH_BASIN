@@ -1,4 +1,5 @@
 //*****************************************************************************************************//
+#pragma once
   #include "ModbusClientRTU.h"
   bool ReadRelayArray[16];// Массив для хранения прочитанных состояний реле - 16 бит - 16 реле в виде false/true
   bool ReadInputArray[16];// Массив для хранения прочитанных состояний входов - 16 бит - 16 входов в виде false/true
@@ -7,8 +8,8 @@
   String InStr = ""; //Строка полученных данных из Modbus RTU
   char CharArray[16]; // Текстовый массив Char
 
-
-// Создаем экземпляр клиента ModbusRTU
+  //HardwareSerial RS485Serial(2);
+  // Создаем экземпляр клиента ModbusRTU
   ModbusClientRTU RS485(Serial2);    
 
 

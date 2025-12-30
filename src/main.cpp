@@ -16,7 +16,6 @@
 #include "Timer_Relay.h"
 #include "ds18.h"
 
-
 /************************* Подключаем библиотеку  АЦП модуль ADS1115 16-бит *********************************/
 #include <Adafruit_ADS1X15.h> // Библиотека для работы с модулями ADS1115 и ADS1015
 //Adafruit_ADS1115 ads;  /* Use this for the 16-bit version */
@@ -24,10 +23,14 @@ Adafruit_ADS1115 ads1; // Первый ADS1115 - PH
 Adafruit_ADS1115 ads2; // Второй ADS1115 - Хлор 
 //Adafruit_ADS10
 
+#include "ModbusRTU_RS485.h"
+
 #include "Nextion_Rx.h"
 #include "Nextion_Tx.h"
 
 #include "LED_WS2815.h"
+
+#include "PH_CL2.h"
 
 #include <Slow.h> //Периодически выполняем  - для обратной связи с устройствами
 
@@ -207,6 +210,8 @@ void setup() {
 
   dash.begin(); // Запуск дашборда
 
+  setup_Modbus();
+
 
 Serial.printf(
   "Heap Free: %u | Heap Min: %u | Max Block: %u | PSRAM Free: %u\n",
@@ -234,6 +239,9 @@ void loop() {
 
 TimerControlRelay(10000);  // TimerControlRelay(600); //Контроль включения реле по таймерам
 
+ControlModbusRelay(1000);
+loop_PH(2000);
+loop_CL2(2000);
 
  /**************************** *********************************************************************/
    Nextion_Transmit(500); // Отправка в Nextion по очереди

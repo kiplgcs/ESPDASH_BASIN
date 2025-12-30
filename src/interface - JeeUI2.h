@@ -131,7 +131,19 @@ inline void interface(){
         "lineWidth:1;pointRadius:3;smooth:false", Temperatura);
     // Контроль PH (NaOCl)
       UI_PAGE();
+    static const std::initializer_list<UIOption> dosingOptions{{"1", "15 сек"},
+                                                               {"2", "60 сек"},
+                                                               {"3", "5 мин"},
+                                                               {"4", "15 мин"},
+                                                               {"5", "30 мин"},
+                                                               {"6", "1 час"},
+                                                               {"7", "24 часа"}};
 
+    UI_DISPLAY_FLOAT("PH", PH, "pH (текущее)");
+    UI_DISPLAY_BOOL("Power_ACO", Power_ACO, "Дозатор ACO", "Работа", "Откл.");
+    UI_CHECKBOX("PH_Control_ACO", PH_Control_ACO, "Контроль pH (ACO)");
+    UI_NUMBER("PH_setting", PH_setting, "Верхний предел pH", true);
+    UI_SELECT("ACO_Work", ACO_Work, dosingOptions, "Период дозирования ACO");
         // График тренда измеренной температуры:
     //  - "FloatTrend1" — внутреннее имя источника данных (ID графика), которым библиотека связывает график с данными.
     //  - "Temperature1 Trend" — заголовок графика, показываемый в веб-интерфейсе.
@@ -159,6 +171,15 @@ inline void interface(){
 
     //Контроль хлора CL (ACO)
     UI_PAGE();
+    
+    UI_DISPLAY_FLOAT("ppmCl", ppmCl, "Свободный хлор, мг/л");
+    UI_DISPLAY_INT("corrected_ORP_Eh_mV", corrected_ORP_Eh_mV, "ORP, мВ");
+    UI_DISPLAY_BOOL("Power_H2O2", Power_H2O2, "Дозатор NaOCl", "Работа", "Откл.");
+    UI_CHECKBOX("NaOCl_H2O2_Control", NaOCl_H2O2_Control, "Контроль хлора (NaOCl)");
+    UI_NUMBER("ORP_setting", ORP_setting, "Нижний предел ORP, мВ", false);
+    UI_SELECT("H2O2_Work", H2O2_Work, dosingOptions, "Период дозирования NaOCl");
+
+
     UI_GRAPH_SOURCE("FloatTrend2", "Temperature2 Trend",
     "value:Temperatura;updatePeriod_of_Time:60;updateStep:5;maxPoints:30;width:100%;height:400;"
     "xLabel:Time;yLabel:Temperature;pointColor:#6b66ff;lineColor:#ff5e5e;"

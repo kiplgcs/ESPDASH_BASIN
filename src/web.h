@@ -316,11 +316,11 @@ bool Saved_Power_ACO, Power_ACO = false; 	//Дозация Активное Ка
 // String Saved_Timer_ACO_Work, Timer_ACO_Work;
 
 bool PH_Control_ACO, Saved_PHControlACO; // Флаг для отслеживания предыдущего состояния PH_Control_ACO
-int ACO_Work, Saved_ACO_Work;
+int ACO_Work = 1, Saved_ACO_Work;
 
 
 bool NaOCl_H2O2_Control, Saved_NaOCl_H2O2_Control;
-int H2O2_Work, Saved_H2O2_Work;
+int H2O2_Work = 1, Saved_H2O2_Work;
 
 int corr_ORP_temper_mV; 		// ОРП с учетом калибровки по температуре
 int CalRastvor256mV	= 256;	//Калибровочный раствор
@@ -334,11 +334,10 @@ char Info_H2O2[50]; String Saved_Info_H2O2;
 char Info_ACO[50];  String Saved_Info_ACO;
 
 // ===== Настройки пределов pH =====
-float PH_setting; // = 7.2;  // Верхний предел для включения дозирования
-
+float PH_setting = 7.2; // Верхний предел для включения дозирования
 
 // ===== Настройки пределов ORP =====
-int ORP_setting; // = 500;   // Нижний предел для включения дозирования
+int ORP_setting = 500; // Нижний предел для включения дозирования
 
 //Получение по ModbusRTU Объявляем переменные Input1, ..., Input16
 //bool Input1, Input2, Input3, Input4, Input5, Input6, Input7, Input8, Input9, Input10, Input11, Input12, Input13, Input14, Input15, Input16;
@@ -2194,7 +2193,17 @@ window.addEventListener('resize', ()=>{
         if(typeof j.Sider_heat !== 'undefined') updateSliderDisplay('Sider_heat', j.Sider_heat);
     if(typeof j.Activation_Heat !== 'undefined') updateCheckboxValue('Activation_Heat', j.Activation_Heat);
     if(typeof j.Power_Heat !== 'undefined') updateStat('Power_Heat', j.Power_Heat);
-
+if(typeof j.PH !== 'undefined') updateStat('PH', j.PH);
+    if(typeof j.PH_Control_ACO !== 'undefined') updateCheckboxValue('PH_Control_ACO', j.PH_Control_ACO);
+    if(typeof j.PH_setting !== 'undefined') updateInputValue('PH_setting', j.PH_setting);
+    if(typeof j.ACO_Work !== 'undefined') updateSelectValue('ACO_Work', j.ACO_Work);
+    if(typeof j.Power_ACO !== 'undefined') updateStat('Power_ACO', j.Power_ACO);
+    if(typeof j.ppmCl !== 'undefined') updateStat('ppmCl', j.ppmCl);
+    if(typeof j.corrected_ORP_Eh_mV !== 'undefined') updateStat('corrected_ORP_Eh_mV', j.corrected_ORP_Eh_mV);
+    if(typeof j.NaOCl_H2O2_Control !== 'undefined') updateCheckboxValue('NaOCl_H2O2_Control', j.NaOCl_H2O2_Control);
+    if(typeof j.ORP_setting !== 'undefined') updateInputValue('ORP_setting', j.ORP_setting);
+    if(typeof j.H2O2_Work !== 'undefined') updateSelectValue('H2O2_Work', j.H2O2_Work);
+    if(typeof j.Power_H2O2 !== 'undefined') updateStat('Power_H2O2', j.Power_H2O2);
     });
   }
 setInterval(fetchLive, 1000);
@@ -2377,7 +2386,17 @@ function setImg(x){
                +",\"Sider_heat\":"+String(Sider_heat)
                +",\"Activation_Heat\":"+String(Activation_Heat ? 1 : 0)
                +",\"Power_Heat\":\""+String(Power_Heat ? "Нагрев" : "Откл.")+"\""
-               
+                +",\"PH\":\""+String(PH, 2)+"\""
+               +",\"PH_Control_ACO\":"+String(PH_Control_ACO ? 1 : 0)
+               +",\"PH_setting\":"+String(PH_setting, 2)
+               +",\"ACO_Work\":"+String(ACO_Work)
+               +",\"Power_ACO\":\""+String(Power_ACO ? "Работа" : "Откл.")+"\""
+               +",\"ppmCl\":\""+String(ppmCl, 3)+"\""
+               +",\"corrected_ORP_Eh_mV\":\""+String(corrected_ORP_Eh_mV)+"\""
+               +",\"NaOCl_H2O2_Control\":"+String(NaOCl_H2O2_Control ? 1 : 0)
+               +",\"ORP_setting\":"+String(ORP_setting)
+               +",\"H2O2_Work\":"+String(H2O2_Work)
+               +",\"Power_H2O2\":\""+String(Power_H2O2 ? "Работа" : "Откл.")+"\""
                +",\"Lumen_Ul\":\""+Lumen_Ul+"\""
                +",\"Comment\":\""+Comment+"\"}";
     r->send(200, "application/json", s);

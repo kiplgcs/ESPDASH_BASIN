@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include "web.h"
 #include "NPT_Time.h"
+#include "ModbusRTU_RS485.h"
 
 // Функция для проверки времени в заданном интервале (минуты от 00:00)
 bool checkTimeInInterval(int currentHour, int currentMinute, uint16_t startMinutes, uint16_t endMinutes)
@@ -83,11 +84,33 @@ bool checkTimeInInterval(int currentHour, int currentMinute, uint16_t startMinut
 //       timerDuration = 0;
 //       break;
 //   }
-
+void manageTimer(int& mode,                 // Входной параметр: режим работы таймера (1,2,3,4,5,6,7)
+                 bool& power,               // Входной/выходной параметр: флаг, указывающий, включен ли таймер (true - включен, false - выключен)
+                 bool activation,           // Входной параметр: флаг, указывающий, активирован ли таймер (true - активирован, false - неактивирован)
+                 unsigned long& lastMillis, // Входной/выходной параметр: переменная, содержащая последнее значение времени для таймера
+                 char* info) {              // Выходной параметр: массив символов для хранения информации о таймере
+  if (!activation || !Power_Filtr) {
+    power = false;
+    snprintf(info, 50, "OFF");
+    lastMillis = millis();
+    return;
+  }
 
 //     unsigned long currentMillis = millis();  // Получаем текущее время в миллисекундах
 //     unsigned long elapsedMillis = currentMillis - lastMillis;  // Вычисляем прошедшее время с момента последнего обновления
+unsigned long timerDuration;
+  const unsigned long timerWorkDuration = 5000;  // Время работы таймера всегда 5 секунд
 
+  switch (mode) {
+    case 1: timerDuration = 1000UL * 15; break;          // 15 сек
+    case 2: timerDuration = 1000UL * 60; break;          // 60 сек
+    case 3: timerDuration = 1000UL * 60 * 5; break;      // 5 минут
+    case 4: timerDuration = 1000UL * 60 * 15; break;     // 15 минут
+    case 5: timerDuration = 1000UL * 60 * 30; break;     // 30 минут
+    case 6: timerDuration = 1000UL * 60 * 60; break;     // 1 час
+    case 7: timerDuration = 1000UL * 60 * 60 * 24; break; // 24 часа
+    default: timerDuration = 0; break;
+  }
 //   if (!power) {
 //     // Режим ожидания (таймер не работает)
 //     if (elapsedMillis >= timerDuration) {
@@ -101,7 +124,20 @@ bool checkTimeInInterval(int currentHour, int currentMinute, uint16_t startMinut
 //       lastMillis = currentMillis;  // Обновляем последнее время
 //     }
 //   }
+  const unsigned long currentMillis = millis();
+  const unsigned long elapsedMillis = currentMillis - lastMillis;
 
+  if (!power) {
+    if (elapsedMillis >= timerDuration) {
+      power = true;
+      lastMillis = currentMillis;
+    }
+  } else {
+    if (elapsedMillis >= timerWorkDuration) {
+      power = false;
+      lastMillis = currentMillis;
+    }
+  }
 //   // Формируем информацию о таймере для последующей передачи в Nextion или вывода в порт
 //   if (power && activation) {
 //     // Если таймер включен и активирован, вычисляем оставшееся время работы
@@ -116,7 +152,12 @@ bool checkTimeInInterval(int currentHour, int currentMinute, uint16_t startMinut
 //   }
     
 // }
-
+  if (power && activation) {
+    snprintf(info, 50, "Work");
+  } else if (!power && activation) {
+    snprintf(info, 50, "Start");
+  }
+}
 /**************************************************************************************/
 /**************************************************************************************/
 /**************************************************************************************/
@@ -150,6 +191,10 @@ void TimerControlRelay(int interval) {
             //Проверяем режим освещения и применяем логику включения лампы
                 UITimerEntry &lampTimer = ui.timer("LampTimer");
                 UITimerEntry &rgbTimer = ui.timer("RgbTimer");
+                UITimerEntry &filtrTimer1 = ui.timer("FiltrTimer1");
+                UITimerEntry &filtrTimer2 = ui.timer("FiltrTimer2");
+                UITimerEntry &filtrTimer3 = ui.timer("FiltrTimer3");
+                UITimerEntry &cleanTimer = ui.timer("CleanTimer1");
 
                  if (SetLamp == "off") {
                   Lamp = false;
@@ -183,16 +228,29 @@ void TimerControlRelay(int interval) {
 //     if (checkTimeInInterval(hours, minutes, Ul_light_timeON, Ul_light_timeOFF)&&Ul_light_Time==true) {
 //       Pow_Ul_light=true;
 //     } else if (Ul_light_Time==true) {Pow_Ul_light=false; } // Выключаем
-
+    bool anyFiltrTimer = Filtr_Time1 || Filtr_Time2 || Filtr_Time3;
+    bool filtrActive = (Filtr_Time1 && checkTimeInInterval(currentHour, currentMinute, filtrTimer1.on, filtrTimer1.off))
+                    || (Filtr_Time2 && checkTimeInInterval(currentHour, currentMinute, filtrTimer2.on, filtrTimer2.off))
+                    || (Filtr_Time3 && checkTimeInInterval(currentHour, currentMinute, filtrTimer3.on, filtrTimer3.off));
 //     //текущий день недели "DayOfWeek" - будет указывать в массиве "chk_Array[DayOfWeek - 1]"" на "chk1...chk7" который имее значение "true" или "false"
 //     bool chk_Array[] = {chk1, chk2, chk3, chk4, chk5, chk6, chk7}; 
-
+    if (anyFiltrTimer) {
+      Power_Filtr = filtrActive;
+    }
 //     if (checkTimeInInterval(hours, minutes, Clean_timeON1, Clean_timeOFF1) && Clean_Time1 == true && chk_Array[DayOfWeek - 1]) {
 //         Power_Clean = true; // Включаем промывку
 //     } else if (Clean_Time1 == true) {
 //         Power_Clean = false; // Выключаем
 //     }
+    bool chk_Array[] = {chk1, chk2, chk3, chk4, chk5, chk6, chk7};
+    bool cleanDayEnabled = (DayOfWeek >= 1 && DayOfWeek <= 7) ? chk_Array[DayOfWeek - 1] : false;
+    if (Clean_Time1) {
+      Power_Clean = cleanDayEnabled && checkTimeInInterval(currentHour, currentMinute, cleanTimer.on, cleanTimer.off);
+    }
 
+    if (Power_Clean) {
+      Power_Filtr = false;
+    }
 
 
 
@@ -290,29 +348,42 @@ void TimerControlRelay(int interval) {
 // //   strcpy(Info_H2O2, "OFF");                        // Обновляем текстовое состояние
 // // }
 
-// // Активация дозации ACO - кислоты по датчику PH
-//     static unsigned long lastMillisACO = 0;
-//     if (PH > PH_setting  && PH_Control_ACO && Power_Filtr) {
-//       manageTimer(ACO_Work, Power_ACO, PH_Control_ACO, lastMillisACO, Info_ACO);
-//         //Activation_Timer_ACO = true;
-//     } else if (PH <= PH_setting || !PH_Control_ACO || !Power_Filtr) {
-//       manageTimer(ACO_Work, Power_ACO=false, false, lastMillisACO, Info_ACO);
-//     }
-   
-//     // Активация дозации NaOCl по датчику хлора
-//     // Условие запуска таймера дозации хлора:
-//     // Если ORP ниже нижнего предела (ORP_Lower), pH в норме,
-//     // контроль включён, фильтрация активна
-//     static unsigned long lastMillisH2O2 = 0;
-//     if(corrected_ORP_Eh_mV < ORP_setting && PH <= PH_setting + 0.1 && NaOCl_H2O2_Control && Power_Filtr) {
-//       manageTimer(H2O2_Work, Power_H2O2, NaOCl_H2O2_Control, lastMillisH2O2, Info_H2O2);
-//     } else if (corrected_ORP_Eh_mV > ORP_setting || PH > PH_setting  || !NaOCl_H2O2_Control || !Power_Filtr){
-//       manageTimer(H2O2_Work, Power_H2O2 = false, false, lastMillisH2O2, Info_H2O2);
-//     }
+        // // Активация дозации ACO - кислоты по датчику PH
+        //     static unsigned long lastMillisACO = 0;
+        //     if (PH > PH_setting  && PH_Control_ACO && Power_Filtr) {
+        //       manageTimer(ACO_Work, Power_ACO, PH_Control_ACO, lastMillisACO, Info_ACO);
+        //         //Activation_Timer_ACO = true;
+        //     } else if (PH <= PH_setting || !PH_Control_ACO || !Power_Filtr) {
+        //       manageTimer(ACO_Work, Power_ACO=false, false, lastMillisACO, Info_ACO);
+        //     }
+          
+        //     // Активация дозации NaOCl по датчику хлора
+        //     // Условие запуска таймера дозации хлора:
+        //     // Если ORP ниже нижнего предела (ORP_Lower), pH в норме,
+        //     // контроль включён, фильтрация активна
+        //     static unsigned long lastMillisH2O2 = 0;
+        //     if(corrected_ORP_Eh_mV < ORP_setting && PH <= PH_setting + 0.1 && NaOCl_H2O2_Control && Power_Filtr) {
+        //       manageTimer(H2O2_Work, Power_H2O2, NaOCl_H2O2_Control, lastMillisH2O2, Info_H2O2);
+        //     } else if (corrected_ORP_Eh_mV > ORP_setting || PH > PH_setting  || !NaOCl_H2O2_Control || !Power_Filtr){
+        //       manageTimer(H2O2_Work, Power_H2O2 = false, false, lastMillisH2O2, Info_H2O2);
+        //     }
+    // Активация дозации ACO - кислоты по датчику PH
+    static unsigned long lastMillisACO = 0;
+    if (PH > PH_setting && PH_Control_ACO && Power_Filtr) {
+      manageTimer(ACO_Work, Power_ACO, PH_Control_ACO, lastMillisACO, Info_ACO);
+    } else {
+      manageTimer(ACO_Work, Power_ACO = false, false, lastMillisACO, Info_ACO);
+    }
 
+    // Активация дозации NaOCl по датчику хлора
+    static unsigned long lastMillisH2O2 = 0;
+    if (corrected_ORP_Eh_mV < ORP_setting && PH <= PH_setting + 0.1 && NaOCl_H2O2_Control && Power_Filtr) {
+      manageTimer(H2O2_Work, Power_H2O2, NaOCl_H2O2_Control, lastMillisH2O2, Info_H2O2);
+    } else {
+      manageTimer(H2O2_Work, Power_H2O2 = false, false, lastMillisH2O2, Info_H2O2);
+    }
 
-
-} // End TimerControlRelay
+// } // End TimerControlRelay
 
 
 
@@ -327,7 +398,7 @@ void TimerControlRelay(int interval) {
 // //---------------------------------------------------------------------------------
 // //---------------------------------------------------------------------------------
 // //---------------------------------------------------------------------------------
-
+} // End TimerControlRelay
 
 //   // Error err = RS485.addRequest(40001,1,0x05,0, Lamp ? devices[0].value : devices[1].value); // реле№1 для Lamp -  RS485.addRequest(Tokin, адр.модуля, функция, адр.реле, вкл./выкл);
 
@@ -340,11 +411,30 @@ void TimerControlRelay(int interval) {
 //   // err = RS485.addRequest(40001,1,0x05,4, PowerHeat ? devices[0].value : devices[1].value); //реле№5 для PowerHeat
 
 //   if (!Activation_Heat) {Error err = RS485.addRequest(40001,1,0x05,4, devices[1].value );} //реле№5 для PowerHeat
+void ControlModbusRelay(int interval) {
+  static unsigned long timer;
+  if (interval + timer > millis()) return;
+  timer = millis();
+//---------------------------------------------------------------------------------
+//---------------------------------------------------------------------------------
+//---------------------------------------------------------------------------------
+//---------------------------------------------------------------------------------
 
+  Error err = RS485.addRequest(40001, 1, 0x05, 0, Lamp ? devices[0].value : devices[1].value); // реле№1 для Lamp
+  err = RS485.addRequest(40001, 1, 0x05, 1, Pow_WS2815 ? devices[0].value : devices[1].value); //реле№2 для Pow_WS2815
+  err = RS485.addRequest(40001, 1, 0x05, 8, Power_Filtr ? devices[0].value : devices[1].value); //реле№3 для Power_Filtr
+  err = RS485.addRequest(40001, 1, 0x05, 3, Power_Clean ? devices[0].value : devices[1].value); //реле№4 для Power_Clean
+
+  if (!Activation_Heat) {
+    err = RS485.addRequest(40001, 1, 0x05, 4, devices[1].value); //реле№5 для PowerHeat
+  } else {
+    err = RS485.addRequest(40001, 1, 0x05, 4, Power_Heat ? devices[0].value : devices[1].value);
+  }
 
 
 //   Error err = RS485.addRequest(40001,1,0x05,5, Power_H2O2 ? devices[0].value : devices[1].value); //реле№6 для Power_H2O2
-
+  err = RS485.addRequest(40001, 1, 0x05, 5, Power_H2O2 ? devices[0].value : devices[1].value); //реле№6 для Power_H2O2
+  err = RS485.addRequest(40001, 1, 0x05, 6, Power_ACO ? devices[0].value : devices[1].value); //реле№7 для Power_ACO
  
 //   err = RS485.addRequest(40001,1,0x05,6, Power_ACO ? devices[0].value : devices[1].value);//реле№7 для Power_ACO
     
@@ -354,11 +444,13 @@ void TimerControlRelay(int interval) {
   
 //   AktualReadRelay=false; // перед прочтением говорим всем что данные в массивах не актуальны пока
 //   AktualReadInput=false;
-
+  err = RS485.addRequest(40050, 1, 0x03, 0, 1); // Чтение всех реле в бинарный массив ReadRelayArray[16]
+  err = RS485.addRequest(40060, 1, 0x03, 4, 1); // Чтение всех входов в бинарный массив ReadInputArray[16]
 //   // Если активирован автосвет - то свет включаем и отключаем по освещенности на улице
 //   if(Lamp_autosvet && Lumen_Ul_percent < 20){Lamp=true;}  else if (Lamp_autosvet && Lumen_Ul_percent > 30) {Lamp=false;} 
-
-
+  AktualReadRelay = false;
+  AktualReadInput = false;
+}
 //   err = RS485.addRequest(40001,1,0x05,15, Pow_Ul_light ? devices[0].value : devices[1].value); //Уличное освещение на столбе
  
 // }
