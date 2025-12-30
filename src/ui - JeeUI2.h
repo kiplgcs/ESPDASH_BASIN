@@ -520,8 +520,14 @@ private:
 
     void clamp(){
         if(minStorage < minValue) minStorage = minValue;
+        if(minStorage > maxValue) minStorage = maxValue;
+        if(maxStorage < minValue) maxStorage = minValue;
         if(maxStorage > maxValue) maxStorage = maxValue;
-        if(minStorage > maxStorage) minStorage = maxStorage;
+        if(minStorage > maxStorage){
+            int temp = minStorage;
+            minStorage = maxStorage;
+            maxStorage = temp;
+        }
     }
 };
 

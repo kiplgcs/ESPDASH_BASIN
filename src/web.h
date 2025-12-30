@@ -1229,10 +1229,10 @@ else if(e.type=="range"){ // Диапазонный слайдер с двумя
             "</div>"
             "<div>Range: <span id='"+rangeId+"Val'>" + String(minVal) + " - " + String(maxVal) + "</span>%</div>"
             "<style>"
-            ".range-slider { position: relative; width: 100%; height: 10px; }"
+            ".range-slider { position: relative; width: 100%; height: 10px; --thumb-size: 20px; }"
             ".range-slider input[type=range] { position: absolute; width: 100%; pointer-events: none; -webkit-appearance: none; background: none; }"
-            ".range-slider input[type=range]::-webkit-slider-thumb { pointer-events: all; width: 20px; height: 20px; border-radius: 50%; background: #1e88e5; -webkit-appearance: none; cursor: pointer; position: relative; z-index: 3; }"
-            ".slider-track { position: absolute; height: 6px; top: 50%; transform: translateY(-50%); background: #444; border-radius: 3px; width: 100%; }"
+            ".range-slider input[type=range]::-webkit-slider-thumb { pointer-events: all; width: var(--thumb-size); height: var(--thumb-size); border-radius: 50%; background: #1e88e5; -webkit-appearance: none; cursor: pointer; position: relative; z-index: 3; }"
+            ".slider-track { position: absolute; height: 6px; top: 50%; transform: translateY(-50%); background: #444; border-radius: 3px; left: calc(var(--thumb-size) / 2); right: calc(var(--thumb-size) / 2); }"
             "</style>"
             "<script>"
             "(() => {"
@@ -1242,12 +1242,17 @@ else if(e.type=="range"){ // Диапазонный слайдер с двумя
             "  const track = document.querySelector('#' + rangeId + ' .slider-track');"
             "  const display = document.getElementById(rangeId + 'Val');"
             "  if(!minEl || !maxEl) return;"
+            "  const minLimit = "+String(minCfg)+";"
+            "  const maxLimit = "+String(maxCfg)+";"
             "  const updateRangeSlider = () => {"
             "    let min = parseFloat(minEl.value);"
             "    let max = parseFloat(maxEl.value);"
             "    if(min > max){ [min, max] = [max, min]; minEl.value=min; maxEl.value=max; }"
             "    if(display) display.innerText = min + ' - ' + max;"
-            "    if(track) track.style.background = `linear-gradient(to right, #444 ${min}%, #1e88e5 ${min}%, #1e88e5 ${max}%, #444 ${max}%)`;"
+            "    const span = (maxLimit - minLimit) || 1;"
+            "    const minPct = ((min - minLimit) / span) * 100;"
+            "    const maxPct = ((max - minLimit) / span) * 100;"
+            "    if(track) track.style.background = `linear-gradient(to right, #444 ${minPct}%, #1e88e5 ${minPct}%, #1e88e5 ${maxPct}%, #444 ${maxPct}%)`;"
             "    fetch('/save?key=' + encodeURIComponent(rangeId) + '&val=' + encodeURIComponent(min + '-' + max));"
             "  };"
             "  minEl.addEventListener('input', updateRangeSlider);"
@@ -1707,7 +1712,14 @@ function setRangeSliderUI(id, minVal, maxVal){
   const display = document.getElementById(id+"Val");
   if(display) display.innerText = min + ' - ' + max;
   const track = document.querySelector('#'+id+' .slider-track');
-  if(track) track.style.background = `linear-gradient(to right, #444 ${min}%, #1e88e5 ${min}%, #1e88e5 ${max}%, #444 ${max}%)`;
+  if(track){
+    const minLimit = parseFloat(minEl.min || 0);
+    const maxLimit = parseFloat(minEl.max || 100);
+    const span = (maxLimit - minLimit) || 1;
+    const minPct = ((min - minLimit) / span) * 100;
+    const maxPct = ((max - minLimit) / span) * 100;
+    track.style.background = `linear-gradient(to right, #444 ${minPct}%, #1e88e5 ${minPct}%, #1e88e5 ${maxPct}%, #444 ${maxPct}%)`;
+  }
 }
 
 function syncDashButton(id, state){
