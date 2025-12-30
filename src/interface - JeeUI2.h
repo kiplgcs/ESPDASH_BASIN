@@ -59,7 +59,8 @@ inline void interface(){
                                      {"on", "Лампа включена постоянно"},
                                      {"auto", "Включение по датчику освещенности (<20%)"},
                                      {"timer", "Включение по таймеру"}}), "Режим света", onSetLampChange);
-    UI_NUMBER("Lumen_Ul", Lumen_Ul, "Освещенность на улице, %", false);
+    //UI_NUMBER("Lumen_Ul", Lumen_Ul, "Освещенность на улице, %", false);
+    UI_TEXT("Lumen_Ul", String(Lumen_Ul), "Освещенность на улице, %");
     UI_TIMER("LampTimer", "Таймер лампы", onLampTimerChange);
 
     // Управление RGB подсветкой
