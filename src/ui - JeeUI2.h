@@ -30,6 +30,22 @@ public:
         pageIndex++;
     }
 
+    void popupBegin(const String &popupId, const String &title, const String &buttonLabel){
+        ensurePage();
+        String popupTabId = String(F("popup_")) + popupId;
+        dash.addPopup(popupId, title, popupTabId);
+        addElement("popupButton", String(F("popup_btn_")) + popupId, buttonLabel, popupId);
+        tabStack.push_back(currentTabId);
+        currentTabId = popupTabId;
+    }
+
+    void popupEnd(){
+        if(tabStack.empty()) return;
+        currentTabId = tabStack.back();
+        tabStack.pop_back();
+    }
+
+
     void display(const String &id, const String &label, const String &placeholder=""){
         addElement("display", id, label, placeholder);
     }
@@ -165,6 +181,7 @@ private:
     String optionBuffer;
     size_t pageIndex = 0;
     std::map<String, float*> graphInputs;
+        std::vector<String> tabStack;
 
     struct GraphConfig{
         String valueKey;
@@ -176,6 +193,7 @@ private:
     void resetDash(){
         dash.tabs.clear();
         dash.elements.clear();
+                dash.popups.clear();
         menus.clear();
         optionBuffer = "";
         currentTabId = "";
@@ -868,6 +886,9 @@ inline bool uiApplyValueForId(const String &id, const String &value){
 #define UI_APP(title) oab.app(title)
 #define UI_MENU(title) oab.menu(title)
 #define UI_PAGE() oab.page()
+
+#define UI_POPUP_BEGIN(id, title, buttonLabel) oab.popupBegin(id, title, buttonLabel)
+#define UI_POPUP_END() oab.popupEnd()
 
 #define UI_CONCAT_INNER(a, b) a##b
 #define UI_CONCAT(a, b) UI_CONCAT_INNER(a, b)

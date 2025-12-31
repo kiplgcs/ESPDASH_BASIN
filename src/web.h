@@ -47,7 +47,6 @@ inline String authUsername;      // Логин для доступа к веб-�
 inline String authPassword;      // Пароль для доступа к веб-интерфейсу
 inline int button1 = 0;          // Состояние кнопки 1
 inline int button2 = 0;          // Состояние кнопки 2
-inline int button_Cal_PH=0;       //Кнопка активации калибровки датчика PH
 inline int RangeMin = 10;        // Минимальное значение диапазонного слайдера
 inline int RangeMax = 40;        // Максимальное значение диапазонного слайдера
 inline int jpg = 1;              // Флаг JPG отображения (например, переключение картинок)
@@ -450,7 +449,7 @@ inline bool ensureAuthorized(AsyncWebServerRequest *request){
 struct Tab { String id; String title; };
 struct Element { String type; String id; String label; String value; String tab; };
 
-
+struct Popup { String id; String title; String tabId; };
 
 
 
@@ -459,8 +458,17 @@ class MiniDash {
 public:
     vector<Tab> tabs;         // Список вкладок
     vector<Element> elements; // Список элементов UI
+        vector<Popup> popups;
   void addTab(const String &id, const String &title){ tabs.push_back({id,title}); }
   void addElement(const String &tab, const Element &e){ Element x=e; x.tab=tab; elements.push_back(x); }
+  
+    void addPopup(const String &id, const String &title, const String &tabId){
+    for(auto &popup : popups){
+      if(popup.id == id) return;
+    }
+    popups.push_back({id, title, tabId});
+  }
+
   void begin(){
     if(!dashInterfaceInitialized){
       interface();
@@ -742,6 +750,14 @@ private:
       ".wifi-modal-content{width:min(480px,90vw);background:#1a1c22;border:1px solid rgba(255,255,255,0.08);border-radius:14px;box-shadow:0 18px 40px rgba(0,0,0,0.65);overflow:hidden;} "
       ".wifi-modal-header{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid rgba(255,255,255,0.06);} "
       ".wifi-scan-list{max-height:320px;overflow:auto;display:flex;flex-direction:column;} "
+      
+            ".dash-modal{position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:flex-start;justify-content:center;padding:60px 20px;z-index:1400;} "
+      ".dash-modal.hidden{display:none;} "
+      ".dash-modal-content{width:min(880px,95vw);background:#1a1c22;border:1px solid rgba(255,255,255,0.08);border-radius:16px;box-shadow:0 20px 50px rgba(0,0,0,0.7);overflow:hidden;} "
+      ".dash-modal-header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,0.08);} "
+      ".dash-modal-body{padding:16px;max-height:calc(100vh - 180px);overflow:auto;} "
+      ".popup-grid{display:grid;grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));gap:15px;position:relative;} "
+      
       ".network-row{display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:12px 14px;background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,0.05);color:#e9ecf4;text-align:left;cursor:pointer;transition:background 0.12s ease;} "
       ".network-row:hover{background:rgba(255,255,255,0.04);} "
       ".network-ssid{font-weight:700;} "
@@ -785,14 +801,9 @@ private:
       // Основной контент
       html += "<div id='main'>";
 
-      bool firstPage = true;
-      for(auto &t : self->tabs){
-           html += "<div id='"+t.id+"' class='page"+String(firstPage?" active":"")+"'>"
-                  "<div class='page-header'><h3>"+t.title+"</h3>"
-                  "<div class='page-datetime' id='page-datetime-"+t.id+"'>--</div></div>";
-
-     for(auto &e : self->elements){
-              if(e.tab != t.id || e.type != "image") continue;
+      auto renderTabElements = [&](const String &tabId){
+        for(auto &e : self->elements){
+              if(e.tab != tabId || e.type != "image") continue;
 
               String imgSrc = e.label;
               if(!imgSrc.startsWith("http") && !imgSrc.startsWith("/")) imgSrc = "/" + imgSrc;
@@ -837,7 +848,7 @@ private:
                   tokenStart = tokenEnd + 1;
               }
 
-    bool hasCoords = leftRaw.length() || topRaw.length();
+              bool hasCoords = leftRaw.length() || topRaw.length();
               bool positionProvided = extraStyles.indexOf("position:") >= 0;
 
               String imageStyle = "display:block; width:auto; height:auto; border-radius:12px; box-shadow:0 4px 12px rgba(0,0,0,0.5);";
@@ -858,7 +869,7 @@ private:
                   containerStyle += " margin:0;";
               }
 
- html += "<div class=\"card\" style=\""+containerStyle+"\">";
+              html += "<div class=\"card\" style=\""+containerStyle+"\">";
               html += "<img id='"+e.id+"' src='"+imgSrc+"' data-refresh='"+(imgSrc=="/getImage"?"getImage":"")+"' "
                       "style='"+imageStyle+"'/>";
 
@@ -866,8 +877,7 @@ private:
           }
 
           for(auto &overlay : self->elements){
-              if(overlay.tab != t.id || overlay.type != "displayStringAbsolute") continue;
-
+              if(overlay.tab != tabId || overlay.type != "displayStringAbsolute") continue;
               String styleStr = overlay.value;
               auto readProp = [&](const String &prop)->String {
                   String key = prop + ":";
@@ -918,8 +928,8 @@ private:
 
 
           for(auto &e : self->elements){
-              if(e.tab != t.id) continue;
-                           if(e.type=="displayStringAbsolute" || e.type=="image") continue;
+              if(e.tab != tabId) continue;
+              if(e.type=="displayStringAbsolute" || e.type=="image") continue;
               if(e.type=="displayGraph" || e.type=="displayGraphJS"){
                   String config = e.value;
                   auto readSetting = [&](const String &prop)->String {
@@ -956,49 +966,41 @@ private:
                   String yLabel = readSetting("yLabel"); if(yLabel.length()==0) yLabel = "Y Axis";
                   String pointColor = readSetting("pointColor"); if(pointColor.length()==0) pointColor = "#ff8c42";
                   String lineColor = readSetting("lineColor"); if(lineColor.length()==0) lineColor = "#4CAF50";
-                    String updatePeriodRaw = readSetting("updatePeriod_of_Time");
-                    String updateStepRaw = readSetting("updateStep");
-                    // unsigned long maxUpdatePeriod = updatePeriodRaw.length() ? updatePeriodRaw.toInt() : 600000; // 10 минут
-                    // unsigned long updateStep = updateStepRaw.length() ? updateStepRaw.toInt() : 1000;            // 1 секунда
-                    unsigned long maxUpdatePeriodMinutes = updatePeriodRaw.length() ? updatePeriodRaw.toInt() : 10; // минуты
-                    unsigned long updateStepMinutes = updateStepRaw.length() ? updateStepRaw.toInt() : 1;           // минуты
-                    unsigned long maxUpdatePeriod = maxUpdatePeriodMinutes * 60000UL;
-                    unsigned long updateStep = updateStepMinutes * 60000UL;
+                  String updatePeriodRaw = readSetting("updatePeriod_of_Time");
+                  String updateStepRaw = readSetting("updateStep");
+                  unsigned long maxUpdatePeriodMinutes = updatePeriodRaw.length() ? updatePeriodRaw.toInt() : 10; // минуты
+                  unsigned long updateStepMinutes = updateStepRaw.length() ? updateStepRaw.toInt() : 1;           // минуты
+                  unsigned long maxUpdatePeriod = maxUpdatePeriodMinutes * 60000UL;
+                  unsigned long updateStep = updateStepMinutes * 60000UL;
 
-                    if(maxUpdatePeriod < minGraphUpdateInterval) maxUpdatePeriod = minGraphUpdateInterval;
+                  if(maxUpdatePeriod < minGraphUpdateInterval) maxUpdatePeriod = minGraphUpdateInterval;
+                  if(updateStep < minGraphUpdateInterval) updateStep = minGraphUpdateInterval;
+                  if(updateStep > maxUpdatePeriod) updateStep = maxUpdatePeriod;
+                  const size_t maxUpdateOptions = 120;
+                  unsigned long optionCount = maxUpdatePeriod / updateStep;
+                  if(optionCount > maxUpdateOptions){
+                    updateStep = maxUpdatePeriod / maxUpdateOptions;
                     if(updateStep < minGraphUpdateInterval) updateStep = minGraphUpdateInterval;
-                    if(updateStep > maxUpdatePeriod) updateStep = maxUpdatePeriod;
-                    const size_t maxUpdateOptions = 120; // ограничиваем длину выпадающего списка, чтобы не переполнять память
-                    unsigned long optionCount = maxUpdatePeriod / updateStep;
-                    if(optionCount > maxUpdateOptions){
-                      updateStep = maxUpdatePeriod / maxUpdateOptions;
-                      if(updateStep < minGraphUpdateInterval) updateStep = minGraphUpdateInterval;
-                    }
-                    String maxPointsRaw = readSetting("maxPoints");
-                    int defaultGraphMax = maxPointsRaw.length() ? maxPointsRaw.toInt() : (maxPoints > 0 ? maxPoints : 30);
-                    // unsigned long defaultUpdate = updateInterval > 0 ? updateInterval : 1000;
-                    // unsigned long defaultUpdate = updateInterval > 0 ? updateInterval : updateStep;
-                    // GraphSettings seriesSettings{defaultUpdate, defaultGraphMax};
-                    if(defaultGraphMax < minGraphPoints) defaultGraphMax = minGraphPoints;
-                    int maxSelectablePoints = defaultGraphMax;
-                    if(maxSelectablePoints > maxGraphPoints) maxSelectablePoints = maxGraphPoints;
-                    unsigned long defaultUpdate = updateInterval > 0 ? updateInterval : updateStep;
-                    GraphSettings seriesSettings{defaultUpdate, maxSelectablePoints};
+                  }
+                  String maxPointsRaw = readSetting("maxPoints");
+                  int defaultGraphMax = maxPointsRaw.length() ? maxPointsRaw.toInt() : (maxPoints > 0 ? maxPoints : 30);
+                  if(defaultGraphMax < minGraphPoints) defaultGraphMax = minGraphPoints;
+                  int maxSelectablePoints = defaultGraphMax;
+                  if(maxSelectablePoints > maxGraphPoints) maxSelectablePoints = maxGraphPoints;
+                  unsigned long defaultUpdate = updateInterval > 0 ? updateInterval : updateStep;
+                  GraphSettings seriesSettings{defaultUpdate, maxSelectablePoints};
 
-
-
-                    if(!loadGraphSettings(seriesName, seriesSettings)){
-                      loadGraphSettings(valueName, seriesSettings);
-                    }
-                    int graphUpdateInterval = seriesSettings.updateInterval;
-                    if(graphUpdateInterval < (int)minGraphUpdateInterval) graphUpdateInterval = minGraphUpdateInterval;
-                    if(graphUpdateInterval > (int)maxUpdatePeriod) graphUpdateInterval = maxUpdatePeriod;
-                    int graphMaxPoints = seriesSettings.maxPoints;
-                    if(graphMaxPoints < minGraphPoints) graphMaxPoints = minGraphPoints;
-                    // if(graphMaxPoints > maxGraphPoints) graphMaxPoints = maxGraphPoints;
-                    if(graphMaxPoints > maxSelectablePoints) graphMaxPoints = maxSelectablePoints;
-                    String graphUpdateStr = String(graphUpdateInterval);
-                    String graphMaxStr = String(graphMaxPoints);
+                  if(!loadGraphSettings(seriesName, seriesSettings)){
+                    loadGraphSettings(valueName, seriesSettings);
+                  }
+                  int graphUpdateInterval = seriesSettings.updateInterval;
+                  if(graphUpdateInterval < (int)minGraphUpdateInterval) graphUpdateInterval = minGraphUpdateInterval;
+                  if(graphUpdateInterval > (int)maxUpdatePeriod) graphUpdateInterval = maxUpdatePeriod;
+                  int graphMaxPoints = seriesSettings.maxPoints;
+                  if(graphMaxPoints < minGraphPoints) graphMaxPoints = minGraphPoints;
+                  if(graphMaxPoints > maxSelectablePoints) graphMaxPoints = maxSelectablePoints;
+                  String graphUpdateStr = String(graphUpdateInterval);
+                  String graphMaxStr = String(graphMaxPoints);
                   String tableId = "graphTable_"+e.id;
                   String containerStyle = "width:"+widthStyle+";max-width:100%;height:auto;padding:10px 12px;";
                   containerStyle += "display:flex;flex-direction:column;";
@@ -1009,10 +1011,9 @@ private:
                   }
                   html += "<div class='card graph-card' style='"+containerStyle+"'>";
                   html += "<div class='graph-heading'>"+e.label+"</div>";
-                  // html += "<canvas id='graph_"+e.id+"' class='dash-graph' data-graph-id='"+e.id+"' width='"+String(canvasWidth)+"' height='"+String(canvasHeight)+"' data-series='"+valueName+"' data-table-id='"+tableId+"' data-update-interval='"+String(graphUpdateInterval)+"' data-max-points='"+String(graphMaxPoints)+"' data-line-color='"+lineColor+"' data-point-color='"+pointColor+"' data-x-label='"+xLabel+"' data-y-label='"+yLabel+"' style='border:1px solid rgba(255,255,255,0.08);height:"+heightStyle+";'></canvas>";
                   html += "<canvas id='graph_"+e.id+"' class='dash-graph' data-graph-id='"+e.id+"' width='"+String(canvasWidth)+"' height='"+String(canvasHeight)+"' data-series='"+seriesName+"' data-table-id='"+tableId+"' data-update-interval='"+String(graphUpdateInterval)+"' data-max-points='"+String(graphMaxPoints)+"' data-line-color='"+lineColor+"' data-point-color='"+pointColor+"' data-x-label='"+xLabel+"' data-y-label='"+yLabel+"' style='border:1px solid rgba(255,255,255,0.08);height:"+heightStyle+";'></canvas>";
                   html += "<div class='graph-axes'><span class='axis-name'>"+xLabel+"</span><span class='axis-name'>"+yLabel+"</span></div>";
-                  html += "</div>";
+              html += "</div>";
                   html += "<div class='card graph-controls' style='margin-bottom:0;'>";
                   html += "<div class='control-group'><label>Update Interval</label>";
                   html += "<select class='graph-update-interval' data-graph='"+e.id+"'>";
@@ -1036,11 +1037,10 @@ private:
                   for(unsigned long opt = updateStep; opt <= maxUpdatePeriod; opt += updateStep){
                       String val = String(opt);
                       html += String("<option value='") + val + "'" + (graphUpdateStr==val ? " selected" : "") + ">" + formatIntervalLabel(opt) + "</option>";
-                      if(maxUpdatePeriod - opt < updateStep) break; // защита от переполнения
+                                          if(maxUpdatePeriod - opt < updateStep) break;
                   }
                   html += "</select></div>";
                   html += "<div class='control-group'><label>Max Points</label>";
-                  // html += "<input class='graph-max-points' data-graph='"+e.id+"' type='number' min='1' max='50' value='"+graphMaxStr+"'>";
                   html += "<input class='graph-max-points' data-graph='"+e.id+"' type='number' min='1' max='"+String(maxSelectablePoints)+"' value='"+graphMaxStr+"'>";
                   html += "</div>";
                   html += "</div>";
@@ -1072,7 +1072,7 @@ private:
               else if(e.type=="float") html += "<label>"+e.label+"</label><input id='"+e.id+"' type='number' step='0.1' value='"+val+"'>";
               else if(e.type=="time") html += "<label>"+e.label+"</label><input id='"+e.id+"' type='time' value='"+val+"'>";
               else if(e.type=="color") html += "<label>"+e.label+"</label><input id='"+e.id+"' type='color' value='"+val+"'>";
-              else if(e.type=="checkbox"){ 
+              else if(e.type=="checkbox"){
                 String checked = (val == "1" || val.equalsIgnoreCase("true")) ? " checked" : "";
                 html += "<label><input id='"+e.id+"' type='checkbox' value='1'"+checked+">"+e.label+"</label>";
               }
@@ -1110,7 +1110,7 @@ private:
                   String text = (state == "1") ? "ON" : "OFF";
                   String cssState = (state == "1") ? " on" : " off";
 
-                  // val (e.value) can contain layout config: x:..;y:..;width:..;height:..
+                
                   String cfg = e.value;
                   auto readProp = [&](const String &prop)->String {
                       String key = prop + ":";
@@ -1152,22 +1152,25 @@ private:
 
                   html += "<label>"+e.label+"</label><button id='"+e.id+"' class='dash-btn"+cssState+"' data-type='dashButton' data-state='"+state+"'"+styleAttr+">"+text+"</button>";
               }
-            else if(e.type=="display" || e.type=="displayString") 
-              html += "<label>"+e.label+"</label><div id='"+e.id+"' style='font-size:1.2em; min-height:1.5em; color:#fff;'>"+val+"</div>";
-            else if(e.type=="displayStringAbsolute") {
-                // Стиль задается в e.value в формате: : x:20;y:20;fontSize:18;color:#fff
-                int x=0, y=0, fontSize=16;
-                String color="#ffffff";
-                String style = e.value; // "x:20;y:20;fontSize:18;color:#ffffff"
-                int idx;
+              else if(e.type=="popupButton"){
+                  String btnText = e.label.length() ? e.label : "Open";
+                  html += "<button class='btn-primary' data-popup-open='"+e.value+"'>"+btnText+"</button>";
+              }
+              else if(e.type=="display" || e.type=="displayString") 
+                html += "<label>"+e.label+"</label><div id='"+e.id+"' style='font-size:1.2em; min-height:1.5em; color:#fff;'>"+val+"</div>";
+              else if(e.type=="displayStringAbsolute") {
+                  int x=0, y=0, fontSize=16;
+                  String color="#ffffff";
+                  String style = e.value;
+                  int idx;
 
-                if((idx = style.indexOf("x:"))!=-1) x = style.substring(idx+2, style.indexOf(";", idx)).toInt();
-                if((idx = style.indexOf("y:"))!=-1) y = style.substring(idx+2, style.indexOf(";", idx)).toInt();
-                if((idx = style.indexOf("fontSize:"))!=-1) fontSize = style.substring(idx+9, style.indexOf(";", idx)).toInt();
-                if((idx = style.indexOf("color:"))!=-1) color = style.substring(idx+6);
+                  if((idx = style.indexOf("x:"))!=-1) x = style.substring(idx+2, style.indexOf(";", idx)).toInt();
+                  if((idx = style.indexOf("y:"))!=-1) y = style.substring(idx+2, style.indexOf(";", idx)).toInt();
+                  if((idx = style.indexOf("fontSize:"))!=-1) fontSize = style.substring(idx+9, style.indexOf(";", idx)).toInt();
+                  if((idx = style.indexOf("color:"))!=-1) color = style.substring(idx+6);
 
-                html += "<div id='"+e.id+"' style='position:absolute; left:"+String(x)+"px; top:"+String(y)+"px; font-size:"+String(fontSize)+"px; color:"+color+";'>"+e.label+"</div>";
-            }
+                  html += "<div id='"+e.id+"' style='position:absolute; left:"+String(x)+"px; top:"+String(y)+"px; font-size:"+String(fontSize)+"px; color:"+color+";'>"+e.label+"</div>";
+              }
 
               else if(e.type=="dropdown"){
                   html += "<label>"+e.label+"</label><select id='"+e.id+"'>";
@@ -1196,95 +1199,114 @@ private:
               else if(e.type=="selectdays"){
                   html += "<label>"+e.label+"</label>";
                   html += "<div id='"+e.id+"' class='select-days'>";
-                                    const char* dayValues[] = {"Mon","Tue","Wed","Thu","Fri","Sat","Sun"};
+                 const char* dayValues[] = {"Mon","Tue","Wed","Thu","Fri","Sat","Sun"};
                   const char* dayLabels[] = {"ПН","ВТ","СР","ЧТ","ПТ","СБ","ВС"};
                   for(int i=0;i<7;i++){
                       bool checked = val.indexOf(dayValues[i])>=0;
                       html += "<label class='day-pill'><input type='checkbox' value='"+String(dayValues[i])+"' "
                           +(checked?"checked":"")+"><span>"+String(dayLabels[i])+"</span></label>";
                   }
-                  html += "</div>"; // ????????? select-days
+                  html += "</div>";
               }
-else if(e.type=="range"){ // Диапазонный слайдер с двумя ползунками (минимум и максимум)
-    String cfg = e.value;
-    auto readRangeCfg = [&](const String &prop)->String {
-        String token = prop + "=";
-        int start = cfg.indexOf(token);
-        if(start < 0) return "";
-        start += token.length();
-        int end = cfg.indexOf(';', start);
-        if(end < 0) end = cfg.length();
-        return cfg.substring(start, end);
-    };
-    float minCfg = 0;
-    float maxCfg = 100;
-    float stepCfg = 1;
-    String minStr = readRangeCfg("min");
-    if(minStr.length()) minCfg = minStr.toFloat();
-    String maxStr = readRangeCfg("max");
-    if(maxStr.length()) maxCfg = maxStr.toFloat();
-    String stepStr = readRangeCfg("step");
-    if(stepStr.length()) stepCfg = stepStr.toFloat();
+          else if(e.type=="range"){
+                  String cfg = e.value;
+                  auto readRangeCfg = [&](const String &prop)->String {
+                      String token = prop + "=";
+                      int start = cfg.indexOf(token);
+                      if(start < 0) return "";
+                      start += token.length();
+                      int end = cfg.indexOf(';', start);
+                      if(end < 0) end = cfg.length();
+                      return cfg.substring(start, end);
+                  };
+                  float minCfg = 0;
+                  float maxCfg = 100;
+                  float stepCfg = 1;
+                  String minStr = readRangeCfg("min");
+                  if(minStr.length()) minCfg = minStr.toFloat();
+                  String maxStr = readRangeCfg("max");
+                  if(maxStr.length()) maxCfg = maxStr.toFloat();
+                  String stepStr = readRangeCfg("step");
+                  if(stepStr.length()) stepCfg = stepStr.toFloat();
 
-    int minVal = static_cast<int>(minCfg);
-    int maxVal = static_cast<int>(maxCfg);
-    if(val.length()){
-        int sep = val.indexOf('-');
-        if(sep >= 0){
-            minVal = val.substring(0, sep).toInt();
-            maxVal = val.substring(sep + 1).toInt();
-        }
-    }
+                  int minVal = static_cast<int>(minCfg);
+                  int maxVal = static_cast<int>(maxCfg);
+                  if(val.length()){
+                      int sep = val.indexOf('-');
+                      if(sep >= 0){
+                          minVal = val.substring(0, sep).toInt();
+                          maxVal = val.substring(sep + 1).toInt();
+                      }
+                  }
 
 
-    String rangeLabel = e.label.length() ? e.label : "Range Slider";
-    String rangeId = e.id;
-    html += "<label>"+rangeLabel+"</label>"
-            "<div class='range-slider' id='"+rangeId+"'>"
-            "<input type='range' id='"+rangeId+"Min' min='"+String(minCfg)+"' max='"+String(maxCfg)+"' step='"+String(stepCfg)+"' value='" + String(minVal) + "'>"
-            "<input type='range' id='"+rangeId+"Max' min='"+String(minCfg)+"' max='"+String(maxCfg)+"' step='"+String(stepCfg)+"' value='" + String(maxVal) + "'>"
-            "<div class='slider-track'></div>"
-            "</div>"
-            "<div>Range: <span id='"+rangeId+"Val'>" + String(minVal) + " - " + String(maxVal) + "</span>%</div>"
-            "<style>"
-            ".range-slider { position: relative; width: 100%; height: 10px; --thumb-size: 20px; }"
-            ".range-slider input[type=range] { position: absolute; width: 100%; pointer-events: none; -webkit-appearance: none; background: none; }"
-            ".range-slider input[type=range]::-webkit-slider-thumb { pointer-events: all; width: var(--thumb-size); height: var(--thumb-size); border-radius: 50%; background: #1e88e5; -webkit-appearance: none; cursor: pointer; position: relative; z-index: 3; }"
-            ".slider-track { position: absolute; height: 6px; top: 50%; transform: translateY(-50%); background: #444; border-radius: 3px; left: calc(var(--thumb-size) / 2); right: calc(var(--thumb-size) / 2); }"
-            "</style>"
-            "<script>"
-            "(() => {"
-            "  const rangeId = '"+rangeId+"';"
-            "  const minEl = document.getElementById(rangeId + 'Min');"
-            "  const maxEl = document.getElementById(rangeId + 'Max');"
-            "  const track = document.querySelector('#' + rangeId + ' .slider-track');"
-            "  const display = document.getElementById(rangeId + 'Val');"
-            "  if(!minEl || !maxEl) return;"
-            "  const minLimit = "+String(minCfg)+";"
-            "  const maxLimit = "+String(maxCfg)+";"
-            "  const updateRangeSlider = () => {"
-            "    let min = parseFloat(minEl.value);"
-            "    let max = parseFloat(maxEl.value);"
-            "    if(min > max){ [min, max] = [max, min]; minEl.value=min; maxEl.value=max; }"
-            "    if(display) display.innerText = min + ' - ' + max;"
-            "    const span = (maxLimit - minLimit) || 1;"
-            "    const minPct = ((min - minLimit) / span) * 100;"
-            "    const maxPct = ((max - minLimit) / span) * 100;"
-            "    if(track) track.style.background = `linear-gradient(to right, #444 ${minPct}%, #1e88e5 ${minPct}%, #1e88e5 ${maxPct}%, #444 ${maxPct}%)`;"
-            "    fetch('/save?key=' + encodeURIComponent(rangeId) + '&val=' + encodeURIComponent(min + '-' + max));"
-            "  };"
-            "  minEl.addEventListener('input', updateRangeSlider);"
-            "  maxEl.addEventListener('input', updateRangeSlider);"
-            "  updateRangeSlider();"
-            "})();"
-            "</script>";
-}
+               String rangeLabel = e.label.length() ? e.label : "Range Slider";
+                  String rangeId = e.id;
+                  html += "<label>"+rangeLabel+"</label>"
+                          "<div class='range-slider' id='"+rangeId+"'>"
+                          "<input type='range' id='"+rangeId+"Min' min='"+String(minCfg)+"' max='"+String(maxCfg)+"' step='"+String(stepCfg)+"' value='" + String(minVal) + "'>"
+                          "<input type='range' id='"+rangeId+"Max' min='"+String(minCfg)+"' max='"+String(maxCfg)+"' step='"+String(stepCfg)+"' value='" + String(maxVal) + "'>"
+                          "<div class='slider-track'></div>"
+                          "</div>"
+                          "<div>Range: <span id='"+rangeId+"Val'>" + String(minVal) + " - " + String(maxVal) + "</span>%</div>"
+                          "<style>"
+                          ".range-slider { position: relative; width: 100%; height: 10px; --thumb-size: 20px; }"
+                          ".range-slider input[type=range] { position: absolute; width: 100%; pointer-events: none; -webkit-appearance: none; background: none; }"
+                          ".range-slider input[type=range]::-webkit-slider-thumb { pointer-events: all; width: var(--thumb-size); height: var(--thumb-size); border-radius: 50%; background: #1e88e5; -webkit-appearance: none; cursor: pointer; position: relative; z-index: 3; }"
+                          ".slider-track { position: absolute; height: 6px; top: 50%; transform: translateY(-50%); background: #444; border-radius: 3px; left: calc(var(--thumb-size) / 2); right: calc(var(--thumb-size) / 2); }"
+                          "</style>"
+                          "<script>"
+                          "(() => {"
+                          "  const rangeId = '"+rangeId+"';"
+                          "  const minEl = document.getElementById(rangeId + 'Min');"
+                          "  const maxEl = document.getElementById(rangeId + 'Max');"
+                          "  const track = document.querySelector('#' + rangeId + ' .slider-track');"
+                          "  const display = document.getElementById(rangeId + 'Val');"
+                          "  if(!minEl || !maxEl) return;"
+                          "  const minLimit = "+String(minCfg)+";"
+                          "  const maxLimit = "+String(maxCfg)+";"
+                          "  const updateRangeSlider = () => {"
+                          "    let min = parseFloat(minEl.value);"
+                          "    let max = parseFloat(maxEl.value);"
+                          "    if(min > max){ [min, max] = [max, min]; minEl.value=min; maxEl.value=max; }"
+                          "    if(display) display.innerText = min + ' - ' + max;"
+                          "    const span = (maxLimit - minLimit) || 1;"
+                          "    const minPct = ((min - minLimit) / span) * 100;"
+                          "    const maxPct = ((max - minLimit) / span) * 100;"
+                          "    if(track) track.style.background = `linear-gradient(to right, #444 ${minPct}%, #1e88e5 ${minPct}%, #1e88e5 ${maxPct}%, #444 ${maxPct}%)`;"
+                          "    fetch('/save?key=' + encodeURIComponent(rangeId) + '&val=' + encodeURIComponent(min + '-' + max));"
+                          "  };"
+                          "  minEl.addEventListener('input', updateRangeSlider);"
+                          "  maxEl.addEventListener('input', updateRangeSlider);"
+                          "  updateRangeSlider();"
+                          "})();"
+                          "</script>";
+              }
 
-              html += "</div>"; // Закрываем контейнер .card — завершение текущей карточки UI элемента
+                            html += "</div>";
           }
-          html += "</div>"; // Закрываем контейнер .page — завершение текущей страницы UI
+                };
+
+      bool firstPage = true;
+      for(auto &t : self->tabs){
+           html += "<div id='"+t.id+"' class='page"+String(firstPage?" active":"")+"'>"
+                  "<div class='page-header'><h3>"+t.title+"</h3>"
+                  "<div class='page-datetime' id='page-datetime-"+t.id+"'>--</div></div>";
+          renderTabElements(t.id);
+          html += "</div>";
           firstPage = false;
       }
+
+       for(auto &popup : self->popups){
+          html += "<div id='popup-"+popup.id+"' class='dash-modal hidden' data-popup='"+popup.id+"'>"
+                  "<div class='dash-modal-content'>"
+                  "<div class='dash-modal-header'><h4>"+popup.title+"</h4>"
+                  "<button class='icon-btn' onclick=\"closePopup('"+popup.id+"')\">&times;</button></div>"
+                  "<div class='dash-modal-body'><div class='popup-grid'>";
+          renderTabElements(popup.tabId);
+          html += "</div></div></div></div>";
+      }
+
 
       // ====== WiFi страница ======
       html += "<div id='wifi' class='page'>"
@@ -1419,6 +1441,26 @@ else if(e.type=="range"){ // Диапазонный слайдер с двумя
     if(id === 'mqtt') startMqttStatusUpdates();
     else stopMqttStatusUpdates();
   }
+
+
+  function openPopup(id){
+    const modal = document.getElementById('popup-' + id);
+    if(!modal) return;
+    modal.classList.remove('hidden');
+    modal.onclick = (e)=>{ if(e.target === modal) closePopup(id); };
+  }
+
+  function closePopup(id){
+    const modal = document.getElementById('popup-' + id);
+    if(modal) modal.classList.add('hidden');
+  }
+
+  document.addEventListener('click', (event)=>{
+    const trigger = event.target.closest('[data-popup-open]');
+    if(!trigger) return;
+    openPopup(trigger.dataset.popupOpen);
+  });
+
 
  // Скрыть/показать боковую панель
 function toggleSidebar(){
