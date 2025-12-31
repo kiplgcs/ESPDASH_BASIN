@@ -143,7 +143,7 @@ inline void interface(){
 
     UI_DISPLAY_FLOAT("PH", PH, "pH (текущее)");
 
-    UI_POPUP_BEGIN("Cal_PH", "Калибровка датчика", "Открыть окно калибровки датчика PH");
+    UI_POPUP_BEGIN("Cal_PH", "Калибровка датчика PH", "Открыть окно калибровки датчика PH");
 
     // UI_DUAL_RANGE_KEYS("Float_PH_Slider", PH1, PH2, "Min_CAL PH1:4.1", "Max_CAL PH2:6.86", 4.0, 10.0, 0.1, "Range PH Min-Max");
 
@@ -243,5 +243,12 @@ inline void interface(){
     "value:Temperatura;updatePeriod_of_Time:60;updateStep:5;maxPoints:30;width:100%;height:400;"
     "xLabel:Time;yLabel:Temperature;pointColor:#6b66ff;lineColor:#ff5e5e;"
     "lineWidth:1;pointRadius:3;smooth:false", Temperatura);
+
+        UI_POPUP_BEGIN("CL", "Калибровка датчика хлора", "Открыть окно калибровки датчика CL хлора}");
+            static String Cl_Cal_str = String(corrected_ORP_Eh_mV) + "-" + String(CalRastvor256mV) + "=" + String(CalRastvor256mV - corrected_ORP_Eh_mV);   
+            UI_NUMBER("Cl_Cal", Cl_Cal_str, "ORP - ORPCal = калибровочный коэффициент", true);
+            UI_NUMBER("CalRastvor256mV", CalRastvor256mV, "ОВП калибровочного раствора - мВ", false);
+            UI_NUMBER("Calibration_ORP_mV", Calibration_ORP_mV, "Калибровочный коэффициент - мВ", false);
+        UI_POPUP_END();
 
 }
