@@ -71,7 +71,8 @@ void setup() {
   // Загрузка настроек доступа к веб-интерфейсу
   authUsername = loadValue<String>("authUser", "");
   authPassword = loadValue<String>("authPass", "");
-
+  adminUsername = loadValue<String>("adminUser", "");
+  adminPassword = loadValue<String>("adminPass", "");
 
   // Запуск OTA-обновлений на порту 8080
   beginWebUpdate();

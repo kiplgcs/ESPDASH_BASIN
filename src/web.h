@@ -45,6 +45,8 @@ inline String StoredAPSSID;      // Сохраненный SSID точки до�
 inline String StoredAPPASS;      // Сохраненный пароль точки доступа
 inline String authUsername;      // Логин для доступа к веб-интерфейсу
 inline String authPassword;      // Пароль для доступа к веб-интерфейсу
+inline String adminUsername;     // Логин администратора для всплывающих окон
+inline String adminPassword;     // Пароль администратора для всплывающих окон
 inline int button1 = 0;          // Состояние кнопки 1
 inline int button2 = 0;          // Состояние кнопки 2
 inline int RangeMin = 10;        // Минимальное значение диапазонного слайдера
@@ -444,6 +446,20 @@ inline bool ensureAuthorized(AsyncWebServerRequest *request){
   }
   return true;
 }
+
+inline bool isAdminAuthConfigured(){
+  return adminUsername.length() > 0 && adminPassword.length() > 0;
+}
+
+inline bool ensureAdminAuthorized(AsyncWebServerRequest *request){
+  if(!isAdminAuthConfigured()) return true;
+  if(!request->authenticate(adminUsername.c_str(), adminPassword.c_str())){
+    request->requestAuthentication();
+    return false;
+  }
+  return true;
+}
+
 
 // ---------- Структуры UI ----------
 struct Tab { String id; String title; };
@@ -1386,13 +1402,23 @@ private:
  // ====== Профиль ======
       html += "<div id='profile' class='page'><h3>Профиль</h3>"
               "<div class='card compact'>"
+              "<h4>Доступ к веб-интерфейсу</h4>"
               "<div class='mqtt-grid'>"
               "<div class='mqtt-field'><label>Логин</label><input id='profile-user' value='"+authUsername+"'></div>"
               "<div class='mqtt-field'><label>Пароль</label><input id='profile-pass' type='password' value='"+authPassword+"'></div>"
               "</div>"
+              "<span class='profile-hint'>Пустые поля отключают аутентификацию.</span>"
+              "</div>"
+              "<div class='card compact'>"
+              "<h4>Администратор (для всплывающих окон)</h4>"
+              "<div class='mqtt-grid'>"
+              "<div class='mqtt-field'><label>Логин администратора</label><input id='profile-admin-user' value='"+adminUsername+"'></div>"
+              "<div class='mqtt-field'><label>Пароль администратора</label><input id='profile-admin-pass' type='password' value='"+adminPassword+"'></div>"
+              "</div>"
+              "<span class='profile-hint'>Пустые поля отключают аутентификацию.</span>"
+              "</div>"
               "<div class='mqtt-actions'>"
               "<button class='btn-primary btn-mqtt btn-success' onclick='saveProfileSettings()'>Сохранить</button>"
-              "<span class='profile-hint'>Пустые поля отключают аутентификацию.</span>"
               "</div>"
               "<div id='profile-status' class='profile-hint'></div>"
               "</div></div>";
@@ -1409,6 +1435,7 @@ private:
       timerIdsScript += "];</script>";
       html += timerIdsScript;
 
+      html += String("<script>const popupAuthRequired=") + (isAdminAuthConfigured() ? "true" : "false") + ";</script>";
 
       html += R"rawliteral(
   <script>
@@ -1450,15 +1477,39 @@ private:
     modal.onclick = (e)=>{ if(e.target === modal) closePopup(id); };
   }
 
+  async function ensurePopupAuthorized(){
+    if(!popupAuthRequired) return true;
+
+    const user = prompt('Логин администратора');
+    if(user === null) return false;
+    const pass = prompt('Пароль администратора');
+    if(pass === null) return false;
+    const token = btoa(`${user}:${pass}`);
+    try {
+      const res = await fetch('/popup/auth', {
+        headers: { Authorization: `Basic ${token}` },
+      });
+      if(res.ok){
+        return true;
+      }
+    } catch (err) {
+      console.warn('Popup auth verification failed', err);
+    }
+    alert('Неверный логин или пароль.');
+    return false;
+  }
+
+
   function closePopup(id){
     const modal = document.getElementById('popup-' + id);
     if(modal) modal.classList.add('hidden');
   }
 
-  document.addEventListener('click', (event)=>{
+  document.addEventListener('click', async (event)=>{
     const trigger = event.target.closest('[data-popup-open]');
     if(!trigger) return;
-    openPopup(trigger.dataset.popupOpen);
+    const allowed = await ensurePopupAuthorized();
+    if(allowed) openPopup(trigger.dataset.popupOpen);
   });
 
 
@@ -1574,12 +1625,11 @@ function toggleSidebar(){
   }
 
 function saveProfileSettings(){
-    const statusEl = document.getElementById('profile-status');
-    const user = (document.getElementById('profile-user') || {}).value || '';
-    const pass = (document.getElementById('profile-pass') || {}).value || '';
+    const adminUser = (document.getElementById('profile-admin-user') || {}).value || '';
+    const adminPass = (document.getElementById('profile-admin-pass') || {}).value || '';
     if(statusEl) statusEl.innerText = 'Сохранение...';
 
-    const payload = new URLSearchParams({user, pass});
+    const payload = new URLSearchParams({user, pass, adminUser, adminPass});
     fetch('/profile/save', {method:'POST', body: payload})
       .then(()=>{ if(statusEl) statusEl.innerText = 'Сохранено.'; })
       .catch(()=>{ if(statusEl) statusEl.innerText = 'Ошибка сохранения.'; })
@@ -2310,6 +2360,12 @@ function setImg(x){
       r->send(200,"text/html",html);
     });
 
+        server.on("/popup/auth", HTTP_GET, [](AsyncWebServerRequest *r){
+      if(!ensureAdminAuthorized(r)) return;
+      r->send(200, "text/plain", "OK");
+    });
+
+
     // ---------------- SAVE ----------------
        server.on("/save", HTTP_GET, [self](AsyncWebServerRequest *r){
       if(!ensureAuthorized(r)) return;
@@ -2437,8 +2493,12 @@ function setImg(x){
       };
       authUsername = paramOr("user", authUsername);
       authPassword = paramOr("pass", authPassword);
+      adminUsername = paramOr("adminUser", adminUsername);
+      adminPassword = paramOr("adminPass", adminPassword);
       saveValue<String>("authUser", authUsername);
       saveValue<String>("authPass", authPassword);
+      saveValue<String>("adminUser", adminUsername);
+      saveValue<String>("adminPass", adminPassword);
       r->send(200, "application/json", "{\\\"status\\\":\\\"saved\\\"}");
     });
 
