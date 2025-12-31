@@ -1,4 +1,3 @@
-
 // // Функция для усреднения значений АЦП
 // int readAnalog(int pin, int samples = 10) {
 //     int sum = 0;
@@ -31,10 +30,10 @@
 // return mV;
 // }
 
-
-
- const uint8_t samples = 3;           // Количество выборок для усреднения аналоговых измерений
-
+const uint8_t samples = 3;           // Количество выборок для усреднения аналоговых измерений
+const uint8_t ads1Address = 0x48;     // I2C-адрес первого ADS1115 (pH)
+const uint8_t ads2Address = 0x49;     // I2C-адрес второго ADS1115 (Cl2)
+const uint16_t adsConversionTimeoutMs = 25; // Таймаут ожидания АЦП, чтобы не зависать в цикле
 // --- Для pH-датчика (ADS1, канал A0) ---
 uint8_t countPH = 0;                 // Счётчик выборок
 int32_t totalPH = 0;                 // Сумма всех выборок для усреднения
@@ -44,6 +43,37 @@ int analogValuePH;
 uint8_t countCL = 0;                 // Счётчик выборок
 int32_t totalCL = 0;                 // Сумма всех выборок
 int analogValueCL;
+
+// Проверка доступности устройства на I2C (быстрый "ping" без чтения данных).
+bool isI2CDeviceReady(uint8_t address) {
+    Wire.beginTransmission(address);
+    return Wire.endTransmission() == 0;
+}
+
+// Безопасное чтение ADS1115: проверяем I2C, запускаем конверсию и ждём готовность с таймаутом.
+// Возвращает false, если устройство недоступно или конверсия не завершилась вовремя.
+bool readAdsSingleEndedSafe(Adafruit_ADS1115 &ads, uint8_t address, uint8_t channel, int16_t &result) {
+    if (channel > 3) {
+        return false;
+    }
+
+    if (!isI2CDeviceReady(address)) {
+        return false;
+    }
+
+    ads.startADCReading(MUX_BY_CHANNEL[channel], false);
+    unsigned long start = millis();
+    while (!ads.conversionComplete()) {
+        if (millis() - start > adsConversionTimeoutMs) {
+            return false;
+        }
+        // Короткая задержка, чтобы не грузить CPU в плотном цикле ожидания.
+        delay(1);
+    }
+
+    result = ads.getLastConversionResults();
+    return true;
+}
 
 
 
@@ -65,6 +95,16 @@ void loop_PH(int interval) {
  
     // if (!ads1.begin(0x48)) return; // если I2C не отвечает — выходим
     totalPH += ads1.readADC_SingleEnded(0); // Читаем значение с канала A0 и добавляем к сумме
+        int16_t rawPH = 0;
+    if (!readAdsSingleEndedSafe(ads1, ads1Address, 0, rawPH)) {
+        // Если АЦП недоступен/завис — сбрасываем накопление и выходим,
+        // чтобы не держать старые данные и не блокировать основной loop().
+        countPH = 0;
+        totalPH = 0;
+        return;
+    }
+
+    totalPH += rawPH; // Читаем значение с канала A0 и добавляем к сумме
     countPH++;                              // Увеличиваем счётчик выборок
 
 
@@ -286,6 +326,16 @@ void loop_CL2(int interval) {
   // ----------- ХЛОР (ADS2, канал A1) -----------
 //    if (!ads2.begin(0x49)) return; // если I2C не отвечает — выходим
   totalCL += ads2.readADC_SingleEnded(1);  // Считываем значение с ADS2 (канал 1)
+    int16_t rawCL = 0;
+  if (!readAdsSingleEndedSafe(ads2, ads2Address, 1, rawCL)) {
+      // Если АЦП недоступен/завис — сбрасываем накопление и выходим,
+      // чтобы не держать старые данные и не блокировать основной loop().
+      countCL = 0;
+      totalCL = 0;
+      return;
+  }
+
+  totalCL += rawCL;  // Считываем значение с ADS2 (канал 1)
   countCL++;                               // Увеличиваем счётчик
 
   if (countCL < samples) return;           // Ждём, пока не наберётся 3 выборки
@@ -349,4 +399,3 @@ void loop_CL2(int interval) {
                     // float b_chlorine = 0.05; // Эмпирический коэффициент - определяет чувствительность концентрации хлора к изменениям pH
                     // chlorineConcentration = k_chlorine * pow(10, (Eh - b_chlorine * PH));
                     // jee.var("CL2_Kosv", String(chlorineConcentration, 2) + " млг/литр"); // Косвенное содержание хлора CL2 млг/литр, норма: 3млг/литр
-

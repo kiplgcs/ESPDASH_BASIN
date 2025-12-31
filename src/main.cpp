@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WiFiUdp.h>
+#include <Wire.h> // I2C и ADS1115 подключаем здесь, чтобы не дублировать в PH_CL2.h
 #include "NPT_Time.h"
 
 #include "wifi_manager.h"        // Логика Wi-Fi и сохранение параметров
@@ -17,7 +18,7 @@
 #include "ds18.h"
 
 /************************* Подключаем библиотеку  АЦП модуль ADS1115 16-бит *********************************/
-#include <Adafruit_ADS1X15.h> // Библиотека для работы с модулями ADS1115 и ADS1015
+#include <Adafruit_ADS1X15.h> // Библиотека для работы с модулями ADS1115 и ADS1015 (используется в PH_CL2.h)
 //Adafruit_ADS1115 ads;  /* Use this for the 16-bit version */
 Adafruit_ADS1115 ads1; // Первый ADS1115 - PH
 Adafruit_ADS1115 ads2; // Второй ADS1115 - Хлор 
@@ -97,8 +98,8 @@ void setup() {
   
   // ads.begin(); //инициализируем модуль с ранее настроенными параметрами
 
-  ads1.begin(0x48);
-  ads2.begin(0x49);
+  ads1.begin(ads1Address);
+  ads2.begin(ads2Address);
  
   /************************* инициализируем монитор Nextion*********************************/
  
@@ -240,8 +241,8 @@ void loop() {
 TimerControlRelay(10000);  // TimerControlRelay(600); //Контроль включения реле по таймерам
 
 ControlModbusRelay(1000);
-loop_PH(2000);
-loop_CL2(2000);
+// loop_PH(2000);
+// loop_CL2(2000);
 
 /**************************** *********************************************************************/
   Nextion_Transmit(500); // Отправка в Nextion по очереди
