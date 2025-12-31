@@ -43,8 +43,11 @@ inline String SetLamp;           // Режим работы лампы
 inline String SetRGB;            // Режим управления RGB подсветкой
 inline String StoredAPSSID;      // Сохраненный SSID точки доступа
 inline String StoredAPPASS;      // Сохраненный пароль точки доступа
+inline String authUsername;      // Логин для доступа к веб-интерфейсу
+inline String authPassword;      // Пароль для доступа к веб-интерфейсу
 inline int button1 = 0;          // Состояние кнопки 1
 inline int button2 = 0;          // Состояние кнопки 2
+inline int button_Cal_PH=0;       //Кнопка активации калибровки датчика PH
 inline int RangeMin = 10;        // Минимальное значение диапазонного слайдера
 inline int RangeMax = 40;        // Максимальное значение диапазонного слайдера
 inline int jpg = 1;              // Флаг JPG отображения (например, переключение картинок)
@@ -430,6 +433,19 @@ inline bool readPsramStats(uint32_t &freePsram, uint32_t &totalPsram){
   return false;
 }
 
+inline bool isAuthConfigured(){
+  return authUsername.length() > 0 && authPassword.length() > 0;
+}
+
+inline bool ensureAuthorized(AsyncWebServerRequest *request){
+  if(!isAuthConfigured()) return true;
+  if(!request->authenticate(authUsername.c_str(), authPassword.c_str())){
+    request->requestAuthentication();
+    return false;
+  }
+  return true;
+}
+
 // ---------- Структуры UI ----------
 struct Tab { String id; String title; };
 struct Element { String type; String id; String label; String value; String tab; };
@@ -459,6 +475,7 @@ private:
     MiniDash *self=this;
 
     server.on("/", HTTP_GET, [self](AsyncWebServerRequest *r){
+      if(!ensureAuthorized(r)) return;
        // Формируем HTML-страницу
       String html = "<!DOCTYPE html><html><head><meta charset='UTF-8'><meta http-equiv='Content-Type' content='text/html; charset=UTF-8'><title>";
       html += dashAppTitle;
@@ -735,7 +752,7 @@ private:
       ".mqtt-grid{display:flex;flex-direction:column;gap:12px;} "
       ".mqtt-field{display:flex;flex-direction:column;gap:6px;} "
       ".mqtt-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:8px;} "
-
+      ".profile-hint{color:#9fb4c8;font-size:0.9em;} "
       ".btn-toggle-on{background:linear-gradient(135deg,#4caf50,#81c784);color:#0b0f14;} "
       ".btn-mqtt{position:relative;overflow:hidden;background:linear-gradient(135deg,#1f2a44,#263555);border:1px solid rgba(111,168,255,0.35);color:#e6edff;box-shadow:0 12px 24px rgba(0,0,0,0.4);} "
       ".btn-mqtt:before{content:'';position:absolute;inset:0;opacity:0;pointer-events:none;background:radial-gradient(circle at 20% 20%,rgba(255,255,255,0.28),transparent 45%);transition:opacity 0.18s ease;} "
@@ -759,6 +776,7 @@ private:
               "<input id='ThemeColor' type='color' value='"+ThemeColor+"'></div>";
       html += "<button onclick=\"showPage('wifi',this)\">WiFi Settings</button>";
       html += "<button onclick=\"showPage('stats',this)\">Statistics</button>";
+            html += "<button onclick=\"showPage('profile',this)\">Профиль</button>";
       html += "<button onclick=\"showPage('mqtt',this)\">Настройка MQTT</button>";
       html += "</div>";
 
@@ -1343,6 +1361,19 @@ else if(e.type=="range"){ // Диапазонный слайдер с двумя
               "</div>"
               "</div></div>";
 
+ // ====== Профиль ======
+      html += "<div id='profile' class='page'><h3>Профиль</h3>"
+              "<div class='card compact'>"
+              "<div class='mqtt-grid'>"
+              "<div class='mqtt-field'><label>Логин</label><input id='profile-user' value='"+authUsername+"'></div>"
+              "<div class='mqtt-field'><label>Пароль</label><input id='profile-pass' type='password' value='"+authPassword+"'></div>"
+              "</div>"
+              "<div class='mqtt-actions'>"
+              "<button class='btn-primary btn-mqtt btn-success' onclick='saveProfileSettings()'>Сохранить</button>"
+              "<span class='profile-hint'>Пустые поля отключают аутентификацию.</span>"
+              "</div>"
+              "<div id='profile-status' class='profile-hint'></div>"
+              "</div></div>";
 
       // ====== Основной скрипт страницы ======
             String timerIdsScript = "<script>const timerIds = [";
@@ -1500,6 +1531,18 @@ function toggleSidebar(){
       .finally(()=>{ if(saveBtn){ saveBtn.disabled = false; saveBtn.innerText = originalText || 'Сохранить настройки'; } });
   }
 
+function saveProfileSettings(){
+    const statusEl = document.getElementById('profile-status');
+    const user = (document.getElementById('profile-user') || {}).value || '';
+    const pass = (document.getElementById('profile-pass') || {}).value || '';
+    if(statusEl) statusEl.innerText = 'Сохранение...';
+
+    const payload = new URLSearchParams({user, pass});
+    fetch('/profile/save', {method:'POST', body: payload})
+      .then(()=>{ if(statusEl) statusEl.innerText = 'Сохранено.'; })
+      .catch(()=>{ if(statusEl) statusEl.innerText = 'Ошибка сохранения.'; })
+      .finally(()=>{ setTimeout(()=>{ if(statusEl) statusEl.innerText = ''; }, 2500); });
+  }
 
   function toggleMqttActivation(){
     const btn = document.getElementById('mqtt-activate-btn');
@@ -2227,6 +2270,7 @@ function setImg(x){
 
     // ---------------- SAVE ----------------
        server.on("/save", HTTP_GET, [self](AsyncWebServerRequest *r){
+      if(!ensureAuthorized(r)) return;
       if(r->hasParam("key") && r->hasParam("val")){
         String key = r->getParam("key")->value();
         String valStr = r->getParam("val")->value();
@@ -2300,6 +2344,7 @@ function setImg(x){
     });
 
     server.on("/mqtt/config", HTTP_GET, [](AsyncWebServerRequest *r){
+      if(!ensureAuthorized(r)) return;
       String json = "{\\\"host\\\":\\\""+jsonEscape(mqttHost)+"\\\",";
       json += "\\\"port\\\":" + String(mqttPort) + ",";
       json += "\\\"user\\\":\\\""+jsonEscape(mqttUsername)+"\\\",";
@@ -2310,6 +2355,7 @@ function setImg(x){
     });
 
     server.on("/mqtt/save", HTTP_POST, [](AsyncWebServerRequest *r){
+       if(!ensureAuthorized(r)) return;
       auto paramOr = [&](const char* name, const String &fallback)->String{
         if(r->hasParam(name, true)) return r->getParam(name, true)->value();
         if(r->hasParam(name)) return r->getParam(name)->value();
@@ -2330,6 +2376,7 @@ function setImg(x){
 
 
     server.on("/mqtt/activate", HTTP_POST, [](AsyncWebServerRequest *r){
+      if(!ensureAuthorized(r)) return;
       bool enabled = mqttEnabled;
       if(r->hasParam("enabled", true)) enabled = r->getParam("enabled", true)->value().toInt() == 1;
       else if(r->hasParam("enabled")) enabled = r->getParam("enabled")->value().toInt() == 1;
@@ -2339,8 +2386,22 @@ function setImg(x){
       r->send(200, "application/json", "{\\\"status\\\":\\\"updated\\\"}");
     });
 
+    server.on("/profile/save", HTTP_POST, [](AsyncWebServerRequest *r){
+      if(!ensureAuthorized(r)) return;
+      auto paramOr = [&](const char* name, const String &fallback)->String{
+        if(r->hasParam(name, true)) return r->getParam(name, true)->value();
+        if(r->hasParam(name)) return r->getParam(name)->value();
+        return fallback;
+      };
+      authUsername = paramOr("user", authUsername);
+      authPassword = paramOr("pass", authPassword);
+      saveValue<String>("authUser", authUsername);
+      saveValue<String>("authPass", authPassword);
+      r->send(200, "application/json", "{\\\"status\\\":\\\"saved\\\"}");
+    });
 
     server.on("/button", HTTP_GET, [](AsyncWebServerRequest *r){
+            if(!ensureAuthorized(r)) return;
       if(r->hasParam("id") && r->hasParam("state")){
         String id = r->getParam("id")->value();
         int state = r->getParam("state")->value().toInt();
@@ -2355,6 +2416,7 @@ function setImg(x){
     });
 
     server.on("/live", HTTP_GET, [](AsyncWebServerRequest *r){
+          if(!ensureAuthorized(r)) return;
       // Увеличенный буфер, чтобы сериализация не обрезалась на длинных строках
       StaticJsonDocument<2048> doc;
       doc["CurrentTime"] = CurrentTime;
@@ -2418,6 +2480,7 @@ function setImg(x){
     });
 
     server.on("/stats", HTTP_GET, [](AsyncWebServerRequest *r){
+            if(!ensureAuthorized(r)) return;
       auto formatUptime = [](){
         unsigned long seconds = millis() / 1000;
         unsigned long hours = seconds / 3600;
@@ -2478,10 +2541,12 @@ function setImg(x){
     });
 
     server.on("/wifi/scan", HTTP_GET, [](AsyncWebServerRequest *r){
+            if(!ensureAuthorized(r)) return;
       r->send(200, "application/json", scanWifiNetworksJson());
     });
 
     server.on("/wifi/save", HTTP_POST, [](AsyncWebServerRequest *r){
+      if(!ensureAuthorized(r)) return;
       auto paramOr = [&](const char* name, const String &fallback)->String{
         if(r->hasParam(name, true)) return r->getParam(name, true)->value();
         if(r->hasParam(name)) return r->getParam(name)->value();
@@ -2509,6 +2574,7 @@ function setImg(x){
     });
 
     server.on("/restart", HTTP_POST, [](AsyncWebServerRequest *r){
+            if(!ensureAuthorized(r)) return;
       r->send(200, "text/plain", "Restarting");
       r->client()->stop();
       delay(100);
@@ -2517,6 +2583,7 @@ function setImg(x){
 
 
     server.on("/graphData", HTTP_GET, [](AsyncWebServerRequest *r){
+            if(!ensureAuthorized(r)) return;
       String series = "main";
       if(r->hasParam("series")) series = r->getParam("series")->value();
       const vector<GraphPoint> *points = &graphPoints;
@@ -2536,6 +2603,7 @@ function setImg(x){
     });
 
 server.on("/getImage", HTTP_GET, [](AsyncWebServerRequest *r){
+      if(!ensureAuthorized(r)) return;
     String path = (jpg == 1) ? "/anim1.gif" : "/anim2.gif";
     Serial.println("GET IMAGE -> " + path);
 
@@ -2560,6 +2628,7 @@ server.on("/getImage", HTTP_GET, [](AsyncWebServerRequest *r){
 
     // ---------------- SET JPG (??????????? jpg ??????????) ----------------
     server.on("/setjpg", HTTP_GET, [](AsyncWebServerRequest *r){
+            if(!ensureAuthorized(r)) return;
       if(r->hasParam("val")){
         String v = r->getParam("val")->value();
         int newv = v.toInt();

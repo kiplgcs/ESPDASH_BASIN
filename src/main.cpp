@@ -68,6 +68,11 @@ void setup() {
   loadMqttSettings();
   applyMqttState();
 
+  // Загрузка настроек доступа к веб-интерфейсу
+  authUsername = loadValue<String>("authUser", "");
+  authPassword = loadValue<String>("authPass", "");
+
+
   // Запуск OTA-обновлений на порту 8080
   beginWebUpdate();
 

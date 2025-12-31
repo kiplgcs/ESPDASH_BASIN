@@ -129,21 +129,48 @@ inline void interface(){
         "value:Temperatura;updatePeriod_of_Time:180;updateStep:3;maxPoints:20;width:100%;height:240;"
         "xLabel:Time;yLabel:Temperature;pointColor:#ffd166;lineColor:#4CAF50;"
         "lineWidth:1;pointRadius:3;smooth:false", Temperatura);
+
+
+
     // Контроль PH (NaOCl)
-      UI_PAGE();
-    static const std::initializer_list<UIOption> dosingOptions{{"1", "15 сек"},
+    UI_PAGE();
+ 
+
+    UI_DISPLAY_FLOAT("PH", PH, "pH (текущее)");
+
+    UI_BUTTON("button_Cal_PH", button_Cal_PH, "gray", "Калибровка датчика PH");
+
+    if(button_Cal_PH){
+
+    UI_NUMBER("Float_PH1", PH1, "Min_CAL PH1:4.1", true);
+    static String PH1_CAL_txt = String(PH1_CAL);
+    UI_TEXT("PH1_CAL", PH1_CAL_txt, "АЦП_mV для PH1 (Примерно 3500)");
+    UI_NUMBER("Float_PH2", PH1, "Max_CAL PH2:6.86", true);
+    static String PH2_CAL_txt = String(PH2_CAL);
+    UI_TEXT("PH2_CAL", PH2_CAL_txt, "АЦП_mV для PH2 (Примерно 2900)");
+
+    static String Temper_Reference_txt = String(Temper_Reference);
+    UI_TEXT("Temper_Reference", Temper_Reference_txt, "Темп. референсная");
+    static String Temper_PH_txt = String(Temper_PH);
+    UI_TEXT("Temper_PH", Temper_PH_txt, "Темп. референсная"); //Измеренная тепература для компенасации измерения PH
+
+    }
+
+    UI_DISPLAY_BOOL("Power_ACO", Power_ACO, "Дозатор ACO", "Работа", "Откл.");
+    UI_CHECKBOX("PH_Control_ACO", PH_Control_ACO, "Контроль pH (ACO)");
+    UI_NUMBER("PH_setting", PH_setting, "Верхний предел pH", true);
+
+
+
+   static const std::initializer_list<UIOption> dosingOptions{{"1", "15 сек"},
                                                                {"2", "60 сек"},
                                                                {"3", "5 мин"},
                                                                {"4", "15 мин"},
                                                                {"5", "30 мин"},
                                                                {"6", "1 час"},
                                                                {"7", "24 часа"}};
-
-    UI_DISPLAY_FLOAT("PH", PH, "pH (текущее)");
-    UI_DISPLAY_BOOL("Power_ACO", Power_ACO, "Дозатор ACO", "Работа", "Откл.");
-    UI_CHECKBOX("PH_Control_ACO", PH_Control_ACO, "Контроль pH (ACO)");
-    UI_NUMBER("PH_setting", PH_setting, "Верхний предел pH", true);
     UI_SELECT("ACO_Work", ACO_Work, dosingOptions, "Период дозирования ACO");
+
         // График тренда измеренной температуры:
     //  - "FloatTrend1" — внутреннее имя источника данных (ID графика), которым библиотека связывает график с данными.
     //  - "Temperature1 Trend" — заголовок графика, показываемый в веб-интерфейсе.
