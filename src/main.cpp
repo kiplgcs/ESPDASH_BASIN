@@ -153,9 +153,12 @@ void setup() {
   // ModeSelect = loadValue<String>("ModeSelect","Normal");  // Режим работы
   ModeSelect = loadValue<String>("ModeSelect","Normal");  // Режим работы
   DaysSelect = loadValue<String>("DaysSelect","Mon,Wed,Fri"); // Дни недели
-  RangeMin = loadValue<int>("RangeMin", RangeMin);        // Минимум диапазона
-  RangeMax = loadValue<int>("RangeMax", RangeMax);        // Максимум диапазона
-
+  RangeMin = loadValue<float>("RangeMin", RangeMin);        // Минимум диапазона
+  RangeMax = loadValue<float>("RangeMax", RangeMax);        // Максимум диапазона
+  // PH1_CAL = loadValue<float>("PH1_CAL", PH1_CAL);         // АЦП_mV для PH1
+  // PH2_CAL = loadValue<float>("PH2_CAL", PH2_CAL);         // АЦП_mV для PH2
+  PH1 = loadValue<float>("PH1_MIN", PH1);                 // Точки калибровки PH (минимум)
+  PH2 = loadValue<float>("PH2_MAX", PH2);                 // Точки калибровки PH (максимум)
   Power_Filtr = loadValue<int>("Power_Filtr", 0) != 0;
   Filtr_Time1 = loadValue<int>("Filtr_Time1", 0) != 0;
   Filtr_Time2 = loadValue<int>("Filtr_Time2", 0) != 0;

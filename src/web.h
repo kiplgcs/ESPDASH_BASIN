@@ -67,8 +67,8 @@ int Lumen_Ul, Saved_Lumen_Ul; //освещенность на улице
 //int Lumen_Ul_percent; //Освещенность в процентах
 
 float PH, Saved_PH; //Кислотность воды
-float  PH1, PH2;					//Точки калибровки PH
-float  PH1_CAL, PH2_CAL; 	//Значения для данных точек калибровки PH от 0 до 4095 (12бит)
+float PH1 = 4.1f, PH2 = 6.86f;          //Точки калибровки PH
+float PH1_CAL = 3500.0f, PH2_CAL = 2900.0f; //Значения для данных точек калибровки PH от 0 до 4095 (12бит)
 float Temper_PH; //Измеренная тепература для компенасации измерения PH
 float Temper_Reference; // Температура при котором сенсор выдает свои параметры - 20.0 или 25.0 С для разных сенсоров PH;
 bool Act_PH = false; //Активация калибровки
@@ -772,7 +772,8 @@ private:
       ".dash-modal-content{width:min(880px,95vw);background:#1a1c22;border:1px solid rgba(255,255,255,0.08);border-radius:16px;box-shadow:0 20px 50px rgba(0,0,0,0.7);overflow:hidden;} "
       ".dash-modal-header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid rgba(255,255,255,0.08);} "
       ".dash-modal-body{padding:16px;max-height:calc(100vh - 180px);overflow:auto;} "
-      ".popup-grid{display:grid;grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));gap:15px;position:relative;} "
+      ".popup-grid{display:flex;flex-direction:column;gap:15px;position:relative;width:100%;} "
+      ".popup-grid .card{width:100%;} "
       
       ".network-row{display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:12px 14px;background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,0.05);color:#e9ecf4;text-align:left;cursor:pointer;transition:background 0.12s ease;} "
       ".network-row:hover{background:rgba(255,255,255,0.04);} "
@@ -1245,26 +1246,27 @@ private:
                   String stepStr = readRangeCfg("step");
                   if(stepStr.length()) stepCfg = stepStr.toFloat();
 
-                  int minVal = static_cast<int>(minCfg);
-                  int maxVal = static_cast<int>(maxCfg);
+                  float minVal = minCfg;
+                  float maxVal = maxCfg;
                   if(val.length()){
                       int sep = val.indexOf('-');
                       if(sep >= 0){
-                          minVal = val.substring(0, sep).toInt();
-                          maxVal = val.substring(sep + 1).toInt();
+                          minVal = val.substring(0, sep).toFloat();
+                          maxVal = val.substring(sep + 1).toFloat();
                       }
                   }
 
+              int precision = stepCfg < 1.0f ? 2 : 0;
 
                String rangeLabel = e.label.length() ? e.label : "Range Slider";
                   String rangeId = e.id;
                   html += "<label>"+rangeLabel+"</label>"
                           "<div class='range-slider' id='"+rangeId+"'>"
-                          "<input type='range' id='"+rangeId+"Min' min='"+String(minCfg)+"' max='"+String(maxCfg)+"' step='"+String(stepCfg)+"' value='" + String(minVal) + "'>"
-                          "<input type='range' id='"+rangeId+"Max' min='"+String(minCfg)+"' max='"+String(maxCfg)+"' step='"+String(stepCfg)+"' value='" + String(maxVal) + "'>"
+                          "<input type='range' id='"+rangeId+"Min' min='"+String(minCfg)+"' max='"+String(maxCfg)+"' step='"+String(stepCfg)+"' value='" + String(minVal, precision) + "'>"
+                          "<input type='range' id='"+rangeId+"Max' min='"+String(minCfg)+"' max='"+String(maxCfg)+"' step='"+String(stepCfg)+"' value='" + String(maxVal, precision) + "'>"
                           "<div class='slider-track'></div>"
                           "</div>"
-                          "<div>Range: <span id='"+rangeId+"Val'>" + String(minVal) + " - " + String(maxVal) + "</span>%</div>"
+                          "<div>Range: <span id='"+rangeId+"Val'>" + String(minVal, precision) + " - " + String(maxVal, precision) + "</span>%</div>"
                           "<style>"
                           ".range-slider { position: relative; width: 100%; height: 10px; --thumb-size: 20px; }"
                           ".range-slider input[type=range] { position: absolute; width: 100%; pointer-events: none; -webkit-appearance: none; background: none; }"
@@ -1285,12 +1287,15 @@ private:
                           "    let min = parseFloat(minEl.value);"
                           "    let max = parseFloat(maxEl.value);"
                           "    if(min > max){ [min, max] = [max, min]; minEl.value=min; maxEl.value=max; }"
-                          "    if(display) display.innerText = min + ' - ' + max;"
+                          "    const fixed = " + String(precision) + ";"
+                          "    if(display) display.innerText = min.toFixed(fixed) + ' - ' + max.toFixed(fixed);"
                           "    const span = (maxLimit - minLimit) || 1;"
                           "    const minPct = ((min - minLimit) / span) * 100;"
                           "    const maxPct = ((max - minLimit) / span) * 100;"
                           "    if(track) track.style.background = `linear-gradient(to right, #444 ${minPct}%, #1e88e5 ${minPct}%, #1e88e5 ${maxPct}%, #444 ${maxPct}%)`;"
-                          "    fetch('/save?key=' + encodeURIComponent(rangeId) + '&val=' + encodeURIComponent(min + '-' + max));"
+                          "    const minSaved = min.toFixed(fixed);"
+                          "    const maxSaved = max.toFixed(fixed);"
+                          "    fetch('/save?key=' + encodeURIComponent(rangeId) + '&val=' + encodeURIComponent(minSaved + '-' + maxSaved));"
                           "  };"
                           "  minEl.addEventListener('input', updateRangeSlider);"
                           "  maxEl.addEventListener('input', updateRangeSlider);"
