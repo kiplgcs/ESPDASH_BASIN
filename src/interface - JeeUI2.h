@@ -144,14 +144,14 @@ inline void interface(){
 
    
 
-        UI_SECTION("Калибровка датчика PH",
-            UI_NUMBER("PH_Min", PH1, "Min CAL PH1 (4.1)", true),
-            UI_NUMBER("PH_Max", PH2, "Max CAL PH2 (6.86)", true)
-            UI_NUMBER("PH1_CAL", PH1_CAL, "АЦП_mV для PH1 (Примерно 3500)", false);
-            UI_NUMBER("PH2_CAL", PH2_CAL, "АЦП_mV для PH2 (Примерно 2900)", false);
-            UI_NUMBER("Temper_Reference", Temper_Reference, "Температура референсная", true);
-            UI_NUMBER("Temper_PH", Temper_PH, "Измеренная тепература для компенасации измерения PH", true);
-        )
+        // UI_SECTION("Калибровка датчика PH",
+        //     UI_NUMBER("PH_Min", PH1, "Min CAL PH1 (4.1)", true),
+        //     UI_NUMBER("PH_Max", PH2, "Max CAL PH2 (6.86)", true)
+        //     UI_NUMBER("PH1_CAL", PH1_CAL, "АЦП_mV для PH1 (Примерно 3500)", false);
+        //     UI_NUMBER("PH2_CAL", PH2_CAL, "АЦП_mV для PH2 (Примерно 2900)", false);
+        //     UI_NUMBER("Temper_Reference", Temper_Reference, "Температура референсная", true);
+        //     UI_NUMBER("Temper_PH", Temper_PH, "Измеренная тепература для компенасации измерения PH", true);
+        // )
 
     // if(button_Cal_PH){
         
