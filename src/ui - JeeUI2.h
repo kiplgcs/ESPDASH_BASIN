@@ -138,7 +138,7 @@ public:
         addElement("button", id, label, cfg);
     }
 
-    void range(const String &id, int minVal, int maxVal, float step, const String &label, bool dual=false){
+        void range(const String &id, float minVal, float maxVal, float step, const String &label, bool dual=false){
         String cfg = String(F("min=")) + String(minVal) + F(";max=") + String(maxVal) + F(";step=") + String(step);
         addElement(dual ? "range" : "slider", id, label, cfg);
     }
@@ -479,8 +479,8 @@ public:
 
 private:
     T &storage;
-    int minValue;
-    int maxValue;
+    T minValue;
+    T maxValue;
     float step;
     bool dualRange;
     std::function<void(const T &)> callback;
@@ -495,26 +495,26 @@ private:
     }
 };
 
+template <typename T>
 class UIDualRangeElement : public UIDeclarativeElement {
 public:
-    UIDualRangeElement(const String &elementId, int &minRef, int &maxRef, const String &minKey, const String &maxKey,
-                       int minVal, int maxVal, float stepVal, const String &elementLabel)
+      UIDualRangeElement(const String &elementId, T &minRef, T &maxRef, const String &minKey, const String &maxKey, T minVal, T maxVal, float stepVal, const String &elementLabel)
         : UIDeclarativeElement(elementId, elementLabel), minStorage(minRef), maxStorage(maxRef),
           minStorageKey(minKey), maxStorageKey(maxKey), minValue(minVal), maxValue(maxVal), step(stepVal) {}
 
     void build(OABuilder &builder) override{
-        builder.range(id, minValue, maxValue, step, label, true);
+        builder.range(id, static_cast<float>(minValue), static_cast<float>(maxValue), step, label, true);
     }
 
     void load() override{
-        minStorage = loadValue<int>(minStorageKey.c_str(), minStorage);
-        maxStorage = loadValue<int>(maxStorageKey.c_str(), maxStorage);
+        minStorage = loadValue<T>(minStorageKey.c_str(), minStorage);
+        maxStorage = loadValue<T>(maxStorageKey.c_str(), maxStorage);
         clamp();
     }
 
     void save() const override{
-        saveValue<int>(minStorageKey.c_str(), minStorage);
-        saveValue<int>(maxStorageKey.c_str(), maxStorage);
+        saveValue<T>(minStorageKey.c_str(), minStorage);
+        saveValue<T>(maxStorageKey.c_str(), maxStorage);
     }
 
     String valueString() const override{ return String(minStorage) + '-' + String(maxStorage); }
@@ -522,14 +522,14 @@ public:
     void setFromString(const String &value) override{
         int sep = value.indexOf('-');
         if(sep < 0) return;
-        minStorage = value.substring(0, sep).toInt();
-        maxStorage = value.substring(sep + 1).toInt();
+        minStorage = parseValue(value.substring(0, sep));
+        maxStorage = parseValue(value.substring(sep + 1));
         clamp();
     }
 
 private:
-    int &minStorage;
-    int &maxStorage;
+    T &minStorage;
+    T &maxStorage;
     String minStorageKey;
     String maxStorageKey;
     int minValue;
@@ -546,6 +546,13 @@ private:
             minStorage = maxStorage;
             maxStorage = temp;
         }
+    }
+    
+    static T parseValue(const String &value){
+        if constexpr(std::is_floating_point<T>::value){
+            return static_cast<T>(value.toFloat());
+        }
+        return static_cast<T>(value.toInt());
     }
 };
 
@@ -910,8 +917,7 @@ inline bool uiApplyValueForId(const String &id, const String &value){
     do { static UIRangeElement<decltype(state)> UI_UNIQUE_NAME(ui_range_)(id, state, minVal, maxVal, stepVal, label, false, callback); UI_REGISTER_ELEMENT(UI_UNIQUE_NAME(ui_range_)); } while(false)
 
 #define UI_DUAL_RANGE_KEYS(id, minState, maxState, minKey, maxKey, minVal, maxVal, stepVal, label) \
-    do { static UIDualRangeElement UI_UNIQUE_NAME(ui_dual_range_)(id, minState, maxState, minKey, maxKey, minVal, maxVal, stepVal, label); UI_REGISTER_ELEMENT(UI_UNIQUE_NAME(ui_dual_range_)); } while(false)
-
+    do { static UIDualRangeElement<std::remove_reference_t<decltype(minState)>> UI_UNIQUE_NAME(ui_dual_range_)(id, minState, maxState, minKey, maxKey, minVal, maxVal, stepVal, label); UI_REGISTER_ELEMENT(UI_UNIQUE_NAME(ui_dual_range_)); } while(false)
 #define UI_NUMBER(id, state, label, allowFloat) \
     do { static UINumberElement<decltype(state)> UI_UNIQUE_NAME(ui_number_)(id, state, label, allowFloat); UI_REGISTER_ELEMENT(UI_UNIQUE_NAME(ui_number_)); } while(false)
 
