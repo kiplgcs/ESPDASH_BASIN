@@ -240,8 +240,8 @@ void loop() {
 TimerControlRelay(10000);  // TimerControlRelay(600); //Контроль включения реле по таймерам
 
 ControlModbusRelay(1000);
-// loop_PH(2000);
-// loop_CL2(2000);
+loop_PH(2000);
+loop_CL2(2000);
 
 /**************************** *********************************************************************/
   Nextion_Transmit(500); // Отправка в Nextion по очереди
