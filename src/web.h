@@ -13,6 +13,7 @@
 #include "fs_utils.h"            // Вспомогательные функции для работы с файловой системой
 #include "wifi_manager.h"                // Логика Wi-Fi и хранение параметров
 #include "settings_MQTT.h"       // Настройки и работа с MQTT
+#include <ArduinoJson.h>
 
 using std::vector;              // Используем vector без указания std:: каждый раз
 
@@ -2354,52 +2355,66 @@ function setImg(x){
     });
 
     server.on("/live", HTTP_GET, [](AsyncWebServerRequest *r){
-          String timerJson;
-    for(const auto &timer : ui.allTimers()){
-      timerJson += ",\"" + timer.id + "_ON\":\"" + formatMinutesToTime(timer.on)
-                + "\",\"" + timer.id + "_OFF\":\"" + formatMinutesToTime(timer.off) + "\"";
-    }
-
-    String s = "{\"CurrentTime\":\""+CurrentTime+"\",\"RandomVal\":"+String(RandomVal)
-               +",\"InfoString\":\""+InfoString+"\",\"InfoString1\":\""+InfoString1+"\",\"InfoString2\":\""+InfoString2
-                   +"\",\"button1\":"+String(button1)+",\"button2\":"+String(button2)+",\"button_Lamp\":"+String(Lamp ? 1 : 0)+",\"button_WS2815\":"+String(Pow_WS2815 ? 1 : 0)
-               +",\"MotorSpeed\":"+String(MotorSpeedSetting)
-               +",\"RangeMin\":"+String(RangeMin)+",\"RangeMax\":"+String(RangeMax)
-                +",\"LEDColor\":\""+LEDColor+"\",\"LedPattern\":\""+LedPattern+"\",\"LedColorMode\":\""+LedColorMode+"\",\"LedColorOrder\":\""+LedColorOrder+"\",\"LedBrightness\":"+String(LedBrightness)
-               +",\"LedAutoplay\":"+String(LedAutoplay ? 1 : 0)+",\"LedAutoplayDuration\":"+String(LedAutoplayDuration)
-               +",\"ModeSelect\":\""+ModeSelect+"\",\"DaysSelect\":\""+DaysSelect+"\""
-                              // +",\"ModeSelect\":\""+ModeSelect+"\",\"SetLamp\":\""+SetLamp+"\",\"DaysSelect\":\""+DaysSelect+"\""
-                                            +",\"ModeSelect\":\""+ModeSelect+"\",\"SetLamp\":\""+SetLamp+"\",\"SetRGB\":\""+SetRGB+"\",\"DaysSelect\":\""+DaysSelect+"\""
-                              +",\"IntInput\":"+String(IntInput)+",\"FloatInput\":"+String(FloatInput)
-              +",\"Timer1\":\""+Timer1+"\",\"Power_Time1\":"+String(Power_Time1 ? 1 : 0)
-               +timerJson
-               +",\"WS2815_Time1\":"+String(WS2815_Time1 ? 1 : 0)
-
-                 +",\"Power_Filtr\":"+String(Power_Filtr ? 1 : 0)
-
-               +",\"Filtr_Time1\":"+String(Filtr_Time1 ? 1 : 0)
-               +",\"Filtr_Time2\":"+String(Filtr_Time2 ? 1 : 0)
-               +",\"Filtr_Time3\":"+String(Filtr_Time3 ? 1 : 0)
-               +",\"Power_Clean\":"+String(Power_Clean ? 1 : 0)
-               +",\"Clean_Time1\":"+String(Clean_Time1 ? 1 : 0)
-                              +",\"DS1\":\""+String(DS1, 1)+" °C\""
-               +",\"Sider_heat\":"+String(Sider_heat)
-               +",\"Activation_Heat\":"+String(Activation_Heat ? 1 : 0)
-               +",\"Power_Heat\":\""+String(Power_Heat ? "Нагрев" : "Откл.")+"\""
-                +",\"PH\":\""+String(PH, 2)+"\""
-               +",\"PH_Control_ACO\":"+String(PH_Control_ACO ? 1 : 0)
-               +",\"PH_setting\":"+String(PH_setting, 2)
-               +",\"ACO_Work\":"+String(ACO_Work)
-               +",\"Power_ACO\":\""+String(Power_ACO ? "Работа" : "Откл.")+"\""
-               +",\"ppmCl\":\""+String(ppmCl, 3)+"\""
-               +",\"corrected_ORP_Eh_mV\":\""+String(corrected_ORP_Eh_mV)+"\""
-               +",\"NaOCl_H2O2_Control\":"+String(NaOCl_H2O2_Control ? 1 : 0)
-               +",\"ORP_setting\":"+String(ORP_setting)
-               +",\"H2O2_Work\":"+String(H2O2_Work)
-               +",\"Power_H2O2\":\""+String(Power_H2O2 ? "Работа" : "Откл.")+"\""
-               +",\"Lumen_Ul\":\""+Lumen_Ul+"\""
-               +",\"Comment\":\""+Comment+"\"}";
-    r->send(200, "application/json", s);
+      // Увеличенный буфер, чтобы сериализация не обрезалась на длинных строках
+      StaticJsonDocument<2048> doc;
+      doc["CurrentTime"] = CurrentTime;
+      doc["RandomVal"] = RandomVal;
+      doc["InfoString"] = InfoString;
+      doc["InfoString1"] = InfoString1;
+      doc["InfoString2"] = InfoString2;
+      doc["button1"] = button1;
+      doc["button2"] = button2;
+      doc["button_Lamp"] = Lamp ? 1 : 0;
+      doc["button_WS2815"] = Pow_WS2815 ? 1 : 0;
+      doc["MotorSpeed"] = MotorSpeedSetting;
+      doc["RangeMin"] = RangeMin;
+      doc["RangeMax"] = RangeMax;
+      doc["LEDColor"] = LEDColor;
+      doc["LedPattern"] = LedPattern;
+      doc["LedColorMode"] = LedColorMode;
+      doc["LedColorOrder"] = LedColorOrder;
+      doc["LedBrightness"] = LedBrightness;
+      doc["LedAutoplay"] = LedAutoplay ? 1 : 0;
+      doc["LedAutoplayDuration"] = LedAutoplayDuration;
+      doc["ModeSelect"] = ModeSelect;
+      doc["SetLamp"] = SetLamp;
+      doc["SetRGB"] = SetRGB;
+      doc["DaysSelect"] = DaysSelect;
+      doc["IntInput"] = IntInput;
+      doc["FloatInput"] = FloatInput;
+      doc["Timer1"] = Timer1;
+      doc["Power_Time1"] = Power_Time1 ? 1 : 0;
+      for (const auto &timer : ui.allTimers()) {
+        doc[String(timer.id + "_ON")] = formatMinutesToTime(timer.on);
+        doc[String(timer.id + "_OFF")] = formatMinutesToTime(timer.off);
+      }
+      doc["WS2815_Time1"] = WS2815_Time1 ? 1 : 0;
+      doc["Power_Filtr"] = Power_Filtr ? 1 : 0;
+      doc["Filtr_Time1"] = Filtr_Time1 ? 1 : 0;
+      doc["Filtr_Time2"] = Filtr_Time2 ? 1 : 0;
+      doc["Filtr_Time3"] = Filtr_Time3 ? 1 : 0;
+      doc["Power_Clean"] = Power_Clean ? 1 : 0;
+      doc["Clean_Time1"] = Clean_Time1 ? 1 : 0;
+      doc["DS1"] = String(DS1, 1) + " °C";
+      doc["Sider_heat"] = Sider_heat;
+      doc["Activation_Heat"] = Activation_Heat ? 1 : 0;
+      doc["Power_Heat"] = Power_Heat ? "Нагрев" : "Откл.";
+      doc["PH"] = String(PH, 2);
+      doc["PH_Control_ACO"] = PH_Control_ACO ? 1 : 0;
+      doc["PH_setting"] = PH_setting;
+      doc["ACO_Work"] = ACO_Work;
+      doc["Power_ACO"] = Power_ACO ? "Работа" : "Откл.";
+      doc["ppmCl"] = String(ppmCl, 3);
+      doc["corrected_ORP_Eh_mV"] = String(corrected_ORP_Eh_mV);
+      doc["NaOCl_H2O2_Control"] = NaOCl_H2O2_Control ? 1 : 0;
+      doc["ORP_setting"] = ORP_setting;
+      doc["H2O2_Work"] = H2O2_Work;
+      doc["Power_H2O2"] = Power_H2O2 ? "Работа" : "Откл.";
+      doc["Lumen_Ul"] = Lumen_Ul;
+      doc["Comment"] = Comment;
+      String s;
+      serializeJson(doc, s);
+      r->send(200, "application/json", s);
     });
 
     server.on("/stats", HTTP_GET, [](AsyncWebServerRequest *r){

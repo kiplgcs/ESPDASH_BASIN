@@ -240,19 +240,50 @@ void loop() {
 TimerControlRelay(10000);  // TimerControlRelay(600); //Контроль включения реле по таймерам
 
 ControlModbusRelay(1000);
-loop_PH(2000);
-loop_CL2(2000);
+// loop_PH(2000);
+// loop_CL2(2000);
 
- /**************************** *********************************************************************/
-   Nextion_Transmit(500); // Отправка в Nextion по очереди
+/**************************** *********************************************************************/
+  Nextion_Transmit(500); // Отправка в Nextion по очереди
   //if(Power_Clean){Power_Filtr = false;} //преимущество очистки - отключаем фильтрацию в любом случае (даже если включен по таймерам), если подошло время очистки фильтра
-  // Проверяем, активирован ли триггер
-   if (triggerActivated_Nextion) {/*NextionDelay (3000);*/ delay(2000); NextionDelay ();} //Отложенное чтение по флагу - переменных из Nextion, связанное с поздним обновление в Nextion информации.
-   if (triggerRestartNextion) {/*RestartNextionDelay(5000); */ delay(3000); RestartNextionDelay();} //Для отложенного чтения всех необходимых переменных после перезагрузки ESP
-  ///////////////////////////////////////////////////////////////////////////////////////
+  // Проверяем, активирован ли триггер (без блокирующих delay)
+  static unsigned long nextionDelayAt = 0;
+  static unsigned long nextionRestartAt = 0;
+
+  if (triggerActivated_Nextion) {
+    if (nextionDelayAt == 0) {
+      nextionDelayAt = millis() + 2000; // отложить на 2 секунды
+    }
+    if (nextionDelayAt != 0 && static_cast<long>(millis() - nextionDelayAt) >= 0) {
+      NextionDelay();
+      nextionDelayAt = 0;
+    }
+  } else {
+    nextionDelayAt = 0;
+  }
+
+  if (triggerRestartNextion) {
+    if (nextionRestartAt == 0) {
+      nextionRestartAt = millis() + 3000; // отложить на 3 секунды
+    }
+    if (nextionRestartAt != 0 && static_cast<long>(millis() - nextionRestartAt) >= 0) {
+      RestartNextionDelay();
+      nextionRestartAt = 0;
+    }
+  } else {
+    nextionRestartAt = 0;
+  }
+
+
+
+
+ ///////////////////////////////////////////////////////////////////////////////////////
   Temp_DS18B20(5000); //Измеряем температуру
  ///****************************  Nextion - проверка прихода данных Tx/Rx ****************************************/
-  while (MySerial.available()){myNex.NextionListen();} //для непрерывного чтения данных из порта, пока они доступны
+  // Ограничиваем количество чтений за итерацию, чтобы не блокировать основной цикл при шуме на линии
+  for (int i = 0; i < 20 && MySerial.available(); ++i) {
+    myNex.NextionListen();
+  }
  /**************************** *********************************************************************/
   // Nextion_Transmit(500); // Отправка в Nextion по очереди
   // if(Power_Clean){Power_Filtr = false;} //преимущество очистки - отключаем фильтрацию в любом случае (даже если включен по таймерам), если подошло время очистки фильтра

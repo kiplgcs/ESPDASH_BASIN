@@ -75,8 +75,8 @@ void handleData(ModbusMessage msg, uint32_t token)
 
 void setup_Modbus() {
  //Настраиваем Serial2, подключенный к Modbus RTU
-  Serial2.begin(19200, SERIAL_8N1, GPIO_NUM_16, GPIO_NUM_17);
-
+  // Serial2.begin(19200, SERIAL_8N1, GPIO_NUM_16, GPIO_NUM_17);
+Serial2.begin(19200, SERIAL_8N1, GPIO_NUM_4, GPIO_NUM_5);
   //Настраиваем клиент ModbusClientRTU. предоставить функции обработчика onData и onError
   RS485.onDataHandler(&handleData);
   //RS485.onErrorHandler(&handleError);
