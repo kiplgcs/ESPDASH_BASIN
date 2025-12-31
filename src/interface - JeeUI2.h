@@ -138,23 +138,35 @@ inline void interface(){
 
     UI_DISPLAY_FLOAT("PH", PH, "pH (текущее)");
 
-    UI_BUTTON("button_Cal_PH", button_Cal_PH, "gray", "Калибровка датчика PH");
+    // UI_BUTTON("button_Cal_PH", button_Cal_PH, "gray", "Калибровка датчика PH");
 
-    if(button_Cal_PH){
 
-    UI_NUMBER("Float_PH1", PH1, "Min_CAL PH1:4.1", true);
-    static String PH1_CAL_txt = String(PH1_CAL);
-    UI_TEXT("PH1_CAL", PH1_CAL_txt, "АЦП_mV для PH1 (Примерно 3500)");
-    UI_NUMBER("Float_PH2", PH1, "Max_CAL PH2:6.86", true);
-    static String PH2_CAL_txt = String(PH2_CAL);
-    UI_TEXT("PH2_CAL", PH2_CAL_txt, "АЦП_mV для PH2 (Примерно 2900)");
 
-    static String Temper_Reference_txt = String(Temper_Reference);
-    UI_TEXT("Temper_Reference", Temper_Reference_txt, "Темп. референсная");
-    static String Temper_PH_txt = String(Temper_PH);
-    UI_TEXT("Temper_PH", Temper_PH_txt, "Темп. референсная"); //Измеренная тепература для компенасации измерения PH
+   
 
-    }
+        UI_SECTION("Калибровка датчика PH",
+            UI_NUMBER("PH_Min", PH1, "Min CAL PH1 (4.1)", true),
+            UI_NUMBER("PH_Max", PH2, "Max CAL PH2 (6.86)", true)
+            UI_NUMBER("PH1_CAL", PH1_CAL, "АЦП_mV для PH1 (Примерно 3500)", false);
+            UI_NUMBER("PH2_CAL", PH2_CAL, "АЦП_mV для PH2 (Примерно 2900)", false);
+            UI_NUMBER("Temper_Reference", Temper_Reference, "Температура референсная", true);
+            UI_NUMBER("Temper_PH", Temper_PH, "Измеренная тепература для компенасации измерения PH", true);
+        )
+
+    // if(button_Cal_PH){
+        
+    // // UI_DUAL_RANGE_KEYS("Float_PH_Slider", PH1, PH2, "Min_CAL PH1:4.1", "Max_CAL PH2:6.86", 4.0, 10.0, 0.1, "Range PH Min-Max");
+    // UI_NUMBER("Float_PH1", PH1, "Min_CAL PH1:4.1", true);
+    // UI_NUMBER("Float_PH2", PH2, "Max_CAL PH2:6.86", true);
+
+    // // UI_DUAL_RANGE_KEYS("Int_PH_Slider", PH1_CAL, PH2_CAL, "АЦП_mV для PH2", "АЦП_mV для PH1", 100, 5000, 0.5, "Range АЦП_mV Min-Max");
+    // UI_NUMBER("PH1_CAL", PH1_CAL, "АЦП_mV для PH1 (Примерно 3500)", false);
+    // UI_NUMBER("PH2_CAL", PH2_CAL, "АЦП_mV для PH2 (Примерно 2900)", false);
+
+    // UI_NUMBER("Temper_Reference", Temper_Reference, "Температура референсная", true);
+    // UI_NUMBER("Temper_PH", Temper_PH, "Измеренная тепература для компенасации измерения PH", true);
+
+    // }
 
     UI_DISPLAY_BOOL("Power_ACO", Power_ACO, "Дозатор ACO", "Работа", "Откл.");
     UI_CHECKBOX("PH_Control_ACO", PH_Control_ACO, "Контроль pH (ACO)");
