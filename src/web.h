@@ -1313,7 +1313,7 @@ private:
           firstPage = false;
       }
 
-       for(auto &popup : self->popups){
+      for(auto &popup : self->popups){
           html += "<div id='popup-"+popup.id+"' class='dash-modal hidden' data-popup='"+popup.id+"'>"
                   "<div class='dash-modal-content'>"
                   "<div class='dash-modal-header'><h4>"+popup.title+"</h4>"
@@ -1323,7 +1323,7 @@ private:
           html += "</div></div></div></div>";
       }
 
-
+      
       // ====== WiFi страница ======
       html += "<div id='wifi' class='page'>"
               "<div class='page-header'><h3>WiFi Settings</h3>"
@@ -1496,8 +1496,8 @@ private:
       console.warn('Popup auth verification failed', err);
     }
     alert('Неверный логин или пароль.');
-    return false;
-  }
+            return false;
+    }
 
 
   function closePopup(id){
