@@ -1625,6 +1625,9 @@ function toggleSidebar(){
   }
 
 function saveProfileSettings(){
+ const statusEl = document.getElementById('profile-status');
+    const user = (document.getElementById('profile-user') || {}).value || '';
+    const pass = (document.getElementById('profile-pass') || {}).value || '';
     const adminUser = (document.getElementById('profile-admin-user') || {}).value || '';
     const adminPass = (document.getElementById('profile-admin-pass') || {}).value || '';
     if(statusEl) statusEl.innerText = 'Сохранение...';
