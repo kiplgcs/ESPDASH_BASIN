@@ -2304,6 +2304,7 @@ window.addEventListener('resize', ()=>{
     syncDashButton('button2', j.button2);
     syncDashButton('button_Lamp', j.button_Lamp);
     syncDashButton('button_WS2815', j.button_WS2815);
+    syncDashButton('Pow_Ul_light', j.Pow_Ul_light);
     syncDashButton('Power_H2O2_Button', j.Power_H2O2_Button);
     syncDashButton('Power_ACO_Button', j.Power_ACO_Button);
     if(typeof j.MotorSpeed !== 'undefined') updateSliderDisplay('MotorSpeed', j.MotorSpeed);
@@ -2324,7 +2325,7 @@ window.addEventListener('resize', ()=>{
 
     if(typeof j.Timer1 !== 'undefined') updateInputValue('Timer1', j.Timer1);
     if(typeof j.Power_Time1 !== 'undefined') updateCheckboxValue('Power_Time1', j.Power_Time1);
-
+    if(typeof j.Ul_light_Time !== 'undefined') updateCheckboxValue('Ul_light_Time', j.Ul_light_Time);
     if(typeof j.WS2815_Time1 !== 'undefined') updateCheckboxValue('WS2815_Time1', j.WS2815_Time1);
 
         if(typeof j.Power_Filtr !== 'undefined') updateCheckboxValue('Power_Filtr', j.Power_Filtr);
@@ -2556,7 +2557,7 @@ function setImg(x){
       doc["button1"] = button1;
       doc["button2"] = button2;
       doc["button_Lamp"] = Lamp ? 1 : 0;
-      doc["button_WS2815"] = Pow_WS2815 ? 1 : 0;
+      doc["Pow_Ul_light"] = Pow_Ul_light ? 1 : 0;
       doc["MotorSpeed"] = MotorSpeedSetting;
       doc["RangeMin"] = RangeMin;
       doc["RangeMax"] = RangeMax;
@@ -2575,6 +2576,7 @@ function setImg(x){
       doc["FloatInput"] = FloatInput;
       doc["Timer1"] = Timer1;
       doc["Power_Time1"] = Power_Time1 ? 1 : 0;
+      doc["Ul_light_Time"] = Ul_light_Time ? 1 : 0;
       for (const auto &timer : ui.allTimers()) {
         doc[String(timer.id + "_ON")] = formatMinutesToTime(timer.on);
         doc[String(timer.id + "_OFF")] = formatMinutesToTime(timer.off);

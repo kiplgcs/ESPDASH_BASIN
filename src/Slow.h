@@ -5,7 +5,6 @@
 int flag_slow = 0; //Флаг общей отправки данных обратной связи
 int period_slow_Time = 2000; //Период обновления данных - зависит от "Nx_dim_id" nекущеuj - считанного значения яркости Nextion
 int flag_WiFi = 1; // для switch - вывод информации в одно поле поочерди 
-static uint8_t sync_step = 0;
 
 void slow(int interval){ // Обратная связь для редкого обновления данных - раз в XXX сек 
   static unsigned long timer=0;
@@ -188,7 +187,13 @@ switch (flag_slow) {
 
 // Медленная поочередная синхронизация с Nextion на случай рассинхронизации.
 // Отправляем небольшими порциями, чтобы не перегружать канал связи и CPU.
-
+static uint8_t sync_step = 0; // ync_step объявлен как static, чтобы его значение сохранялось между вызовами slow()
+const bool onSetLampPage = (Nx_page_id == 1); // Страница настройки лампы активна
+const bool onSetRgbPage = (Nx_page_id == 2); // Страница настройки RGB активна
+const bool onSetFiltrPage = (Nx_page_id == 3); // Страница таймеров фильтрации активна
+const bool onCleanPage = (Nx_page_id == 4); // Страница таймера промывки активна
+const bool onHeatPage = (Nx_page_id == 5); // Страница нагрева активна
+const bool onDispensersPage = (Nx_page_id == 9); // Страница дозаторов активна
 switch (sync_step) {
   case 0:
     myNex.writeNum("page0.b0.pic", Lamp ? 2 : 1);
@@ -221,167 +226,223 @@ switch (sync_step) {
     sync_step++;
     break;
    case 6:
-    myNex.writeNum("heat.sw0.val", Activation_Heat);
-    myNex.writeNum("heat.h0.val", Sider_heat);
+    if (!onHeatPage) { // Не перезаписываем уставку при открытом экране нагрева
+      myNex.writeNum("heat.sw0.val", Activation_Heat);
+      myNex.writeNum("heat.h0.val", Sider_heat);
+    }
     sync_step++;
     break;
   case 7:
-    myNex.writeNum("heat.n0.val", Sider_heat);
-    myNex.writeNum("Dispensers.cb0.val", ACO_Work - 1);
+    if (!onHeatPage) { // Не мешаем редактированию уставки нагрева
+      myNex.writeNum("heat.n0.val", Sider_heat);
+    }
+    if (!onDispensersPage) { // Не перезаписываем настройки дозаторов
+      myNex.writeNum("Dispensers.cb0.val", ACO_Work - 1);
+    }
     sync_step++;
     break;
   case 8:
-    myNex.writeNum("Dispensers.cb1.val", H2O2_Work - 1);
-    myNex.writeNum("Dispensers.sw0.val", PH_Control_ACO ? 1 : 0);
+    if (!onDispensersPage) { // Не перезаписываем настройки дозаторов
+      myNex.writeNum("Dispensers.cb1.val", H2O2_Work - 1);
+      myNex.writeNum("Dispensers.sw0.val", PH_Control_ACO ? 1 : 0);
+    }
     sync_step++;
     break;
   case 9:
-    myNex.writeNum("Dispensers.sw2.val", NaOCl_H2O2_Control ? 1 : 0);
-    myNex.writeNum("set_lamp.sw3.val", Lamp ? 1 : 0);
+    if (!onDispensersPage) { // Не перезаписываем настройки дозаторов
+      myNex.writeNum("Dispensers.sw2.val", NaOCl_H2O2_Control ? 1 : 0);
+    }
+    if (!onSetLampPage) { // Не мешаем редактированию таймера лампы
+      myNex.writeNum("set_lamp.sw3.val", Lamp ? 1 : 0);
+    }
     sync_step++;
     break;
   case 10:
-    myNex.writeNum("set_lamp.sw1.val", Lamp_autosvet ? 1 : 0);
-    myNex.writeNum("set_lamp.sw0.val", Power_Time1 ? 1 : 0);
+    if (!onSetLampPage) { // Не мешаем редактированию таймера лампы
+      myNex.writeNum("set_lamp.sw1.val", Lamp_autosvet ? 1 : 0);
+      myNex.writeNum("set_lamp.sw0.val", Power_Time1 ? 1 : 0);
+    }
     sync_step++;
     break;
   case 11: {
-    UITimerEntry &lampTimer = ui.timer("LampTimer");
-    String lampOnStr = formatMinutesToTime(lampTimer.on);
-    myNex.writeNum("set_lamp.n0.val", getSubstring(lampOnStr, 0, 1));
-    myNex.writeNum("set_lamp.n1.val", getSubstring(lampOnStr, 3, 4));
+    if (!onSetLampPage) { // Не мешаем редактированию времени лампы
+      UITimerEntry &lampTimer = ui.timer("LampTimer");
+      String lampOnStr = formatMinutesToTime(lampTimer.on);
+      myNex.writeNum("set_lamp.n0.val", getSubstring(lampOnStr, 0, 1));
+      myNex.writeNum("set_lamp.n1.val", getSubstring(lampOnStr, 3, 4));
+    }
     sync_step++;
     break;
   }
   case 12: {
-    UITimerEntry &lampTimer = ui.timer("LampTimer");
-    String lampOffStr = formatMinutesToTime(lampTimer.off);
-    myNex.writeNum("set_lamp.n2.val", getSubstring(lampOffStr, 0, 1));
-    myNex.writeNum("set_lamp.n3.val", getSubstring(lampOffStr, 3, 4));
+    if (!onSetLampPage) { // Не мешаем редактированию времени лампы
+      UITimerEntry &lampTimer = ui.timer("LampTimer");
+      String lampOffStr = formatMinutesToTime(lampTimer.off);
+      myNex.writeNum("set_lamp.n2.val", getSubstring(lampOffStr, 0, 1));
+      myNex.writeNum("set_lamp.n3.val", getSubstring(lampOffStr, 3, 4));
+    }
     sync_step++;
     break;
   }
   case 13:
-    myNex.writeNum("set_RGB.sw3.val", Pow_WS2815 ? 1 : 0);
-    myNex.writeNum("set_RGB.sw2.val", Pow_WS2815_autosvet ? 1 : 0);
+    if (!onSetRgbPage) { // Не мешаем редактированию настроек RGB
+      myNex.writeNum("set_RGB.sw3.val", Pow_WS2815 ? 1 : 0);
+      myNex.writeNum("set_RGB.sw2.val", Pow_WS2815_autosvet ? 1 : 0);
+    }
     sync_step++;
     break;
   case 14:
-    myNex.writeNum("set_RGB.sw0.val", WS2815_Time1 ? 1 : 0);
+    if (!onSetRgbPage) { // Не мешаем редактированию таймера RGB
+      myNex.writeNum("set_RGB.sw0.val", WS2815_Time1 ? 1 : 0);
+    }
     sync_step++;
     break;
   case 15: {
-    UITimerEntry &rgbTimer = ui.timer("RgbTimer");
-    String rgbOnStr = formatMinutesToTime(rgbTimer.on);
-    myNex.writeNum("set_RGB.n0.val", getSubstring(rgbOnStr, 0, 1));
-    myNex.writeNum("set_RGB.n1.val", getSubstring(rgbOnStr, 3, 4));
+    if (!onSetRgbPage) { // Не мешаем редактированию времени RGB
+      UITimerEntry &rgbTimer = ui.timer("RgbTimer");
+      String rgbOnStr = formatMinutesToTime(rgbTimer.on);
+      myNex.writeNum("set_RGB.n0.val", getSubstring(rgbOnStr, 0, 1));
+      myNex.writeNum("set_RGB.n1.val", getSubstring(rgbOnStr, 3, 4));
+    }
     sync_step++;
     break;
   }
   case 16: {
-    UITimerEntry &rgbTimer = ui.timer("RgbTimer");
-    String rgbOffStr = formatMinutesToTime(rgbTimer.off);
-    myNex.writeNum("set_RGB.n2.val", getSubstring(rgbOffStr, 0, 1));
-    myNex.writeNum("set_RGB.n3.val", getSubstring(rgbOffStr, 3, 4));
+    if (!onSetRgbPage) { // Не мешаем редактированию времени RGB
+      UITimerEntry &rgbTimer = ui.timer("RgbTimer");
+      String rgbOffStr = formatMinutesToTime(rgbTimer.off);
+      myNex.writeNum("set_RGB.n2.val", getSubstring(rgbOffStr, 0, 1));
+      myNex.writeNum("set_RGB.n3.val", getSubstring(rgbOffStr, 3, 4));
+    }
     sync_step++;
     break;
   }
   case 17:
-    myNex.writeNum("set_filtr.sw3.val", Power_Filtr ? 1 : 0);
-    myNex.writeNum("set_filtr.sw0.val", Filtr_Time1 ? 1 : 0);
+    if (!onSetFiltrPage) { // Не мешаем редактированию таймеров фильтрации
+      myNex.writeNum("set_filtr.sw3.val", Power_Filtr ? 1 : 0);
+      myNex.writeNum("set_filtr.sw0.val", Filtr_Time1 ? 1 : 0);
+    }
     sync_step++;
     break;
   case 18:
-    myNex.writeNum("set_filtr.sw2.val", Filtr_Time2 ? 1 : 0);
-    myNex.writeNum("set_filtr.sw1.val", Filtr_Time3 ? 1 : 0);
+    if (!onSetFiltrPage) { // Не мешаем редактированию таймеров фильтрации
+      myNex.writeNum("set_filtr.sw2.val", Filtr_Time2 ? 1 : 0);
+      myNex.writeNum("set_filtr.sw1.val", Filtr_Time3 ? 1 : 0);
+    }
     sync_step++;
     break;
   case 19: {
-    UITimerEntry &filtrTimer1 = ui.timer("FiltrTimer1");
-    String filtrOn1Str = formatMinutesToTime(filtrTimer1.on);
-    myNex.writeNum("set_filtr.n0.val", getSubstring(filtrOn1Str, 0, 1));
-    myNex.writeNum("set_filtr.n1.val", getSubstring(filtrOn1Str, 3, 4));
+    if (!onSetFiltrPage) { // Не мешаем редактированию времени фильтра №1
+      UITimerEntry &filtrTimer1 = ui.timer("FiltrTimer1");
+      String filtrOn1Str = formatMinutesToTime(filtrTimer1.on);
+      myNex.writeNum("set_filtr.n0.val", getSubstring(filtrOn1Str, 0, 1));
+      myNex.writeNum("set_filtr.n1.val", getSubstring(filtrOn1Str, 3, 4));
+    }
     sync_step++;
     break;
   }
   case 20: {
-    UITimerEntry &filtrTimer1 = ui.timer("FiltrTimer1");
-    String filtrOff1Str = formatMinutesToTime(filtrTimer1.off);
-    myNex.writeNum("set_filtr.n2.val", getSubstring(filtrOff1Str, 0, 1));
-    myNex.writeNum("set_filtr.n3.val", getSubstring(filtrOff1Str, 3, 4));
+    if (!onSetFiltrPage) { // Не мешаем редактированию времени фильтра №1
+      UITimerEntry &filtrTimer1 = ui.timer("FiltrTimer1");
+      String filtrOff1Str = formatMinutesToTime(filtrTimer1.off);
+      myNex.writeNum("set_filtr.n2.val", getSubstring(filtrOff1Str, 0, 1));
+      myNex.writeNum("set_filtr.n3.val", getSubstring(filtrOff1Str, 3, 4));
+    }
     sync_step++;
     break;
   }
   case 21: {
-    UITimerEntry &filtrTimer2 = ui.timer("FiltrTimer2");
-    String filtrOn2Str = formatMinutesToTime(filtrTimer2.on);
-    myNex.writeNum("set_filtr.n4.val", getSubstring(filtrOn2Str, 0, 1));
-    myNex.writeNum("set_filtr.n5.val", getSubstring(filtrOn2Str, 3, 4));
+    if (!onSetFiltrPage) { // Не мешаем редактированию времени фильтра №2
+      UITimerEntry &filtrTimer2 = ui.timer("FiltrTimer2");
+      String filtrOn2Str = formatMinutesToTime(filtrTimer2.on);
+      myNex.writeNum("set_filtr.n4.val", getSubstring(filtrOn2Str, 0, 1));
+      myNex.writeNum("set_filtr.n5.val", getSubstring(filtrOn2Str, 3, 4));
+    }
     sync_step++;
     break;
   }
   case 22: {
-    UITimerEntry &filtrTimer2 = ui.timer("FiltrTimer2");
-    String filtrOff2Str = formatMinutesToTime(filtrTimer2.off);
-    myNex.writeNum("set_filtr.n6.val", getSubstring(filtrOff2Str, 0, 1));
-    myNex.writeNum("set_filtr.n7.val", getSubstring(filtrOff2Str, 3, 4));
+    if (!onSetFiltrPage) { // Не мешаем редактированию времени фильтра №2
+      UITimerEntry &filtrTimer2 = ui.timer("FiltrTimer2");
+      String filtrOff2Str = formatMinutesToTime(filtrTimer2.off);
+      myNex.writeNum("set_filtr.n6.val", getSubstring(filtrOff2Str, 0, 1));
+      myNex.writeNum("set_filtr.n7.val", getSubstring(filtrOff2Str, 3, 4));
+    }
     sync_step++;
     break;
   }
   case 23: {
-    UITimerEntry &filtrTimer3 = ui.timer("FiltrTimer3");
-    String filtrOn3Str = formatMinutesToTime(filtrTimer3.on);
-    myNex.writeNum("set_filtr.n8.val", getSubstring(filtrOn3Str, 0, 1));
-    myNex.writeNum("set_filtr.n9.val", getSubstring(filtrOn3Str, 3, 4));
+    if (!onSetFiltrPage) { // Не мешаем редактированию времени фильтра №3
+      UITimerEntry &filtrTimer3 = ui.timer("FiltrTimer3");
+      String filtrOn3Str = formatMinutesToTime(filtrTimer3.on);
+      myNex.writeNum("set_filtr.n8.val", getSubstring(filtrOn3Str, 0, 1));
+      myNex.writeNum("set_filtr.n9.val", getSubstring(filtrOn3Str, 3, 4));
+    }
     sync_step++;
     break;
   }
   case 24: {
-    UITimerEntry &filtrTimer3 = ui.timer("FiltrTimer3");
-    String filtrOff3Str = formatMinutesToTime(filtrTimer3.off);
-    myNex.writeNum("set_filtr.n10.val", getSubstring(filtrOff3Str, 0, 1));
-    myNex.writeNum("set_filtr.n11.val", getSubstring(filtrOff3Str, 3, 4));
+    if (!onSetFiltrPage) { // Не мешаем редактированию времени фильтра №3
+      UITimerEntry &filtrTimer3 = ui.timer("FiltrTimer3");
+      String filtrOff3Str = formatMinutesToTime(filtrTimer3.off);
+      myNex.writeNum("set_filtr.n10.val", getSubstring(filtrOff3Str, 0, 1));
+      myNex.writeNum("set_filtr.n11.val", getSubstring(filtrOff3Str, 3, 4));
+    }
     sync_step++;
     break;
   }
   case 25:
-    myNex.writeNum("Clean.sw1.val", Power_Clean ? 1 : 0);
-    myNex.writeNum("Clean.sw0.val", Clean_Time1 ? 1 : 0);
+    if (!onCleanPage) { // Не мешаем редактированию таймера промывки
+      myNex.writeNum("Clean.sw1.val", Power_Clean ? 1 : 0);
+      myNex.writeNum("Clean.sw0.val", Clean_Time1 ? 1 : 0);
+    }
     sync_step++;
     break;
   case 26: {
-    UITimerEntry &cleanTimer = ui.timer("CleanTimer1");
-    String cleanOnStr = formatMinutesToTime(cleanTimer.on);
-    myNex.writeNum("Clean.n0.val", getSubstring(cleanOnStr, 0, 1));
-    myNex.writeNum("Clean.n1.val", getSubstring(cleanOnStr, 3, 4));
+    if (!onCleanPage) { // Не мешаем редактированию времени промывки
+      UITimerEntry &cleanTimer = ui.timer("CleanTimer1");
+      String cleanOnStr = formatMinutesToTime(cleanTimer.on);
+      myNex.writeNum("Clean.n0.val", getSubstring(cleanOnStr, 0, 1));
+      myNex.writeNum("Clean.n1.val", getSubstring(cleanOnStr, 3, 4));
+    }
     sync_step++;
     break;
   }
   case 27: {
-    UITimerEntry &cleanTimer = ui.timer("CleanTimer1");
-    String cleanOffStr = formatMinutesToTime(cleanTimer.off);
-    myNex.writeNum("Clean.n2.val", getSubstring(cleanOffStr, 0, 1));
-    myNex.writeNum("Clean.n3.val", getSubstring(cleanOffStr, 3, 4));
+    if (!onCleanPage) { // Не мешаем редактированию времени промывки
+      UITimerEntry &cleanTimer = ui.timer("CleanTimer1");
+      String cleanOffStr = formatMinutesToTime(cleanTimer.off);
+      myNex.writeNum("Clean.n2.val", getSubstring(cleanOffStr, 0, 1));
+      myNex.writeNum("Clean.n3.val", getSubstring(cleanOffStr, 3, 4));
+    }
     sync_step++;
     break;
   }
   case 28:
-    myNex.writeNum("Clean.bt0.val", chk1 ? 1 : 0);
-    myNex.writeNum("Clean.bt1.val", chk2 ? 1 : 0);
+    if (!onCleanPage) { // Не мешаем редактированию дней промывки
+      myNex.writeNum("Clean.bt0.val", chk1 ? 1 : 0);
+      myNex.writeNum("Clean.bt1.val", chk2 ? 1 : 0);
+    }
     sync_step++;
     break;
   case 29:
-    myNex.writeNum("Clean.bt2.val", chk3 ? 1 : 0);
-    myNex.writeNum("Clean.bt3.val", chk4 ? 1 : 0);
+    if (!onCleanPage) { // Не мешаем редактированию дней промывки
+      myNex.writeNum("Clean.bt2.val", chk3 ? 1 : 0);
+      myNex.writeNum("Clean.bt3.val", chk4 ? 1 : 0);
+    }
     sync_step++;
     break;
   case 30:
-    myNex.writeNum("Clean.bt4.val", chk5 ? 1 : 0);
-    myNex.writeNum("Clean.bt5.val", chk6 ? 1 : 0);
+    if (!onCleanPage) { // Не мешаем редактированию дней промывки
+      myNex.writeNum("Clean.bt4.val", chk5 ? 1 : 0);
+      myNex.writeNum("Clean.bt5.val", chk6 ? 1 : 0);
+    }
     sync_step++;
     break;
   case 31:
-    myNex.writeNum("Clean.bt6.val", chk7 ? 1 : 0);
+    if (!onCleanPage) { // Не мешаем редактированию дней промывки
+      myNex.writeNum("Clean.bt6.val", chk7 ? 1 : 0);
+    }
     sync_step = 0;
     break;
   default:

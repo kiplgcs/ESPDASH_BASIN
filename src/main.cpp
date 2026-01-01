@@ -191,6 +191,8 @@ void setup() {
   // }
    SetLamp = loadValue<String>("SetLamp", "off");
 
+  Pow_Ul_light = loadButtonState("Pow_Ul_light", 0) != 0;
+  Ul_light_Time = loadValue<int>("Ul_light_Time", 0) != 0;
   setup_WS2815();
 
 

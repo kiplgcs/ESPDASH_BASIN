@@ -212,6 +212,7 @@ void TimerControlRelay(int interval) {
                 UITimerEntry &filtrTimer2 = ui.timer("FiltrTimer2");
                 UITimerEntry &filtrTimer3 = ui.timer("FiltrTimer3");
                 UITimerEntry &cleanTimer = ui.timer("CleanTimer1");
+                UITimerEntry &ulLightTimer = ui.timer("UlLightTimer");
 
                  if (SetLamp == "off") {
                   Lamp = false;
@@ -233,7 +234,10 @@ void TimerControlRelay(int interval) {
                     if (checkTimeInInterval(currentHour, currentMinute, rgbTimer.on, rgbTimer.off)&&WS2815_Time1==true) {
                       Pow_WS2815=true;
                     } else if (WS2815_Time1==true) {Pow_WS2815=false;} // Выключаем
-                      
+              
+                    if (Ul_light_Time) {
+                      Pow_Ul_light = checkTimeInInterval(currentHour, currentMinute, ulLightTimer.on, ulLightTimer.off);
+                    }        
     
 //   if (checkTimeInInterval(hours, minutes, Filtr_timeON1, Filtr_timeOFF1)&&Filtr_Time1==true || checkTimeInInterval(hours, minutes, Filtr_timeON2, Filtr_timeOFF2)&&Filtr_Time2==true || checkTimeInInterval(hours, minutes, Filtr_timeON3, Filtr_timeOFF3)&&Filtr_Time3==true) {
 //      if(!Power_Clean){Power_Filtr=true;} //преимущество очистки - отключаем фильтрацию в любом случае (даже если включен по таймерам), если подошло время очистки фильтра
@@ -457,7 +461,7 @@ void ControlModbusRelay(int interval) {
   }
 
   err = RS485.addRequest(40001, 1, 0x05, 14, Power_Warm_floor_heating ? devices[0].value : devices[1].value); // реле№15 теплый пол
-
+  err = RS485.addRequest(40001, 1, 0x05, 15, Pow_Ul_light ? devices[0].value : devices[1].value); //Уличное освещение на столбе
 
 //   Error err = RS485.addRequest(40001,1,0x05,5, Power_H2O2 ? devices[0].value : devices[1].value); //реле№6 для Power_H2O2
   // err = RS485.addRequest(40001, 1, 0x05, 5, Power_H2O2 ? devices[0].value : devices[1].value); //реле№6 для Power_H2O2
