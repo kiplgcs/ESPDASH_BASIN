@@ -70,7 +70,7 @@ float PH, Saved_PH; //Кислотность воды
 float PH1 = 4.1f, PH2 = 6.86f;          //Точки калибровки PH
 float PH1_CAL = 3500.0f, PH2_CAL = 2900.0f; //Значения для данных точек калибровки PH от 0 до 4095 (12бит)
 float Temper_PH; //Измеренная тепература для компенасации измерения PH
-float Temper_Reference; // Температура при котором сенсор выдает свои параметры - 20.0 или 25.0 С для разных сенсоров PH;
+float Temper_Reference = 20.0f; // Температура при котором сенсор выдает свои параметры - 20.0 или 25.0 С для разных сенсоров PH;
 bool Act_PH = false; //Активация калибровки
 bool Act_Cl = false; //Активация калибровки
 int analogValuePH_Comp; //корректированное значение АЦП после компенсации по температуре
@@ -2294,6 +2294,8 @@ window.addEventListener('resize', ()=>{
     syncDashButton('button2', j.button2);
     syncDashButton('button_Lamp', j.button_Lamp);
     syncDashButton('button_WS2815', j.button_WS2815);
+    syncDashButton('Power_H2O2_Button', j.Power_H2O2_Button);
+    syncDashButton('Power_ACO_Button', j.Power_ACO_Button);
     if(typeof j.MotorSpeed !== 'undefined') updateSliderDisplay('MotorSpeed', j.MotorSpeed);
     if(typeof j.RangeMin !== 'undefined' && typeof j.RangeMax !== 'undefined') setRangeSliderUI('RangeSlider', j.RangeMin, j.RangeMax);
     if(typeof j.LEDColor !== 'undefined') updateInputValue('LEDColor', j.LEDColor);
@@ -2338,7 +2340,8 @@ window.addEventListener('resize', ()=>{
         if(typeof j.Sider_heat !== 'undefined') updateSliderDisplay('Sider_heat', j.Sider_heat);
     if(typeof j.Activation_Heat !== 'undefined') updateCheckboxValue('Activation_Heat', j.Activation_Heat);
     if(typeof j.Power_Heat !== 'undefined') updateStat('Power_Heat', j.Power_Heat);
-if(typeof j.PH !== 'undefined') updateStat('PH', j.PH);
+    if(typeof j.PH !== 'undefined') updateStat('PH', j.PH);
+    if(typeof j.analogValuePH !== 'undefined') updateStat('analogValuePH', j.analogValuePH);
     if(typeof j.PH_Control_ACO !== 'undefined') updateCheckboxValue('PH_Control_ACO', j.PH_Control_ACO);
     if(typeof j.PH_setting !== 'undefined') updateInputValue('PH_setting', j.PH_setting);
     if(typeof j.ACO_Work !== 'undefined') updateSelectValue('ACO_Work', j.ACO_Work);
@@ -2349,6 +2352,7 @@ if(typeof j.PH !== 'undefined') updateStat('PH', j.PH);
     if(typeof j.ORP_setting !== 'undefined') updateInputValue('ORP_setting', j.ORP_setting);
     if(typeof j.H2O2_Work !== 'undefined') updateSelectValue('H2O2_Work', j.H2O2_Work);
     if(typeof j.Power_H2O2 !== 'undefined') updateStat('Power_H2O2', j.Power_H2O2);
+    if(typeof j.Temper_Reference !== 'undefined') updateInputValue('Temper_Reference', j.Temper_Reference);
     });
   }
 setInterval(fetchLive, 1000);
@@ -2573,16 +2577,20 @@ function setImg(x){
       doc["Activation_Heat"] = Activation_Heat ? 1 : 0;
       doc["Power_Heat"] = Power_Heat ? "Нагрев" : "Откл.";
       doc["PH"] = String(PH, 2);
+      doc["analogValuePH"] = String(analogValuePH_Comp) + " mV";
+      doc["Temper_Reference"] = Temper_Reference;
       doc["PH_Control_ACO"] = PH_Control_ACO ? 1 : 0;
       doc["PH_setting"] = PH_setting;
       doc["ACO_Work"] = ACO_Work;
       doc["Power_ACO"] = Power_ACO ? "Работа" : "Откл.";
+      doc["Power_ACO_Button"] = Power_ACO ? 1 : 0;
       doc["ppmCl"] = String(ppmCl, 3);
       doc["corrected_ORP_Eh_mV"] = String(corrected_ORP_Eh_mV);
       doc["NaOCl_H2O2_Control"] = NaOCl_H2O2_Control ? 1 : 0;
       doc["ORP_setting"] = ORP_setting;
       doc["H2O2_Work"] = H2O2_Work;
       doc["Power_H2O2"] = Power_H2O2 ? "Работа" : "Откл.";
+      doc["Power_H2O2_Button"] = Power_H2O2 ? 1 : 0;
       doc["Lumen_Ul"] = Lumen_Ul;
       doc["Comment"] = Comment;
       String s;

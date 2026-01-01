@@ -100,6 +100,7 @@ void setup() {
   // PH2_CAL = loadValue<float>("PH2_CAL", PH2_CAL);         // АЦП_mV для PH2
   PH1 = loadValue<float>("PH1_MIN", PH1);                 // Точки калибровки PH (минимум)
   PH2 = loadValue<float>("PH2_MAX", PH2);                 // Точки калибровки PH (максимум)
+  Temper_Reference = loadValue<float>("Temper_Reference", Temper_Reference);
   Power_Filtr = loadValue<int>("Power_Filtr", 0) != 0;
   Filtr_Time1 = loadValue<int>("Filtr_Time1", 0) != 0;
   Filtr_Time2 = loadValue<int>("Filtr_Time2", 0) != 0;

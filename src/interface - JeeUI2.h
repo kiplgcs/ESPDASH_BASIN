@@ -221,19 +221,18 @@ inline void interface(){
 
 
     //var("PH_CAL", "PH"+ String(PH, 2) + " : " + String(analogValuePH_Comp)+"mV");
-                UI_TEXT("analogValuePH", String(analogValuePH_Comp)+"mV", "Данные с АЦП от датчика PH");
+                UI_DISPLAY_INT("analogValuePH", analogValuePH_Comp, "Данные с АЦП от датчика PH");
                 // UI_NUMBER("PH_Min", PH1, "Min CAL PH1 (4.1)", true);
                 // UI_NUMBER("PH_Max", PH2, "Max CAL PH2 (6.86)", true);
                 UI_DUAL_RANGE_KEYS("Float_PH_Slider", PH1, PH2, "PH1_MIN", "PH2_MAX", 4.0, 10.0, 0.1, "Range PH Min-Max");
-                // UI_NUMBER("PH1_CAL", PH1_CAL, "АЦП_mV для PH1 (Примерно 3500)", false);
-                // UI_NUMBER("PH2_CAL", PH2_CAL, "АЦП_mV для PH2 (Примерно 2900)", false);
-                UI_DUAL_RANGE_KEYS("Int_PH_Slider", PH1_CAL, PH2_CAL, "PH1_CAL", "PH2_CAL", 100.0, 5000.0, 1, "Range АЦП_mV Min-Max");
+                UI_NUMBER("PH1_CAL", PH1_CAL, "АЦП_mV для PH1 (Примерно 3500)", false);
+                UI_NUMBER("PH2_CAL", PH2_CAL, "АЦП_mV для PH2 (Примерно 2900)", false);
+                // UI_DUAL_RANGE_KEYS("Int_PH_Slider", PH1_CAL, PH2_CAL, "PH1_CAL", "PH2_CAL", 100.0, 5000.0, 1, "Range АЦП_mV Min-Max");
 
                 UI_NUMBER("Temper_Reference", Temper_Reference, "Температура референсная", true);
                 UI_NUMBER("Temper_PH", Temper_PH, "Измеренная тепература для компенасации измерения PH", true);
 
-                UI_BUTTON("Power_H2O2", Power_H2O2, "gray", "Проверка работы перельстатического насоса подачи кислоты (вручную)");
-
+                UI_BUTTON("Power_H2O2_Button", Power_H2O2, "gray", "Проверка работы перельстатического насоса подачи кислоты (вручную)");
         UI_POPUP_END();
 
 
@@ -259,7 +258,7 @@ inline void interface(){
             UI_NUMBER("CalRastvor256mV", CalRastvor256mV, "ОВП калибровочного раствора - мВ", false);
             UI_NUMBER("Calibration_ORP_mV", Calibration_ORP_mV, "Калибровочный коэффициент - мВ", false);
 
-            UI_BUTTON("Power_ACO", Power_ACO, "gray", "Проверка работы перельстатического насоса подачи хлора (вручную)");
+            UI_BUTTON("Power_ACO_Button", Power_ACO, "gray", "Проверка работы перельстатического насоса подачи хлора (вручную)");
         UI_POPUP_END();
 
 }
