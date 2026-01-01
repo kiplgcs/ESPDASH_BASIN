@@ -190,7 +190,7 @@ void loop() {
   CurrentTime = getCurrentDateTime();   // Получение текущего времени
 
 TimerControlRelay(10000);  // TimerControlRelay(600); //Контроль включения реле по таймерам
-
+updateManualPumpPulses(); // Для прверки перельстатических насосов - счет таймера - 1 сек
 ControlModbusRelay(1000);
 loop_PH(2000);
 loop_CL2(2100);

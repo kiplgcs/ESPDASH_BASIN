@@ -304,8 +304,12 @@ String Ul_light_timeON, Ul_light_timeOFF; // Утавки времени вкл�
 bool Power_Topping, Power_Topping1; // Долив воды по уровню
 
 
-bool Saved_Power_H2O, Power_H2O2 = false; //Дозация перекеси водороода 
+bool Saved_Power_H2O, Power_H2O2 = false; //Дозация перекеси водорода
 bool Saved_Power_ACO, Power_ACO = false; 	//Дозация Активное Каталитическое Окисление «Active Catalytic Oxidation» ACO
+bool ManualPulse_H2O2_Active = false;
+bool ManualPulse_ACO_Active = false;
+unsigned long ManualPulse_H2O2_StartedAt = 0;
+unsigned long ManualPulse_ACO_StartedAt = 0;
 //bool Saved_Power_APF, Power_APF = false;		//Высокоэффективный коагулянт и флокулянт «All Poly Floc» APF
 
 // bool Saved_Test_Pump, Test_Pump; //Разрешение на работу тамера дозации ACO
@@ -2582,15 +2586,17 @@ function setImg(x){
       doc["PH_Control_ACO"] = PH_Control_ACO ? 1 : 0;
       doc["PH_setting"] = PH_setting;
       doc["ACO_Work"] = ACO_Work;
-      doc["Power_ACO"] = Power_ACO ? "Работа" : "Откл.";
-      doc["Power_ACO_Button"] = Power_ACO ? 1 : 0;
+      const bool powerAcoActive = Power_ACO || ManualPulse_ACO_Active;
+      const bool powerH2O2Active = Power_H2O2 || ManualPulse_H2O2_Active;
+      doc["Power_ACO"] = powerAcoActive ? "Работа" : "Откл.";
+      doc["Power_ACO_Button"] = powerAcoActive ? 1 : 0;
       doc["ppmCl"] = String(ppmCl, 3);
       doc["corrected_ORP_Eh_mV"] = String(corrected_ORP_Eh_mV);
       doc["NaOCl_H2O2_Control"] = NaOCl_H2O2_Control ? 1 : 0;
       doc["ORP_setting"] = ORP_setting;
       doc["H2O2_Work"] = H2O2_Work;
-      doc["Power_H2O2"] = Power_H2O2 ? "Работа" : "Откл.";
-      doc["Power_H2O2_Button"] = Power_H2O2 ? 1 : 0;
+      doc["Power_H2O2"] = powerH2O2Active ? "Работа" : "Откл.";
+      doc["Power_H2O2_Button"] = powerH2O2Active ? 1 : 0;
       doc["Lumen_Ul"] = Lumen_Ul;
       doc["Comment"] = Comment;
       String s;

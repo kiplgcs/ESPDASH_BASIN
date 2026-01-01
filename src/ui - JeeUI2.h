@@ -881,6 +881,20 @@ inline String uiValueForId(const String &id){
 }
 
 inline bool uiApplyValueForId(const String &id, const String &value){
+        if(id == "Power_ACO_Button"){
+        if(value.toInt() != 0){
+            ManualPulse_ACO_Active = true;
+            ManualPulse_ACO_StartedAt = millis();
+        }
+        return true;
+    }
+    if(id == "Power_H2O2_Button"){
+        if(value.toInt() != 0){
+            ManualPulse_H2O2_Active = true;
+            ManualPulse_H2O2_StartedAt = millis();
+        }
+        return true;
+    }
     return uiRegistry.applyValue(id, value);
 }
 

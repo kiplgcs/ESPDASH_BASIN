@@ -158,6 +158,17 @@ unsigned long timerDuration;
     snprintf(info, 50, "Start");
   }
 }
+
+// Включение перельстатических насосов в ручную кнопкой на 1 сек для проверки
+inline void updateManualPumpPulses(){
+  const unsigned long now = millis();
+  if(ManualPulse_ACO_Active && (now - ManualPulse_ACO_StartedAt >= 1000UL)){
+    ManualPulse_ACO_Active = false;
+  }
+  if(ManualPulse_H2O2_Active && (now - ManualPulse_H2O2_StartedAt >= 1000UL)){
+    ManualPulse_H2O2_Active = false;
+  }
+}
 /**************************************************************************************/
 /**************************************************************************************/
 /**************************************************************************************/
@@ -433,9 +444,12 @@ void ControlModbusRelay(int interval) {
 
 
 //   Error err = RS485.addRequest(40001,1,0x05,5, Power_H2O2 ? devices[0].value : devices[1].value); //реле№6 для Power_H2O2
-  err = RS485.addRequest(40001, 1, 0x05, 5, Power_H2O2 ? devices[0].value : devices[1].value); //реле№6 для Power_H2O2
-  err = RS485.addRequest(40001, 1, 0x05, 6, Power_ACO ? devices[0].value : devices[1].value); //реле№7 для Power_ACO
- 
+  // err = RS485.addRequest(40001, 1, 0x05, 5, Power_H2O2 ? devices[0].value : devices[1].value); //реле№6 для Power_H2O2
+  // err = RS485.addRequest(40001, 1, 0x05, 6, Power_ACO ? devices[0].value : devices[1].value); //реле№7 для Power_ACO
+  const bool powerH2O2Active = Power_H2O2 || ManualPulse_H2O2_Active; //Переменная powerH2O2Active будет равна true, если хотя бы одно из условий -  true
+  const bool powerAcoActive = Power_ACO || ManualPulse_ACO_Active;
+  err = RS485.addRequest(40001, 1, 0x05, 5, powerH2O2Active ? devices[0].value : devices[1].value); //реле№6 для Power_H2O2
+  err = RS485.addRequest(40001, 1, 0x05, 6, powerAcoActive ? devices[0].value : devices[1].value); //реле№7 для Power_ACO
 //   err = RS485.addRequest(40001,1,0x05,6, Power_ACO ? devices[0].value : devices[1].value);//реле№7 для Power_ACO
     
    
