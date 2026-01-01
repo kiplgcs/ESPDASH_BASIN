@@ -3,6 +3,7 @@
 #include <WiFi.h>
 #include <WiFiUdp.h>
 #include <Wire.h> // I2C и ADS1115 подключаем здесь, чтобы не дублировать в PH_CL2.h
+#include <esp_system.h>
 #include "NPT_Time.h"
 
 #include "wifi_manager.h"        // Логика Wi-Fi и сохранение параметров
@@ -44,6 +45,38 @@ WiFiUDP ntpUDP;
 void setup() {
   Serial.begin(115200);
 
+  delay(100);
+  Serial.println("\n[BOOT] ESPDASH starting...");
+  const char *resetReasonText = []() -> const char * {
+    switch (esp_reset_reason()) {
+      case ESP_RST_POWERON:
+        return "Power On";
+      case ESP_RST_EXT:
+        return "External Reset";
+      case ESP_RST_SW:
+        return "Software Reset";
+      case ESP_RST_PANIC:
+        return "Panic";
+      case ESP_RST_INT_WDT:
+        return "Interrupt Watchdog";
+      case ESP_RST_TASK_WDT:
+        return "Task Watchdog";
+      case ESP_RST_WDT:
+        return "Other Watchdog";
+      case ESP_RST_DEEPSLEEP:
+        return "Deep Sleep";
+      case ESP_RST_BROWNOUT:
+        return "Brownout";
+      case ESP_RST_SDIO:
+        return "SDIO";
+      default:
+        return "Unknown";
+    }
+  }();
+  Serial.printf("[BOOT] Reset reason: %s\n", resetReasonText);
+  Serial.printf("[BOOT] Chip model: %s | Cores: %u | Revision: %u\n",
+                ESP.getChipModel(), ESP.getChipCores(), ESP.getChipRevision());
+
   // Подключение к Wi-Fi с использованием сохранённых данных и кнопок
   StoredAPSSID = loadValue<String>("apSSID", String(apSSID));
   StoredAPPASS = loadValue<String>("apPASS", String(apPASS));
@@ -53,19 +86,24 @@ void setup() {
   // Activation_Heat = loadValue<int>("Activation_Heat", 0) != 0;
   // Sider_heat1 = Sider_heat;
   // Activation_Heat1 = Activation_Heat;
+    Serial.println("[BOOT] Initializing Wi-Fi...");
   initWiFiModule();
 
   // Инициализация файловой системы SPIFFS
+    Serial.println("[BOOT] Initializing filesystem...");
   initFileSystem();
 
   // Загрузка параметра jpg из файловой системы (по умолчанию 1)
   jpg = loadValue<int>("jpg", 1);
 
   // Инициализация времени из сохраненного значения (если есть)
+    Serial.println("[BOOT] Loading persisted time...");
   loadBaseEpochFromStorage();
 
   // Загрузка и применение MQTT параметров
+  Serial.println("[BOOT] Loading MQTT settings...");
   loadMqttSettings();
+  Serial.println("[BOOT] Applying MQTT state...");
   applyMqttState();
 
   // Загрузка настроек доступа к веб-интерфейсу

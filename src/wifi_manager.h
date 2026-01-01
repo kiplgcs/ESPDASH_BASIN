@@ -106,6 +106,8 @@ inline void startStaAttempt() {
   staAttemptInProgress = true;                // Отмечаем, что попытка идет
   lastAttemptStarted = millis();              // Запоминаем время старта
   attemptCount++;                             // Увеличиваем счетчик попыток
+  Serial.printf("[WiFi] Connecting to SSID \"%s\" (attempt %d/%d), hostname: %s\n",
+                staSsid.c_str(), attemptCount, maxAttempts, hostName.c_str());
 }
 
 inline void activateFallbackAp() {
@@ -116,15 +118,8 @@ inline void activateFallbackAp() {
   staAttemptInProgress = false;
   attemptCount = 0;
   checkInterval = 1000;
-}
-
-inline void onConnected() {
-  fallbackApActive = false;    // AP больше не нужен
-  staAttemptInProgress = false;
-  checkInterval = 120000;      // 120 seconds — замедляем проверки статуса при стабильной связи
-  attemptCount = 0;            // Сбрасываем счетчик
-  WiFi.mode(WIFI_STA);         // Оставляем только STA
-  beginMdns();                 // Стартуем mDNS для удобного доступа
+  Serial.printf("[WiFi] Fallback AP active: SSID \"%s\" | IP: %s\n",
+                apSsid.c_str(), WiFi.softAPIP().toString().c_str());
 }
 
 inline String buildModeText() {
@@ -139,6 +134,20 @@ inline String buildModeText() {
   default:
     return "Unknown"; // Непредвиденное состояние
   }
+}
+
+inline void onConnected() {
+  fallbackApActive = false;    // AP больше не нужен
+  staAttemptInProgress = false;
+  checkInterval = 120000;      // 120 seconds — замедляем проверки статуса при стабильной связи
+  attemptCount = 0;            // Сбрасываем счетчик
+  WiFi.mode(WIFI_STA);         // Оставляем только STA
+  beginMdns();                 // Стартуем mDNS для удобного доступа
+  Serial.printf("[WiFi] Connected: SSID \"%s\" | IP: %s | RSSI: %d dBm | Mode: %s\n",
+                WiFi.SSID().c_str(),
+                WiFi.localIP().toString().c_str(),
+                WiFi.RSSI(),
+                buildModeText().c_str());
 }
 
 inline String buildStatusText() {
@@ -190,6 +199,9 @@ inline void initWiFiModule() {
   apPass = loadValue<String>("apPASS", String(::apPASS));        // Пароль AP из NVS
   hostName = loadValue<String>("hostname", String(defaultHostname)); // Имя хоста из NVS
 
+    Serial.printf("[WiFi] Config: STA SSID \"%s\" | AP SSID \"%s\" | Hostname \"%s\"\n",
+                staSsid.c_str(), apSsid.c_str(), hostName.c_str());
+                
   WiFi.persistent(false);        // Не сохраняем настройки Wi-Fi во флэш автоматически
   WiFi.mode(WIFI_STA);           // Первичный режим — STA
   WiFi.setHostname(hostName.c_str());

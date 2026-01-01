@@ -3,58 +3,58 @@
 
 #include "ui - JeeUI2.h"
 
-inline void interface(){
-    UI_APP("Система управления бассейном");
+inline void interface(){ // Декларатиынве функции интерфейса
+    UI_APP("🏊 Система управления бассейном");
 
-    UI_MENU("Общая информация по бассейну");
-    UI_MENU("Controls");
-    UI_MENU("Настройка фильтрации, Промывка фильтра");
-    UI_MENU("Управление лампой");
-    UI_MENU("Управление RGB подсветкой");
-    UI_MENU("Контроль уровня воды");
-    UI_MENU("Контроль температуры");
-    UI_MENU("Контроль PH (NaOCl)");
-    UI_MENU("Контроль хлора CL (ACO)");
+    UI_MENU("📊 Общая информация по бассейну");
+    UI_MENU("🧰 Controls");
+    UI_MENU("🧹 Настройка фильтрации, Промывка фильтра");
+    UI_MENU("💡 Управление лампой");
+    UI_MENU("🌈 Управление RGB подсветкой");
+    UI_MENU("📏 Контроль уровня воды");
+    UI_MENU("🌡 Контроль температуры");
+    UI_MENU("🧪 Контроль PH (NaOCl)");
+    UI_MENU("🧴 Контроль хлора CL (ACO)");
 
     // Общая информация по бассейну
     UI_PAGE();
     UI_IMAGE("Image1", "/anim1.gif", "width:40%;height:200; x:25%;y:50%;");
 
-    UI_DISPLAY_INT("RandomVal", RandomVal, "Random Number");
+    UI_DISPLAY_INT("RandomVal", RandomVal, "🔢 Random Number");
     UI_TEXT("InfoString", InfoString, "x:10%;y:10%;fontSize:12;color:#00ff00");
     UI_TEXT("InfoString1", InfoString1, "x:20%;y:50%;fontSize:12;color:#00ff00");
-    UI_BUTTON("button1", button1, "gray", "My Button");
-    UI_BUTTON("button2", button2, "gray", "My Button1");
+    UI_BUTTON("button1", button1, "gray", "🔘 My Button");
+    UI_BUTTON("button2", button2, "gray", "🔘 My Button1");
 
     // Controls tab
     UI_PAGE();
     
-    UI_RANGE("MotorSpeed", MotorSpeedSetting, 0, 100, 1, "Motor Speed");
-    UI_DUAL_RANGE_KEYS("RangeSlider", RangeMin, RangeMax, "RangeMin", "RangeMax", 10, 40, 1, "Range Min-Max");
-    UI_NUMBER("IntInput", IntInput, "Enter Integer", false);
-    UI_NUMBER("FloatInput", FloatInput, "Enter Float", true);
-    UI_TIME("Timer1", Timer1, "Start Time");
-    UI_TEXT("Comment", Comment, "Comment");
+    UI_RANGE("MotorSpeed", MotorSpeedSetting, 0, 100, 1, "⚙️ Motor Speed");
+    UI_DUAL_RANGE_KEYS("RangeSlider", RangeMin, RangeMax, "RangeMin", "RangeMax", 10, 40, 1, "🎚️ Range Min-Max");
+    UI_NUMBER("IntInput", IntInput, "🔢 Enter Integer", false);
+    UI_NUMBER("FloatInput", FloatInput, "🔣 Enter Float", true);
+    UI_TIME("Timer1", Timer1, "⏰ Start Time");
+    UI_TEXT("Comment", Comment, "💬 Comment");
 
     static String PopupComment;
-    UI_POPUP_BEGIN("DataEntry", "Ввод данных", "Открыть окно");
-    UI_TEXT("PopupComment", PopupComment, "Комментарий");
+    UI_POPUP_BEGIN("DataEntry", "📝 Ввод данных", "🪟 Открыть окно");
+    UI_TEXT("PopupComment", PopupComment, "💬 Комментарий");
     UI_POPUP_END();
 
     // Настройка фильтрации, Промывка фильтра
     UI_PAGE();
-    UI_BUTTON("Power_Filtr", Power_Filtr, "gray", "Фильтрация (вручную)");
+    UI_BUTTON("Power_Filtr", Power_Filtr, "gray", "🧽 Фильтрация (вручную)");
     // UI_CHECKBOX("Power_Filtr", Power_Filtr, "Фильтрация (вручную)");
-    UI_CHECKBOX("Filtr_Time1", Filtr_Time1, "Таймер фильтрации №1");
-    UI_TIMER("FiltrTimer1", "Таймер фильтрации №1", noopTimerCallback);
-    UI_CHECKBOX("Filtr_Time2", Filtr_Time2, "Таймер фильтрации №2");
-    UI_TIMER("FiltrTimer2", "Таймер фильтрации №2", noopTimerCallback);
-    UI_CHECKBOX("Filtr_Time3", Filtr_Time3, "Таймер фильтрации №3");
-    UI_BUTTON("Power_Clean", Power_Clean, "gray", "Промывка фильтра (вручную)");
+    UI_CHECKBOX("Filtr_Time1", Filtr_Time1, "⏱️ Таймер фильтрации №1");
+    UI_TIMER("FiltrTimer1", "⏱️ Таймер фильтрации №1", noopTimerCallback);
+    UI_CHECKBOX("Filtr_Time2", Filtr_Time2, "⏱️ Таймер фильтрации №2");
+    UI_TIMER("FiltrTimer2", "⏱️ Таймер фильтрации №2", noopTimerCallback);
+    UI_CHECKBOX("Filtr_Time3", Filtr_Time3, "⏱️ Таймер фильтрации №3");
+    UI_BUTTON("Power_Clean", Power_Clean, "gray", "🧼 Промывка фильтра (вручную)");
     // UI_CHECKBOX("Power_Clean", Power_Clean, "Промывка фильтра (вручную)");
-    UI_CHECKBOX("Clean_Time1", Clean_Time1, "Таймер промывки");
-    UI_TIMER("CleanTimer1", "Таймер промывки", noopTimerCallback);
-    UI_SELECT_DAYS("DaysSelect", DaysSelect, "Дни промывки");
+    UI_CHECKBOX("Clean_Time1", Clean_Time1, "🗓️ Таймер промывки");
+    UI_TIMER("CleanTimer1", "🗓️ Таймер промывки", noopTimerCallback);
+    UI_SELECT_DAYS("DaysSelect", DaysSelect, "📅 Дни промывки");
 
     
 
@@ -65,26 +65,26 @@ inline void interface(){
     UI_SELECT_CB("SetLamp", SetLamp, (std::initializer_list<UIOption>{{"off", "Лампа отключена постоянно"},
                                      {"on", "Лампа включена постоянно"},
                                      {"auto", "Включение по датчику освещенности (<20%)"},
-                                     {"timer", "Включение по таймеру"}}), "Режим света", onSetLampChange);
+                                     {"timer", "Включение по таймеру"}}), "💡 Режим света", onSetLampChange);
     // UI_NUMBER("Lumen_Ul", Lumen_Ul, "Освещенность на улице, %", false);
     static String Lumen_Ul_str = String(Lumen_Ul); 
-    UI_TEXT("Lumen_Ul", Lumen_Ul_str, "Освещенность на улице, %");
+    UI_TEXT("Lumen_Ul", Lumen_Ul_str, "🔆 Освещенность на улице, %");
 
-    UI_TIMER("LampTimer", "Таймер лампы", onLampTimerChange);
+    UI_TIMER("LampTimer", "⏲️ Таймер лампы", onLampTimerChange);
 
     // Управление RGB подсветкой
     UI_PAGE();
-    UI_BUTTON_DEFAULT("button_WS2815", Pow_WS2815, "gray", "Включить / Отключить : RGB ленту WS2815", 1);
-    UI_CHECKBOX("WS2815_Time1", WS2815_Time1, "Таймер RGB ленты"); //Галочка - активания/деактивация таймера
+    UI_BUTTON_DEFAULT("button_WS2815", Pow_WS2815, "gray", "🌈 Включить / Отключить : RGB ленту WS2815", 1);
+    UI_CHECKBOX("WS2815_Time1", WS2815_Time1, "⏲️ Таймер RGB ленты"); //Галочка - активания/деактивация таймера
     UI_SELECT_CB("SetRGB", SetRGB, (std::initializer_list<UIOption>{{"off", "RGB подсветка отключена постоянно"},
                                    {"on", "RGB подсветка включена постоянно"},
                                    {"auto", "Включение по датчику освещенности (<20%)"},
-                                   {"timer", "Включение по таймеру"}}), "Режим управления RGB подсветкой", onSetRgbChange);
-        UI_TIMER("RgbTimer", "Таймер RGB ленты", noopTimerCallback);
-    UI_COLOR("LEDColor", LEDColor, "Цвет подсветки");
+                                   {"timer", "Включение по таймеру"}}), "🎛️ Режим управления RGB подсветкой", onSetRgbChange);
+    UI_TIMER("RgbTimer", "⏲️ Таймер RGB ленты", noopTimerCallback);
+    UI_COLOR("LEDColor", LEDColor, "🎨 Цвет подсветки");
     UI_SELECT_CB("LedColorMode", LedColorMode, (std::initializer_list<UIOption>{{"auto", "Автоматически"},
-                                               {"manual", "Ручной цвет"}}), "Режим цвета", onLedColorModeChange);
-    UI_RANGE_CB("LedBrightness", LedBrightness, 10, 255, 1, "Яркость", onLedBrightnessChange);
+                                               {"manual", "Ручной цвет"}}), "🎨 Режим цвета", onLedColorModeChange);
+    UI_RANGE_CB("LedBrightness", LedBrightness, 10, 255, 1, "🔆 Яркость", onLedBrightnessChange);
     UI_SELECT("LedPattern", LedPattern, (std::initializer_list<UIOption>{{"rainbow", "Радуга"},
                                          {"pulse", "Пульс"},
                                          {"chase", "Шлейф"},
@@ -108,16 +108,16 @@ inline void interface(){
                                          {"twirl", "Завихрение"},
                                          {"sparkle_trails", "Искровые шлейфы"},
                                          {"neon_flow", "Неоновый поток"},
-                                         {"calm_sea", "Спокойное море"}}), "Режим подсветки");
-    UI_RANGE("LedAutoplayDuration", LedAutoplayDuration, 5, 180, 5, "Смена режима (сек)");
+                                         {"calm_sea", "Спокойное море"}}), "✨ Режим подсветки");
+    UI_RANGE("LedAutoplayDuration", LedAutoplayDuration, 5, 180, 5, "⏳ Смена режима (сек)");
     UI_SELECT("LedAutoplay", LedAutoplay, (std::initializer_list<UIOption>{{"1", "Автомат"},
-                                           {"0", "Вручную"}}), "Автосмена");
+                                           {"0", "Вручную"}}), "🔁 Автосмена");
     UI_SELECT("LedColorOrder", LedColorOrder, (std::initializer_list<UIOption>{{"GRB", "WS2815 / WS2812 (GRB)"},
                                                {"RGB", "WS2811 (RGB)"},
                                                {"GBR", "GBR"},
                                                {"RBG", "RBG"},
                                                {"BRG", "BRG"},
-                                               {"BGR", "BGR"}}), "Порядок цветов ленты");
+                                               {"BGR", "BGR"}}), "🎚️ Порядок цветов ленты");
 
 
 
@@ -127,12 +127,12 @@ inline void interface(){
 
    // Контроль температуры
     UI_PAGE();
-    UI_DISPLAY_FLOAT("DS1", DS1, "Температура воды, °C");
-    UI_RANGE("Sider_heat", Sider_heat, 5, 30, 1, "Уставка нагрева");
-    UI_NUMBER("Sider_heat", Sider_heat, "Уставка нагрева, °C", false);
-    UI_CHECKBOX("Activation_Heat", Activation_Heat, "Контроль нагрева");
-    UI_DISPLAY_BOOL("Power_Heat", Power_Heat, "Состояние нагрева", "Нагрев", "Откл.");
-    UI_GRAPH_SOURCE("PoolTempTrend", "Температура бассейна",
+    UI_DISPLAY_FLOAT("DS1", DS1, "🌡 Температура воды, °C");
+    UI_RANGE("Sider_heat", Sider_heat, 5, 30, 1, "🎯 Уставка нагрева");
+    UI_NUMBER("Sider_heat", Sider_heat, "🎯 Уставка нагрева, °C", false);
+    UI_CHECKBOX("Activation_Heat", Activation_Heat, "🔥 Контроль нагрева");
+    UI_DISPLAY_BOOL("Power_Heat", Power_Heat, "♨️ Состояние нагрева", "🔥 Нагрев", "⏹️ Откл.");
+    UI_GRAPH_SOURCE("PoolTempTrend", "📈 Температура бассейна",
         "value:Temperatura;updatePeriod_of_Time:180;updateStep:3;maxPoints:20;width:100%;height:240;"
         "xLabel:Time;yLabel:Temperature;pointColor:#ffd166;lineColor:#4CAF50;"
         "lineWidth:1;pointRadius:3;smooth:false", Temperatura);
@@ -143,7 +143,7 @@ inline void interface(){
     UI_PAGE();
  
 
-    UI_DISPLAY_FLOAT("PH", PH, "pH (текущее)");
+    UI_DISPLAY_FLOAT("PH", PH, "🧪 pH (текущее)");
 
 
 
@@ -177,9 +177,9 @@ inline void interface(){
 
     // }
 
-    UI_DISPLAY_BOOL("Power_ACO", Power_ACO, "Дозатор ACO", "Работа", "Откл.");
-    UI_CHECKBOX("PH_Control_ACO", PH_Control_ACO, "Контроль pH (ACO)");
-    UI_NUMBER("PH_setting", PH_setting, "Верхний предел pH", true);
+    UI_DISPLAY_BOOL("Power_ACO", Power_ACO, "🧴 Дозатор ACO", "✅ Работа", "⏹️ Откл.");
+    UI_CHECKBOX("PH_Control_ACO", PH_Control_ACO, "🧪 Контроль pH (ACO)");
+    UI_NUMBER("PH_setting", PH_setting, "⬆️ Верхний предел pH", true);
 
 
 
@@ -190,7 +190,7 @@ inline void interface(){
                                                                {"5", "30 мин"},
                                                                {"6", "1 час"},
                                                                {"7", "24 часа"}};
-    UI_SELECT("ACO_Work", ACO_Work, dosingOptions, "Период дозирования ACO");
+       UI_SELECT("ACO_Work", ACO_Work, dosingOptions, "⏳ Период дозирования ACO");
 
         // График тренда измеренной температуры:
     //  - "FloatTrend1" — внутреннее имя источника данных (ID графика), которым библиотека связывает график с данными.
@@ -212,53 +212,50 @@ inline void interface(){
     //      pointRadius:3              — радиус точек.
     //      smooth:false               — отключено сглаживание линий (ступенчатый вывод).
     //  - Temperatura — переменная-источник, из которой читается значение для построения графика.
-    UI_GRAPH_SOURCE("FloatTrend1", "Temperature1 Trend",
+    UI_GRAPH_SOURCE("FloatTrend1", "📊 Temperature1 Trend",
     "value:Temperatura;updatePeriod_of_Time:60;updateStep:5;maxPoints:40;width:100%;height:240;"
     "xLabel:Time;yLabel:Temperature;pointColor:#6b66ff;lineColor:#ff5e5e;"
     "lineWidth:1;pointRadius:3;smooth:false", Temperatura);
         
-    UI_POPUP_BEGIN("Cal_PH", "Калибровка датчика PH", "Открыть окно калибровки датчика PH");
-
+     UI_POPUP_BEGIN("Cal_PH", "🧪 Калибровка датчика PH", "🪟 Открыть окно калибровки датчика PH");
 
     //var("PH_CAL", "PH"+ String(PH, 2) + " : " + String(analogValuePH_Comp)+"mV");
-                UI_DISPLAY_INT("analogValuePH", analogValuePH_Comp, "Данные с АЦП от датчика PH");
+                UI_DISPLAY_INT("analogValuePH", analogValuePH_Comp, "📟 Данные с АЦП от датчика PH");
                 // UI_NUMBER("PH_Min", PH1, "Min CAL PH1 (4.1)", true);
                 // UI_NUMBER("PH_Max", PH2, "Max CAL PH2 (6.86)", true);
-                UI_DUAL_RANGE_KEYS("Float_PH_Slider", PH1, PH2, "PH1_MIN", "PH2_MAX", 4.0, 10.0, 0.1, "Range PH Min-Max");
-                UI_NUMBER("PH1_CAL", PH1_CAL, "АЦП_mV для PH1 (Примерно 3500)", false);
-                UI_NUMBER("PH2_CAL", PH2_CAL, "АЦП_mV для PH2 (Примерно 2900)", false);
+                UI_DUAL_RANGE_KEYS("Float_PH_Slider", PH1, PH2, "PH1_MIN", "PH2_MAX", 4.0, 10.0, 0.1, "🎚️ Range PH Min-Max");
+                UI_NUMBER("PH1_CAL", PH1_CAL, "📉 АЦП_mV для PH1 (Примерно 3500)", false);
+                UI_NUMBER("PH2_CAL", PH2_CAL, "📉 АЦП_mV для PH2 (Примерно 2900)", false);
                 // UI_DUAL_RANGE_KEYS("Int_PH_Slider", PH1_CAL, PH2_CAL, "PH1_CAL", "PH2_CAL", 100.0, 5000.0, 1, "Range АЦП_mV Min-Max");
 
-                UI_NUMBER("Temper_Reference", Temper_Reference, "Температура референсная", true);
-                UI_NUMBER("Temper_PH", Temper_PH, "Измеренная тепература для компенасации измерения PH", true);
+                UI_NUMBER("Temper_Reference", Temper_Reference, "🌡 Температура референсная", true);
+                UI_NUMBER("Temper_PH", Temper_PH, "🌡 Измеренная тепература для компенасации измерения PH", true);
 
-                UI_BUTTON("Power_H2O2_Button", Power_H2O2, "gray", "Проверка работы перельстатического насоса подачи кислоты (вручную)");
+                UI_BUTTON("Power_H2O2_Button", Power_H2O2, "gray", "🧪 Проверка работы перельстатического насоса подачи кислоты (вручную)");
         UI_POPUP_END();
 
 
     //Контроль хлора CL (ACO)
     UI_PAGE();
     
-    UI_DISPLAY_FLOAT("ppmCl", ppmCl, "Свободный хлор, мг/л");
-    UI_DISPLAY_INT("corrected_ORP_Eh_mV", corrected_ORP_Eh_mV, "ORP, мВ");
-    UI_DISPLAY_BOOL("Power_H2O2", Power_H2O2, "Дозатор NaOCl", "Работа", "Откл.");
-    UI_CHECKBOX("NaOCl_H2O2_Control", NaOCl_H2O2_Control, "Контроль хлора (NaOCl)");
-    UI_NUMBER("ORP_setting", ORP_setting, "Нижний предел ORP, мВ", false);
-    UI_SELECT("H2O2_Work", H2O2_Work, dosingOptions, "Период дозирования NaOCl");
+    UI_DISPLAY_FLOAT("ppmCl", ppmCl, "🧴 Свободный хлор, мг/л");
+    UI_DISPLAY_INT("corrected_ORP_Eh_mV", corrected_ORP_Eh_mV, "📟 ORP, мВ");
+    UI_DISPLAY_BOOL("Power_H2O2", Power_H2O2, "🧴 Дозатор NaOCl", "✅ Работа", "⏹️ Откл.");
+    UI_CHECKBOX("NaOCl_H2O2_Control", NaOCl_H2O2_Control, "🧪 Контроль хлора (NaOCl)");
+    UI_NUMBER("ORP_setting", ORP_setting, "⬇️ Нижний предел ORP, мВ", false);
+    UI_SELECT("H2O2_Work", H2O2_Work, dosingOptions, "⏳ Период дозирования NaOCl");
 
-
-    UI_GRAPH_SOURCE("FloatTrend2", "Temperature2 Trend",
+    UI_GRAPH_SOURCE("FloatTrend2", "📊 Temperature2 Trend",
     "value:Temperatura;updatePeriod_of_Time:60;updateStep:5;maxPoints:30;width:100%;height:400;"
     "xLabel:Time;yLabel:Temperature;pointColor:#6b66ff;lineColor:#ff5e5e;"
     "lineWidth:1;pointRadius:3;smooth:false", Temperatura);
 
         UI_POPUP_BEGIN("CL", "Калибровка датчика хлора", "Открыть окно калибровки датчика CL хлора}");
             static String Cl_Cal_str = String(corrected_ORP_Eh_mV) + "-" + String(CalRastvor256mV) + "=" + String(CalRastvor256mV - corrected_ORP_Eh_mV);   
-            UI_NUMBER("Cl_Cal", Cl_Cal_str, "ORP - ORPCal = калибровочный коэффициент", true);
-            UI_NUMBER("CalRastvor256mV", CalRastvor256mV, "ОВП калибровочного раствора - мВ", false);
-            UI_NUMBER("Calibration_ORP_mV", Calibration_ORP_mV, "Калибровочный коэффициент - мВ", false);
-
-            UI_BUTTON("Power_ACO_Button", Power_ACO, "gray", "Проверка работы перельстатического насоса подачи хлора (вручную)");
+            UI_NUMBER("Cl_Cal", Cl_Cal_str, "📐 ORP - ORPCal = калибровочный коэффициент", true);
+            UI_NUMBER("CalRastvor256mV", CalRastvor256mV, "🧪 ОВП калибровочного раствора - мВ", false);
+            UI_NUMBER("Calibration_ORP_mV", Calibration_ORP_mV, "📏 Калибровочный коэффициент - мВ", false);
+            UI_BUTTON("Power_ACO_Button", Power_ACO, "gray", "🧴 Проверка работы перельстатического насоса подачи хлора (вручную)");
         UI_POPUP_END();
 
 }
