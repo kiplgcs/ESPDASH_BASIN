@@ -13,8 +13,8 @@ int triggerRestartNextion = true; //Флаг функции для отложе�
 #include "EasyNextionLibrary.h"  // Include EasyNextionLibrary
 #include <HardwareSerial.h>
 HardwareSerial MySerial(1);
-#define RXD1 6 //4 // 6 //8/15/16
-#define TXD1 7 //5 //7 //9//14/17
+#define RXD1 6  // 6 //8/15/16
+#define TXD1 7  //7 //9//14/17
 
 EasyNex myNex(MySerial); // Create an object of EasyNex class with the name < myNex >
                        // Set as parameter the Hardware Serial you are going to use
@@ -35,6 +35,24 @@ int in_hours, in_minutes; char buffer[6];
 // void ActivUARTInterrupt() {//Прерывание по Rx для получения данных от Nextion монитора - отключено потому что и так работает все хорошо.
 //   myNex.NextionListen(); // Обработка данных при прерывании
 // }
+
+  /************************* инициализируем монитор Nextion*********************************/
+void setup_Nextion(){
+
+  MySerial.begin(115200, SERIAL_8N1, RXD1, TXD1); // Инициализируем порт со своими пинами
+
+
+  myNex.lastCurrentPageId = 1;  // При первом запуске цикла currentPageId и lastCurrentPageId
+                                // должны иметь разные значения из-за запуска функции firstRefresh()
+  myNex.writeStr("page 0");     // Для синхронизации страницы Nextion в случае сброса на Arduino
+  //triggerRestartNextion = true; //Флаг чтения всех необходимых переменных из Nextion, после перезагрузки контроллера.
+
+  //Прерываем по пину  RX порта для выполнения функции получения данных для монитора Nextion
+  //attachInterrupt(digitalPinToInterrupt(RXD1), ActivUARTInterrupt, RISING); //CHANGE //FALLING //RISING); 
+  /************************* инициализируем и получаем время*********************************/
+  //setup_rtc(); - отключена, т.к. настройка серверов идет в основной функции запроса
+}
+
 
 
 void trigger0(){

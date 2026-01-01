@@ -44,6 +44,43 @@ uint8_t countCL = 0;                 // Счётчик выборок
 int32_t totalCL = 0;                 // Сумма всех выборок
 int analogValueCL;
 
+
+
+/************************* Настраиваем  АЦП модуль ADS1115 16-бит *********************************/
+void setup_ADS1115_PH_CL2(){
+  //Для подключения 16-битного АЦП ADS1115:
+  // в базовом варианте платы NodeMCU-32S I2C интерфейс завязан на пины 21 и 22
+  Wire.begin(4, 5); //10,11 или 8,9  // Инициализируем I2C с SDA  и SCL 
+
+  //Serial.println("Getting single-ended readings from AIN0..3");
+  //Serial.println("ADC Range: +/- 6.144V (1 bit = 3mV/ADS1015, 0.1875mV/ADS1115)");
+  // Входной диапазон (или усиление) АЦП можно изменить с помощью следующих
+  // функции, но будьте осторожны, чтобы не превышать VDD + 0,3 В макс или
+  // превышать верхний и нижний пределы, если вы отрегулируете диапазон ввода! 
+  //Неправильное изменение этих значений может привести к повреждению вашего АЦП!
+  //                                                                ADS1015  ADS1115
+  //                                                                -------  -------
+  // ads.setGain(GAIN_TWOTHIRDS);  // 2/3x gain +/- 6.144V  1 bit = 3mV      0.1875mV (default) //тут настраиваем опорное напряжение
+  ads1.setGain(GAIN_TWOTHIRDS);
+  ads2.setGain(GAIN_TWOTHIRDS);
+
+
+  // ads.setGain(GAIN_ONE);        // 1x gain   +/- 4.096V  1 bit = 2mV      0.125mV
+  // ads.setGain(GAIN_TWO);        // 2x gain   +/- 2.048V  1 bit = 1mV      0.0625mV
+  // ads.setGain(GAIN_FOUR);       // 4x gain   +/- 1.024V  1 bit = 0.5mV    0.03125mV
+  // ads.setGain(GAIN_EIGHT);      // 8x gain   +/- 0.512V  1 bit = 0.25mV   0.015625mV
+  // ads.setGain(GAIN_SIXTEEN);    // 16x gain  +/- 0.256V  1 bit = 0.125mV  0.0078125mV
+  
+  // ads.begin(); //инициализируем модуль с ранее настроенными параметрами
+
+  ads1.begin(ads1Address);
+  ads2.begin(ads2Address);
+}
+
+
+
+
+
 // Проверка доступности устройства на I2C (быстрый "ping" без чтения данных).
 bool isI2CDeviceReady(uint8_t address) {
     Wire.beginTransmission(address);

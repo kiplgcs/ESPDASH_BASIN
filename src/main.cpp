@@ -74,72 +74,13 @@ void setup() {
   adminUsername = loadValue<String>("adminUser", "");
   adminPassword = loadValue<String>("adminPass", "");
 
-  // Запуск OTA-обновлений на порту 8080
-  beginWebUpdate();
+  beginWebUpdate();  // Запуск OTA-обновлений на порту 8080
 
+  setup_ADS1115_PH_CL2(); //Настраиваем  АЦП модуль ADS1115 16-бит
 
-/************************* Настраиваем  АЦП модуль ADS1115 16-бит *********************************/
-  //Для подключения 16-битного АЦП ADS1115:
-  // в базовом варианте платы NodeMCU-32S I2C интерфейс завязан на пины 21 и 22
-  Wire.begin(8, 9); //Wire.begin(23, 22);  // Инициализируем I2C с SDA  и SCL 
+  setup_Nextion(); //Настраиваем Nextion монитор
 
-  //Serial.println("Getting single-ended readings from AIN0..3");
-  //Serial.println("ADC Range: +/- 6.144V (1 bit = 3mV/ADS1015, 0.1875mV/ADS1115)");
-  // Входной диапазон (или усиление) АЦП можно изменить с помощью следующих
-  // функции, но будьте осторожны, чтобы не превышать VDD + 0,3 В макс или
-  // превышать верхний и нижний пределы, если вы отрегулируете диапазон ввода! 
-  //Неправильное изменение этих значений может привести к повреждению вашего АЦП!
-  //                                                                ADS1015  ADS1115
-  //                                                                -------  -------
-  // ads.setGain(GAIN_TWOTHIRDS);  // 2/3x gain +/- 6.144V  1 bit = 3mV      0.1875mV (default) //тут настраиваем опорное напряжение
-  ads1.setGain(GAIN_TWOTHIRDS);
-  ads2.setGain(GAIN_TWOTHIRDS);
-
-
-  // ads.setGain(GAIN_ONE);        // 1x gain   +/- 4.096V  1 bit = 2mV      0.125mV
-  // ads.setGain(GAIN_TWO);        // 2x gain   +/- 2.048V  1 bit = 1mV      0.0625mV
-  // ads.setGain(GAIN_FOUR);       // 4x gain   +/- 1.024V  1 bit = 0.5mV    0.03125mV
-  // ads.setGain(GAIN_EIGHT);      // 8x gain   +/- 0.512V  1 bit = 0.25mV   0.015625mV
-  // ads.setGain(GAIN_SIXTEEN);    // 16x gain  +/- 0.256V  1 bit = 0.125mV  0.0078125mV
-  
-  // ads.begin(); //инициализируем модуль с ранее настроенными параметрами
-
-  ads1.begin(ads1Address);
-  ads2.begin(ads2Address);
- 
-  /************************* инициализируем монитор Nextion*********************************/
- 
-  //myNex.begin(115200);
-  MySerial.begin(115200, SERIAL_8N1, RXD1, TXD1); // Инициализируем порт со своими пинами
-
-
-  myNex.lastCurrentPageId = 1;  // При первом запуске цикла currentPageId и lastCurrentPageId
-                                // должны иметь разные значения из-за запуска функции firstRefresh()
-  myNex.writeStr("page 0");     // Для синхронизации страницы Nextion в случае сброса на Arduino
-  //triggerRestartNextion = true; //Флаг чтения всех необходимых переменных из Nextion, после перезагрузки контроллера.
-
-  //Прерываем по пину  RX порта для выполнения функции получения данных для монитора Nextion
-  //attachInterrupt(digitalPinToInterrupt(RXD1), ActivUARTInterrupt, RISING); //CHANGE //FALLING //RISING); 
-  /************************* инициализируем и получаем время*********************************/
-  //setup_rtc(); - отключена, т.к. настройка серверов идет в основной функции запроса
-  
   setup_ds18();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
   // ---------- Загрузка сохранённых значений ----------
@@ -250,8 +191,8 @@ void loop() {
 TimerControlRelay(10000);  // TimerControlRelay(600); //Контроль включения реле по таймерам
 
 ControlModbusRelay(1000);
-// loop_PH(2000);
-// loop_CL2(2000);
+loop_PH(2000);
+loop_CL2(2100);
 
 /**************************** *********************************************************************/
   Nextion_Transmit(500); // Отправка в Nextion по очереди
@@ -285,8 +226,6 @@ ControlModbusRelay(1000);
   }
 
 
-
-
  ///////////////////////////////////////////////////////////////////////////////////////
   Temp_DS18B20(5000); //Измеряем температуру
  ///****************************  Nextion - проверка прихода данных Tx/Rx ****************************************/
@@ -297,12 +236,6 @@ ControlModbusRelay(1000);
  /**************************** *********************************************************************/
   // Nextion_Transmit(500); // Отправка в Nextion по очереди
   // if(Power_Clean){Power_Filtr = false;} //преимущество очистки - отключаем фильтрацию в любом случае (даже если включен по таймерам), если подошло время очистки фильтра
-
-
-
-
-
-
 
 
 
@@ -451,11 +384,8 @@ ControlModbusRelay(1000);
     addSeriesPoint(entry.first, CurrentTime, entry.second()); // Обновление всех графиков
   }
 
-  // Обработка MQTT-клиента
-  handleMqttLoop();
-
-
-
+  
+  handleMqttLoop();// Обработка MQTT-клиента
 
   loop_WS2815();  
 
