@@ -131,9 +131,8 @@ void loop_PH(int interval) {
     // ----------- pH СЕНСОР (ADS1, канал A0) -----------
  
     // if (!ads1.begin(0x48)) return; // если I2C не отвечает — выходим
-    totalPH += ads1.readADC_SingleEnded(0); // Читаем значение с канала A0 и добавляем к сумме
-        int16_t rawPH = 0;
-    if (!readAdsSingleEndedSafe(ads1, ads1Address, 0, rawPH)) {
+
+     if (!isI2CDeviceReady(ads1Address)) { //if (!readAdsSingleEndedSafe(ads1, ads1Address, 0, rawPH)) {
         // Если АЦП недоступен/завис — сбрасываем накопление и выходим,
         // чтобы не держать старые данные и не блокировать основной loop().
         countPH = 0;
@@ -141,7 +140,7 @@ void loop_PH(int interval) {
         return;
     }
 
-    totalPH += rawPH; // Читаем значение с канала A0 и добавляем к сумме
+    totalPH += ads1.readADC_SingleEnded(0); // Читаем значение с канала A0 и добавляем к сумме
     countPH++;                              // Увеличиваем счётчик выборок
 
 
@@ -362,9 +361,8 @@ void loop_CL2(int interval) {
 
   // ----------- ХЛОР (ADS2, канал A1) -----------
 //    if (!ads2.begin(0x49)) return; // если I2C не отвечает — выходим
-  totalCL += ads2.readADC_SingleEnded(1);  // Считываем значение с ADS2 (канал 1)
-    int16_t rawCL = 0;
-  if (!readAdsSingleEndedSafe(ads2, ads2Address, 1, rawCL)) {
+
+  if (!isI2CDeviceReady(ads2Address)) { //if (!readAdsSingleEndedSafe(ads2, ads2Address, 1, rawCL)) {
       // Если АЦП недоступен/завис — сбрасываем накопление и выходим,
       // чтобы не держать старые данные и не блокировать основной loop().
       countCL = 0;
@@ -372,8 +370,9 @@ void loop_CL2(int interval) {
       return;
   }
 
-  totalCL += rawCL;  // Считываем значение с ADS2 (канал 1)
-  countCL++;                               // Увеличиваем счётчик
+
+    totalCL += ads2.readADC_SingleEnded(1);  // Считываем значение с ADS2 (канал 1)
+    countCL++;                              // Увеличиваем счётчик
 
   if (countCL < samples) return;           // Ждём, пока не наберётся 3 выборки
 
