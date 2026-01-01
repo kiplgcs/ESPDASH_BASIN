@@ -292,6 +292,11 @@ inline void onLampTimerChange(uint16_t onMinutes, uint16_t offMinutes){
 bool Power_Heat, Power_Heat1;
 bool Activation_Heat, Activation_Heat1; // Включение и Активация контроля включения нагрева воды
 int Sider_heat,  Sider_heat1; 			// Sider_heat1; bool Sider_Heat; // Переменная для получения или передачи из в  Nextion c  сидера монитора уставки нагрева воды
+
+bool RoomTemper = false;
+float RoomTempOn = 3.0f;
+float RoomTempOff = 4.0f;
+bool Power_Warm_floor_heating = false;
 //float temper1; int set_temper1;  //Для котроля измениения
 //bool Relay4_Time1, Relay4_Time2; // Разрешения работы включения по времени
 //String Relay4_timeON1, Relay4_timeOFF1, Relay4_timeON2, Relay4_timeOFF2; // Утавки времени включения
@@ -325,11 +330,11 @@ unsigned long ManualPulse_ACO_StartedAt = 0;
 // String Saved_Timer_ACO_Work, Timer_ACO_Work;
 
 bool PH_Control_ACO, Saved_PHControlACO; // Флаг для отслеживания предыдущего состояния PH_Control_ACO
-int ACO_Work = 1, Saved_ACO_Work;
+int ACO_Work = 11, Saved_ACO_Work;
 
 
 bool NaOCl_H2O2_Control, Saved_NaOCl_H2O2_Control;
-int H2O2_Work = 1, Saved_H2O2_Work;
+int H2O2_Work = 11, Saved_H2O2_Work;
 
 int corr_ORP_temper_mV; 		// ОРП с учетом калибровки по температуре
 int CalRastvor256mV	= 256;	//Калибровочный раствор
@@ -2340,10 +2345,14 @@ window.addEventListener('resize', ()=>{
     if(typeof j.Comment !== 'undefined') updateInputValue('Comment', j.Comment);
     if(typeof j.Lumen_Ul !== 'undefined') updateInputValue('Lumen_Ul', j.Lumen_Ul);
       if(typeof j.DS1 !== 'undefined') updateStat('DS1', j.DS1);
+          if(typeof j.RoomTemp !== 'undefined') updateStat('RoomTemp', j.RoomTemp);
     // if(typeof j.Sider_heat !== 'undefined') updateInputValue('Sider_heat', j.Sider_heat);
         if(typeof j.Sider_heat !== 'undefined') updateSliderDisplay('Sider_heat', j.Sider_heat);
     if(typeof j.Activation_Heat !== 'undefined') updateCheckboxValue('Activation_Heat', j.Activation_Heat);
     if(typeof j.Power_Heat !== 'undefined') updateStat('Power_Heat', j.Power_Heat);
+        if(typeof j.RoomTempOn !== 'undefined' && typeof j.RoomTempOff !== 'undefined') setRangeSliderUI('RoomTempRange', j.RoomTempOn, j.RoomTempOff);
+    if(typeof j.RoomTemper !== 'undefined') updateCheckboxValue('RoomTemper', j.RoomTemper);
+    if(typeof j.Power_Warm_floor_heating !== 'undefined') updateStat('Power_Warm_floor_heating', j.Power_Warm_floor_heating);
     if(typeof j.PH !== 'undefined') updateStat('PH', j.PH);
     if(typeof j.analogValuePH !== 'undefined') updateStat('analogValuePH', j.analogValuePH);
     if(typeof j.PH_Control_ACO !== 'undefined') updateCheckboxValue('PH_Control_ACO', j.PH_Control_ACO);
@@ -2577,9 +2586,14 @@ function setImg(x){
       doc["Power_Clean"] = Power_Clean ? 1 : 0;
       doc["Clean_Time1"] = Clean_Time1 ? 1 : 0;
       doc["DS1"] = String(DS1, 1) + " °C";
+      doc["RoomTemp"] = String(DS1, 1) + " °C";
       doc["Sider_heat"] = Sider_heat;
       doc["Activation_Heat"] = Activation_Heat ? 1 : 0;
       doc["Power_Heat"] = Power_Heat ? "Нагрев" : "Откл.";
+      doc["RoomTempOn"] = RoomTempOn;
+      doc["RoomTempOff"] = RoomTempOff;
+      doc["RoomTemper"] = RoomTemper ? 1 : 0;
+      doc["Power_Warm_floor_heating"] = Power_Warm_floor_heating ? "Включен" : "Откл.";
       doc["PH"] = String(PH, 2);
       doc["analogValuePH"] = String(analogValuePH_Comp) + " mV";
       doc["Temper_Reference"] = Temper_Reference;

@@ -60,6 +60,9 @@ inline bool loadGraphSettings(const String &series, GraphSettings &settings){
 inline void saveGraphSettings(const String &series, const GraphSettings &settings){
   if(!spiffsMounted) return;
   String path = graphConfigPath(series);
+          if(SPIFFS.exists(path)){
+          SPIFFS.remove(path);
+        }
   File f = SPIFFS.open(path, FILE_WRITE);
   if(!f){
     Serial.println("Failed to open graph config for writing: " + path);

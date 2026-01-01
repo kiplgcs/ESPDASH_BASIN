@@ -102,13 +102,19 @@ unsigned long timerDuration;
   const unsigned long timerWorkDuration = 5000;  // Время работы таймера всегда 5 секунд
 
   switch (mode) {
-    case 1: timerDuration = 1000UL * 15; break;          // 15 сек
-    case 2: timerDuration = 1000UL * 60; break;          // 60 сек
-    case 3: timerDuration = 1000UL * 60 * 5; break;      // 5 минут
-    case 4: timerDuration = 1000UL * 60 * 15; break;     // 15 минут
-    case 5: timerDuration = 1000UL * 60 * 30; break;     // 30 минут
-    case 6: timerDuration = 1000UL * 60 * 60; break;     // 1 час
-    case 7: timerDuration = 1000UL * 60 * 60 * 24; break; // 24 часа
+    case 1: timerDuration = 1000UL * 15; break;             // 15 сек
+    case 2: timerDuration = 1000UL * 60; break;             // 60 сек
+    case 3: timerDuration = 1000UL * 60 * 5; break;         // 5 минут
+    case 4: timerDuration = 1000UL * 60 * 15; break;        // 15 минут
+    case 5: timerDuration = 1000UL * 60 * 30; break;        // 30 минут
+    case 6: timerDuration = 1000UL * 60 * 60; break;        // 1 час
+    case 8: timerDuration = 1000UL * 60 * 60 * 2; break;    // 2 часа
+    case 9: timerDuration = 1000UL * 60 * 60 * 3; break;    // 3 часа
+    case 10: timerDuration = 1000UL * 60 * 60 * 4; break;   // 4 часа
+    case 11: timerDuration = 1000UL * 60 * 60 * 6; break;   // 6 часов
+    case 12: timerDuration = 1000UL * 60 * 60 * 8; break;   // 8 часов
+    case 13: timerDuration = 1000UL * 60 * 60 * 12; break;  // 12 часов
+    case 7: timerDuration = 1000UL * 60 * 60 * 24; break;   // 24 часа
     default: timerDuration = 0; break;
   }
 //   if (!power) {
@@ -431,6 +437,14 @@ void ControlModbusRelay(int interval) {
 //---------------------------------------------------------------------------------
 //---------------------------------------------------------------------------------
 
+  if (RoomTemper && DS1 < RoomTempOn) {
+    Power_Warm_floor_heating = true;
+  } else if (RoomTemper && DS1 > RoomTempOff) {
+    Power_Warm_floor_heating = false;
+  } else if (!RoomTemper) {
+    Power_Warm_floor_heating = false;
+  }
+
   Error err = RS485.addRequest(40001, 1, 0x05, 0, Lamp ? devices[0].value : devices[1].value); // реле№1 для Lamp
   err = RS485.addRequest(40001, 1, 0x05, 1, Pow_WS2815 ? devices[0].value : devices[1].value); //реле№2 для Pow_WS2815
   err = RS485.addRequest(40001, 1, 0x05, 8, Power_Filtr ? devices[0].value : devices[1].value); //реле№3 для Power_Filtr
@@ -441,6 +455,8 @@ void ControlModbusRelay(int interval) {
   } else {
     err = RS485.addRequest(40001, 1, 0x05, 4, Power_Heat ? devices[0].value : devices[1].value);
   }
+
+  err = RS485.addRequest(40001, 1, 0x05, 14, Power_Warm_floor_heating ? devices[0].value : devices[1].value); // реле№15 теплый пол
 
 
 //   Error err = RS485.addRequest(40001,1,0x05,5, Power_H2O2 ? devices[0].value : devices[1].value); //реле№6 для Power_H2O2

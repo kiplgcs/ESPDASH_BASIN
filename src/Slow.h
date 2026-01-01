@@ -185,6 +185,52 @@ switch (flag_slow) {
 
     }
 
-
+// Медленная поочередная синхронизация с Nextion на случай рассинхронизации.
+// Отправляем небольшими порциями, чтобы не перегружать канал связи и CPU.
+static uint8_t sync_step = 0;
+switch (sync_step) {
+  case 0:
+    myNex.writeNum("page0.b0.pic", Lamp ? 2 : 1);
+    myNex.writeNum("page0.b12.pic", Pow_WS2815 ? 2 : 1);
+    sync_step++;
+    break;
+  case 1:
+    myNex.writeNum("page0.b4.pic", Power_Heat ? 10 : 9);
+    myNex.writeNum("page0.b3.pic", Power_Topping ? 8 : 7);
+    sync_step++;
+    break;
+  case 2:
+    myNex.writeNum("page0.b1.pic", Power_Filtr ? 4 : 3);
+    myNex.writeNum("page0.b2.pic", Power_Clean ? 6 : 5);
+    sync_step++;
+    break;
+  case 3:
+    myNex.writeNum("page0.b5.pic", Power_H2O2 ? 12 : 11);
+    myNex.writeStr("page0.b5.txt", Info_H2O2);
+    sync_step++;
+    break;
+  case 4:
+    myNex.writeNum("page0.b6.pic", Power_ACO ? 12 : 11);
+    myNex.writeStr("page0.b6.txt", Info_ACO);
+    sync_step++;
+    break;
+  case 5:
+    myNex.writeStr("page0.b7.txt", "Cl: " + String(ppmCl));
+    myNex.writeStr("page0.b8.txt", "PH: " + String(PH));
+    sync_step++;
+    break;
+  case 6:
+    myNex.writeNum("heat.sw0.val", Activation_Heat);
+    sync_step++;
+    break;
+  case 7:
+    myNex.writeNum("Dispensers.cb0.val", ACO_Work - 1);
+    myNex.writeNum("Dispensers.cb1.val", H2O2_Work - 1);
+    sync_step++;
+    break;
+  default:
+    sync_step = 0;
+    break;
+}
 
   }

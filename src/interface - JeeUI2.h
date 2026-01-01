@@ -15,6 +15,7 @@ inline void interface(){ // Декларатиынве функции интер
     UI_MENU("🌡 Контроль температуры");
     UI_MENU("🧪 Контроль PH (NaOCl)");
     UI_MENU("🧴 Контроль хлора CL (ACO)");
+    UI_MENU("🏠 Контроль температуры в помещении");
 
     // Общая информация по бассейну
     UI_PAGE();
@@ -50,6 +51,7 @@ inline void interface(){ // Декларатиынве функции интер
     UI_CHECKBOX("Filtr_Time2", Filtr_Time2, "⏱️ Таймер фильтрации №2");
     UI_TIMER("FiltrTimer2", "⏱️ Таймер фильтрации №2", noopTimerCallback);
     UI_CHECKBOX("Filtr_Time3", Filtr_Time3, "⏱️ Таймер фильтрации №3");
+    UI_TIMER("FiltrTimer3", "⏱️ Таймер фильтрации №3", noopTimerCallback);
     UI_BUTTON("Power_Clean", Power_Clean, "gray", "🧼 Промывка фильтра (вручную)");
     // UI_CHECKBOX("Power_Clean", Power_Clean, "Промывка фильтра (вручную)");
     UI_CHECKBOX("Clean_Time1", Clean_Time1, "🗓️ Таймер промывки");
@@ -132,12 +134,17 @@ inline void interface(){ // Декларатиынве функции интер
     UI_NUMBER("Sider_heat", Sider_heat, "🎯 Уставка нагрева, °C", false);
     UI_CHECKBOX("Activation_Heat", Activation_Heat, "🔥 Контроль нагрева");
     UI_DISPLAY_BOOL("Power_Heat", Power_Heat, "♨️ Состояние нагрева", "🔥 Нагрев", "⏹️ Откл.");
-    UI_GRAPH_SOURCE("PoolTempTrend", "📈 Температура бассейна",
-        "value:Temperatura;updatePeriod_of_Time:180;updateStep:3;maxPoints:20;width:100%;height:240;"
-        "xLabel:Time;yLabel:Temperature;pointColor:#ffd166;lineColor:#4CAF50;"
-        "lineWidth:1;pointRadius:3;smooth:false", Temperatura);
+    
+    // UI_GRAPH_SOURCE("PoolTempTrend", "📈 Температура бассейна",
+    // "value:Temperatura;updatePeriod_of_Time:60;updateStep:5;maxPoints:40;width:100%;height:240;"
+    // "xLabel:Time;yLabel:Temperature;pointColor:#6b66ff;lineColor:#ff5e5e;"
+    // "lineWidth:1;pointRadius:3;smooth:false", DS1);
 
-
+    UI_GRAPH_SOURCE("FloatTrend3", "📈 Температура бассейна",
+    "value:Temperatura;updatePeriod_of_Time:60;updateStep:5;maxPoints:40;width:100%;height:240;"
+    "xLabel:Time;yLabel:Temperature;pointColor:#6b66ff;lineColor:#ff5e5e;"
+    "lineWidth:1;pointRadius:3;smooth:false", DS1);
+        
 
     // Контроль PH (NaOCl)
     UI_PAGE();
@@ -147,35 +154,6 @@ inline void interface(){ // Декларатиынве функции интер
 
 
 
-    // UI_BUTTON("button_Cal_PH", button_Cal_PH, "gray", "Калибровка датчика PH");
-
-
-
-   
-
-        // UI_SECTION("Калибровка датчика PH",
-        //     UI_NUMBER("PH_Min", PH1, "Min CAL PH1 (4.1)", true),
-        //     UI_NUMBER("PH_Max", PH2, "Max CAL PH2 (6.86)", true)
-        //     UI_NUMBER("PH1_CAL", PH1_CAL, "АЦП_mV для PH1 (Примерно 3500)", false);
-        //     UI_NUMBER("PH2_CAL", PH2_CAL, "АЦП_mV для PH2 (Примерно 2900)", false);
-        //     UI_NUMBER("Temper_Reference", Temper_Reference, "Температура референсная", true);
-        //     UI_NUMBER("Temper_PH", Temper_PH, "Измеренная тепература для компенасации измерения PH", true);
-        // )
-
-    // if(button_Cal_PH){
-        
-    // // UI_DUAL_RANGE_KEYS("Float_PH_Slider", PH1, PH2, "Min_CAL PH1:4.1", "Max_CAL PH2:6.86", 4.0, 10.0, 0.1, "Range PH Min-Max");
-    // UI_NUMBER("Float_PH1", PH1, "Min_CAL PH1:4.1", true);
-    // UI_NUMBER("Float_PH2", PH2, "Max_CAL PH2:6.86", true);
-
-    // // UI_DUAL_RANGE_KEYS("Int_PH_Slider", PH1_CAL, PH2_CAL, "АЦП_mV для PH2", "АЦП_mV для PH1", 100, 5000, 0.5, "Range АЦП_mV Min-Max");
-    // UI_NUMBER("PH1_CAL", PH1_CAL, "АЦП_mV для PH1 (Примерно 3500)", false);
-    // UI_NUMBER("PH2_CAL", PH2_CAL, "АЦП_mV для PH2 (Примерно 2900)", false);
-
-    // UI_NUMBER("Temper_Reference", Temper_Reference, "Температура референсная", true);
-    // UI_NUMBER("Temper_PH", Temper_PH, "Измеренная тепература для компенасации измерения PH", true);
-
-    // }
 
     UI_DISPLAY_BOOL("Power_ACO", Power_ACO, "🧴 Дозатор ACO", "✅ Работа", "⏹️ Откл.");
     UI_CHECKBOX("PH_Control_ACO", PH_Control_ACO, "🧪 Контроль pH (ACO)");
@@ -183,13 +161,19 @@ inline void interface(){ // Декларатиынве функции интер
 
 
 
-   static const std::initializer_list<UIOption> dosingOptions{{"1", "15 сек"},
-                                                               {"2", "60 сек"},
-                                                               {"3", "5 мин"},
-                                                               {"4", "15 мин"},
-                                                               {"5", "30 мин"},
-                                                               {"6", "1 час"},
-                                                               {"7", "24 часа"}};
+   static const std::initializer_list<UIOption> dosingOptions{  {"1", "15 сек"},
+                                                                {"2", "60 сек"},
+                                                                {"3", "5 мин"},
+                                                                {"4", "15 мин"},
+                                                                {"5", "30 мин"},
+                                                                {"6", "1 час"},
+                                                                {"8", "2 часа"},
+                                                                {"9", "3 часа"},
+                                                                {"10", "4 часа"},
+                                                                {"11", "6 часов"},
+                                                                {"12", "8 часов"},
+                                                                {"13", "12 часов"},
+                                                                {"7", "24 часа"}};
        UI_SELECT("ACO_Work", ACO_Work, dosingOptions, "⏳ Период дозирования ACO");
 
         // График тренда измеренной температуры:
@@ -257,5 +241,12 @@ inline void interface(){ // Декларатиынве функции интер
             UI_NUMBER("Calibration_ORP_mV", Calibration_ORP_mV, "📏 Калибровочный коэффициент - мВ", false);
             UI_BUTTON("Power_ACO_Button", Power_ACO, "gray", "🧴 Проверка работы перельстатического насоса подачи хлора (вручную)");
         UI_POPUP_END();
+
+    // Контроль температуры в помещении
+    UI_PAGE();
+    UI_DISPLAY_FLOAT("RoomTemp", DS1, "🌡 Температура в помещении, °C");
+    UI_DUAL_RANGE_KEYS("RoomTempRange", RoomTempOn, RoomTempOff, "RoomTempOn", "RoomTempOff", 0.0, 30.0, 0.5, "🎚️ Включение/выключение обогрева, °C");
+    UI_CHECKBOX("RoomTemper", RoomTemper, "✅ Контроль температуры в помещении");
+    UI_DISPLAY_BOOL("Power_Warm_floor_heating", Power_Warm_floor_heating, "♨️ Обогрев пола", "🔥 Включен", "⏹️ Откл.");
 
 }
