@@ -43,13 +43,15 @@ inline void interface(){
 
     // Настройка фильтрации, Промывка фильтра
     UI_PAGE();
-    UI_CHECKBOX("Power_Filtr", Power_Filtr, "Фильтрация (вручную)");
+    UI_BUTTON("Power_Filtr", Power_Filtr, "gray", "Фильтрация (вручную)");
+    // UI_CHECKBOX("Power_Filtr", Power_Filtr, "Фильтрация (вручную)");
     UI_CHECKBOX("Filtr_Time1", Filtr_Time1, "Таймер фильтрации №1");
     UI_TIMER("FiltrTimer1", "Таймер фильтрации №1", noopTimerCallback);
     UI_CHECKBOX("Filtr_Time2", Filtr_Time2, "Таймер фильтрации №2");
     UI_TIMER("FiltrTimer2", "Таймер фильтрации №2", noopTimerCallback);
     UI_CHECKBOX("Filtr_Time3", Filtr_Time3, "Таймер фильтрации №3");
-    UI_CHECKBOX("Power_Clean", Power_Clean, "Промывка фильтра (вручную)");
+    UI_BUTTON("Power_Clean", Power_Clean, "gray", "Промывка фильтра (вручную)");
+    // UI_CHECKBOX("Power_Clean", Power_Clean, "Промывка фильтра (вручную)");
     UI_CHECKBOX("Clean_Time1", Clean_Time1, "Таймер промывки");
     UI_TIMER("CleanTimer1", "Таймер промывки", noopTimerCallback);
     UI_SELECT_DAYS("DaysSelect", DaysSelect, "Дни промывки");
@@ -143,19 +145,7 @@ inline void interface(){
 
     UI_DISPLAY_FLOAT("PH", PH, "pH (текущее)");
 
-    UI_POPUP_BEGIN("Cal_PH", "Калибровка датчика PH", "Открыть окно калибровки датчика PH");
 
-            // UI_NUMBER("PH_Min", PH1, "Min CAL PH1 (4.1)", true);
-            // UI_NUMBER("PH_Max", PH2, "Max CAL PH2 (6.86)", true);
-            UI_DUAL_RANGE_KEYS("Float_PH_Slider", PH1, PH2, "PH1_MIN", "PH2_MAX", 4.0, 10.0, 0.1, "Range PH Min-Max");
-            UI_NUMBER("PH1_CAL", PH1_CAL, "АЦП_mV для PH1 (Примерно 3500)", false);
-            UI_NUMBER("PH2_CAL", PH2_CAL, "АЦП_mV для PH2 (Примерно 2900)", false);
-            //UI_DUAL_RANGE_KEYS("Int_PH_Slider", PH1_CAL, PH2_CAL, "PH1_CAL", "PH2_CAL", 100.0, 5000.0, 0.5, "Range АЦП_mV Min-Max");
-
-            UI_NUMBER("Temper_Reference", Temper_Reference, "Температура референсная", true);
-            UI_NUMBER("Temper_PH", Temper_PH, "Измеренная тепература для компенасации измерения PH", true);
-
-    UI_POPUP_END();
 
     // UI_BUTTON("button_Cal_PH", button_Cal_PH, "gray", "Калибровка датчика PH");
 
@@ -226,6 +216,26 @@ inline void interface(){
     "value:Temperatura;updatePeriod_of_Time:60;updateStep:5;maxPoints:40;width:100%;height:240;"
     "xLabel:Time;yLabel:Temperature;pointColor:#6b66ff;lineColor:#ff5e5e;"
     "lineWidth:1;pointRadius:3;smooth:false", Temperatura);
+        
+    UI_POPUP_BEGIN("Cal_PH", "Калибровка датчика PH", "Открыть окно калибровки датчика PH");
+
+
+    //var("PH_CAL", "PH"+ String(PH, 2) + " : " + String(analogValuePH_Comp)+"mV");
+                UI_TEXT("analogValuePH", String(analogValuePH_Comp)+"mV", "Данные с АЦП от датчика PH");
+                // UI_NUMBER("PH_Min", PH1, "Min CAL PH1 (4.1)", true);
+                // UI_NUMBER("PH_Max", PH2, "Max CAL PH2 (6.86)", true);
+                UI_DUAL_RANGE_KEYS("Float_PH_Slider", PH1, PH2, "PH1_MIN", "PH2_MAX", 4.0, 10.0, 0.1, "Range PH Min-Max");
+                // UI_NUMBER("PH1_CAL", PH1_CAL, "АЦП_mV для PH1 (Примерно 3500)", false);
+                // UI_NUMBER("PH2_CAL", PH2_CAL, "АЦП_mV для PH2 (Примерно 2900)", false);
+                UI_DUAL_RANGE_KEYS("Int_PH_Slider", PH1_CAL, PH2_CAL, "PH1_CAL", "PH2_CAL", 100.0, 5000.0, 1, "Range АЦП_mV Min-Max");
+
+                UI_NUMBER("Temper_Reference", Temper_Reference, "Температура референсная", true);
+                UI_NUMBER("Temper_PH", Temper_PH, "Измеренная тепература для компенасации измерения PH", true);
+
+                UI_BUTTON("Power_H2O2", Power_H2O2, "gray", "Проверка работы перельстатического насоса подачи кислоты (вручную)");
+
+        UI_POPUP_END();
+
 
     //Контроль хлора CL (ACO)
     UI_PAGE();
@@ -248,6 +258,8 @@ inline void interface(){
             UI_NUMBER("Cl_Cal", Cl_Cal_str, "ORP - ORPCal = калибровочный коэффициент", true);
             UI_NUMBER("CalRastvor256mV", CalRastvor256mV, "ОВП калибровочного раствора - мВ", false);
             UI_NUMBER("Calibration_ORP_mV", Calibration_ORP_mV, "Калибровочный коэффициент - мВ", false);
+
+            UI_BUTTON("Power_ACO", Power_ACO, "gray", "Проверка работы перельстатического насоса подачи хлора (вручную)");
         UI_POPUP_END();
 
 }
