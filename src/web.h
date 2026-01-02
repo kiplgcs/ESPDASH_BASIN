@@ -38,6 +38,11 @@ inline String InfoString;        // Информационная строка
 inline String InfoString1;       // Вспомогательная информационная строка
 inline String InfoString2;
 inline String InfoStringDIN;     // Состояние входов DIN
+
+inline String OverlayPoolTemp;   // Температура воды в бассейне (оверлей)
+inline String OverlayHeaterTemp; // Температура после нагревателя (оверлей)
+inline String OverlayLevelUpper; // Верхний датчик уровня (оверлей)
+inline String OverlayLevelLower; // Нижний датчик уровня (оверлей)
 inline String ModeSelect;        // Режим работы (например, Auto/Manual)
 inline String DaysSelect;        // Выбор дней недели
 inline String SetLamp;           // Режим работы лампы
@@ -2289,6 +2294,7 @@ window.addEventListener('resize', ()=>{
 });
 
     let pageDateTimeBase = null;
+    let lastFilterImageState = null;
     let pageDateTimeLastSync = 0;
 
     function formatDateTime(dateObj){
@@ -2341,6 +2347,12 @@ window.addEventListener('resize', ()=>{
     if(document.getElementById('InfoString1')) document.getElementById('InfoString1').innerText=j.InfoString1;
     if(document.getElementById('InfoString2')) document.getElementById('InfoString2').innerText=j.InfoString2;
         if(document.getElementById('InfoStringDIN')) document.getElementById('InfoStringDIN').innerText=j.InfoStringDIN;
+       
+           if(document.getElementById('OverlayPoolTemp')) document.getElementById('OverlayPoolTemp').innerText=j.OverlayPoolTemp;
+    if(document.getElementById('OverlayHeaterTemp')) document.getElementById('OverlayHeaterTemp').innerText=j.OverlayHeaterTemp;
+    if(document.getElementById('OverlayLevelUpper')) document.getElementById('OverlayLevelUpper').innerText=j.OverlayLevelUpper;
+    if(document.getElementById('OverlayLevelLower')) document.getElementById('OverlayLevelLower').innerText=j.OverlayLevelLower;
+       
     syncDashButton('button1', j.button1);
     syncDashButton('button2', j.button2);
     syncDashButton('button_Lamp', j.button_Lamp);
@@ -2413,6 +2425,15 @@ window.addEventListener('resize', ()=>{
     if(typeof j.H2O2_Work !== 'undefined') updateSelectValue('H2O2_Work', j.H2O2_Work);
     if(typeof j.Power_H2O2 !== 'undefined') updateStat('Power_H2O2', j.Power_H2O2);
     if(typeof j.Temper_Reference !== 'undefined') updateInputValue('Temper_Reference', j.Temper_Reference);
+    
+        if(typeof j.FilterImageState !== 'undefined' && j.FilterImageState !== lastFilterImageState){
+      lastFilterImageState = j.FilterImageState;
+      const filterImage = document.getElementById('FilterImage');
+      if(filterImage){
+        filterImage.src = (j.FilterImageState === 1) ? '/anim1.gif' : '/img2.jpg';
+      }
+    }
+    
     });
   }
 setInterval(fetchLive, 1000);
@@ -2593,13 +2614,19 @@ function setImg(x){
     server.on("/live", HTTP_GET, [](AsyncWebServerRequest *r){
           if(!ensureAuthorized(r)) return;
       // Увеличенный буфер, чтобы сериализация не обрезалась на длинных строках
-      StaticJsonDocument<4096> doc;
+      // StaticJsonDocument<4096> doc;
+      StaticJsonDocument<6144> doc;
       doc["CurrentTime"] = CurrentTime;
       doc["RandomVal"] = RandomVal;
       doc["InfoString"] = InfoString;
       doc["InfoString1"] = InfoString1;
       doc["InfoString2"] = InfoString2;
       doc["InfoStringDIN"] = InfoStringDIN;
+            doc["OverlayPoolTemp"] = OverlayPoolTemp;
+      doc["OverlayHeaterTemp"] = OverlayHeaterTemp;
+      doc["OverlayLevelUpper"] = OverlayLevelUpper;
+      doc["OverlayLevelLower"] = OverlayLevelLower;
+      doc["FilterImageState"] = jpg;
       doc["button1"] = button1;
       doc["button2"] = button2;
       doc["button_Lamp"] = Lamp ? 1 : 0;

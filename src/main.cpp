@@ -310,7 +310,20 @@ loop_CL2(2100);
   InfoString1 = /*"Speed " + String(Speed, 1) + " / Temp " + String(Temperatura, 1)*/ + " button1 = " + String(button1)
               + " RangeSlider = " + String(RangeMin) + " / " + String(RangeMax);
   
-           
+   
+  OverlayPoolTemp = "🌡 Бассейн: " + String(DS1, 1) + " °C";
+  OverlayHeaterTemp = "♨️ После нагревателя: " + String(DS2, 1) + " °C";
+  OverlayLevelUpper = String("🛟 Верхний уровень: ") + (WaterLevelSensorUpper ? "Активен" : "Нет уровня");
+  OverlayLevelLower = String("🛟 Нижний уровень: ") + (WaterLevelSensorLower ? "Активен" : "Нет уровня");
+
+
+  if (Power_Clean) {
+    jpg = 2;
+  } else if (Power_Filtr) {
+    jpg = 1;
+  } else {
+    jpg = 2;
+  }
 
 //   // ---------- Рандомный цвет LED ----------
 //   // LEDColor = "#" + String((random(0x1000000) | 0x1000000), HEX).substring(1);
