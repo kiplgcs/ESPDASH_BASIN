@@ -208,6 +208,20 @@ struct UITimerEntry {
 
 class UIRegistry {
 public:
+  static String timerStorageKey(const String &id, const String &suffix){
+    if(id == "UlLightTimer"){
+      return String("UlLightT") + suffix;
+    }
+    return id + suffix;
+  }
+
+  static String legacyTimerStorageKey(const String &id, const String &suffix){
+    if(id == "UlLightTimer"){
+      return id + suffix;
+    }
+    return String();
+  }
+
   UITimerEntry &registerTimer(const String &id, const String &label,
                               const std::function<void(uint16_t, uint16_t)> &cb){
     UITimerEntry *entry = findTimer(id);
@@ -217,6 +231,8 @@ public:
       created.label = label;
       created.on = static_cast<uint16_t>(loadValue<int>((id + "_ON").c_str(), 0));
       created.off = static_cast<uint16_t>(loadValue<int>((id + "_OFF").c_str(), 0));
+      created.on = loadTimerValue(id, "_ON");
+      created.off = loadTimerValue(id, "_OFF");
       created.callback = cb;
       timers.push_back(created);
       entry = &timers.back();
@@ -246,6 +262,8 @@ public:
     if(isOn) entry->on = minutes;
     else entry->off = minutes;
     saveValue<int>(fieldId.c_str(), minutes);
+    String storageKey = timerStorageKey(base, isOn ? "_ON" : "_OFF");
+    saveValue<int>(storageKey.c_str(), minutes);
     if(entry->callback) entry->callback(entry->on, entry->off);
     return true;
   }
@@ -257,6 +275,10 @@ public:
     if(persist){
       saveValue<int>((id + "_ON").c_str(), entry.on);
       saveValue<int>((id + "_OFF").c_str(), entry.off);
+      String onKey = timerStorageKey(id, "_ON");
+      String offKey = timerStorageKey(id, "_OFF");
+      saveValue<int>(onKey.c_str(), entry.on);
+      saveValue<int>(offKey.c_str(), entry.off);
     }
     if(entry.callback) entry.callback(entry.on, entry.off);
   }
@@ -271,6 +293,20 @@ private:
       if(entry.id == id) return &entry;
     }
     return nullptr;
+  }
+  
+  uint16_t loadTimerValue(const String &id, const String &suffix){
+    String storageKey = timerStorageKey(id, suffix);
+    int value = loadValue<int>(storageKey.c_str(), -1);
+    if(value < 0){
+      String legacyKey = legacyTimerStorageKey(id, suffix);
+      if(legacyKey.length()){
+        value = loadValue<int>(legacyKey.c_str(), 0);
+      } else {
+        value = 0;
+      }
+    }
+    return static_cast<uint16_t>(value);
   }
 };
 
