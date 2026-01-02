@@ -20,14 +20,13 @@ inline void interface(){ // Декларатиынве функции интер
 
     // Общая информация по бассейну
     UI_PAGE();
-    UI_IMAGE("Image1", "/anim1.gif", "width:40%;height:200; x:25%;y:50%;");
-
-    UI_DISPLAY_INT("RandomVal", RandomVal, "🔢 Random Number");
-    UI_TEXT("InfoString", InfoString, "x:10%;y:10%;fontSize:12;color:#00ff00");
+    // UI_IMAGE("Image1", "/anim1.gif", "width:40%;height:200; x:25%;y:50%;");
+    UI_IMAGE("Image1", "/Basin.jpg", "width:40%;height:200; x:25%;y:50%;");
+      UI_TEXT("InfoString", InfoString, "x:10%;y:10%;fontSize:12;color:#00ff00");
     UI_TEXT("InfoString1", InfoString1, "x:20%;y:50%;fontSize:12;color:#00ff00");
-    UI_BUTTON("button1", button1, "gray", "🔘 My Button");
-    UI_BUTTON("button2", button2, "gray", "🔘 My Button1");
 
+
+    
     // Controls tab
     UI_PAGE();
     
@@ -37,6 +36,11 @@ inline void interface(){ // Декларатиынве функции интер
     UI_NUMBER("FloatInput", FloatInput, "🔣 Enter Float", true);
     UI_TIME("Timer1", Timer1, "⏰ Start Time");
     UI_TEXT("Comment", Comment, "💬 Comment");
+
+    UI_DISPLAY_INT("RandomVal", RandomVal, "🔢 Random Number");
+  
+    UI_BUTTON("button1", button1, "gray", "🔘 My Button");
+    UI_BUTTON("button2", button2, "gray", "🔘 My Button1");
 
     static String PopupComment;
     UI_POPUP_BEGIN("DataEntry", "📝 Ввод данных", "🪟 Открыть окно");
@@ -132,8 +136,11 @@ inline void interface(){ // Декларатиынве функции интер
     UI_DISPLAY_BOOL("WaterLevelSensorLower", WaterLevelSensorLower, "🛟🔽 Датчик уровня (нижний)", "сработал уровень", "нет уровня");
     UI_DISPLAY_BOOL("Power_Topping_State", Power_Topping_State, "🚰 Состояние соленоида долива воды", "✅ Включен", "⏹️ Откл.");
     UI_BUTTON("Power_Topping", Power_Topping, "gray", "🚰 Включить/Отключить соленоид долива воды");
+          
+    UI_TEXT("InfoStringDIN", InfoStringDIN, "x:50%;y:130%;fontSize:14;color:#00ff00;white-space:pre-line");
 
-   // Контроль температуры
+   
+    // Контроль температуры
     UI_PAGE();
     UI_DISPLAY_FLOAT("DS1", DS1, "🌡 Температура воды, °C");
     UI_RANGE("Sider_heat", Sider_heat, 5, 30, 1, "🎯 Уставка нагрева");

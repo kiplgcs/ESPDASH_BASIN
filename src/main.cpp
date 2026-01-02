@@ -290,7 +290,23 @@ loop_CL2(2100);
   Temperatura = DS1;      // Температура в бассейне
   
   // Формирование информационных строк
+  String dinStatus = "DIN входы 1-8: ";
+  for (int i = 0; i < 8; ++i) {
+    dinStatus += String(i + 1) + (ReadInputArray[i] ? "=1" : "=0");
+    if (i < 7) {
+      dinStatus += " ";
+    }
+  }
+  dinStatus += "\nDIN входы 9-16: ";
+  for (int i = 8; i < 16; ++i) {
+    dinStatus += String(i + 1) + (ReadInputArray[i] ? "=1" : "=0");
+    if (i < 15) {
+      dinStatus += " ";
+    }
+  }
+
   InfoString = "Random value is " + String(RandomVal) + " at " + CurrentTime + "Pow_WS2815 = " + String(Pow_WS2815);
+  InfoStringDIN = dinStatus;
   InfoString1 = /*"Speed " + String(Speed, 1) + " / Temp " + String(Temperatura, 1)*/ + " button1 = " + String(button1)
               + " RangeSlider = " + String(RangeMin) + " / " + String(RangeMax);
   

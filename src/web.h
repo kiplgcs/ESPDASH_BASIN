@@ -37,6 +37,7 @@ inline int RandomVal;            // Случайное значение (нап�
 inline String InfoString;        // Информационная строка
 inline String InfoString1;       // Вспомогательная информационная строка
 inline String InfoString2;
+inline String InfoStringDIN;     // Состояние входов DIN
 inline String ModeSelect;        // Режим работы (например, Auto/Manual)
 inline String DaysSelect;        // Выбор дней недели
 inline String SetLamp;           // Режим работы лампы
@@ -2339,6 +2340,7 @@ window.addEventListener('resize', ()=>{
     if(document.getElementById('InfoString')) document.getElementById('InfoString').innerText=j.InfoString;
     if(document.getElementById('InfoString1')) document.getElementById('InfoString1').innerText=j.InfoString1;
     if(document.getElementById('InfoString2')) document.getElementById('InfoString2').innerText=j.InfoString2;
+        if(document.getElementById('InfoStringDIN')) document.getElementById('InfoStringDIN').innerText=j.InfoStringDIN;
     syncDashButton('button1', j.button1);
     syncDashButton('button2', j.button2);
     syncDashButton('button_Lamp', j.button_Lamp);
@@ -2591,12 +2593,13 @@ function setImg(x){
     server.on("/live", HTTP_GET, [](AsyncWebServerRequest *r){
           if(!ensureAuthorized(r)) return;
       // Увеличенный буфер, чтобы сериализация не обрезалась на длинных строках
-      StaticJsonDocument<2048> doc;
+      StaticJsonDocument<4096> doc;
       doc["CurrentTime"] = CurrentTime;
       doc["RandomVal"] = RandomVal;
       doc["InfoString"] = InfoString;
       doc["InfoString1"] = InfoString1;
       doc["InfoString2"] = InfoString2;
+      doc["InfoStringDIN"] = InfoStringDIN;
       doc["button1"] = button1;
       doc["button2"] = button2;
       doc["button_Lamp"] = Lamp ? 1 : 0;
@@ -2833,6 +2836,7 @@ server.on("/getImage", HTTP_GET, [](AsyncWebServerRequest *r){
     });
 
     // ?????? ?????? ???? ? ?????? (???????????)
+    server.serveStatic("/Basin.jpg", SPIFFS, "/Basin.jpg");
     server.serveStatic("/img1.jpg", SPIFFS, "/img1.jpg");
     server.serveStatic("/img2.jpg", SPIFFS, "/img2.jpg");
     server.serveStatic("/anim1.gif", SPIFFS, "/anim1.gif");
