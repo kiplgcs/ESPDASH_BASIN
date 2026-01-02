@@ -221,10 +221,10 @@ inline void interface(){ // Декларатиынве функции интер
     //      pointRadius:3              — радиус точек.
     //      smooth:false               — отключено сглаживание линий (ступенчатый вывод).
     //  - Temperatura — переменная-источник, из которой читается значение для построения графика.
-    UI_GRAPH_SOURCE("FloatTrend1", "📊 Temperature1 Trend",
-    "value:Temperatura;updatePeriod_of_Time:60;updateStep:5;maxPoints:40;width:100%;height:240;"
-    "xLabel:Time;yLabel:Temperature;pointColor:#6b66ff;lineColor:#ff5e5e;"
-    "lineWidth:1;pointRadius:3;smooth:false", Temperatura);
+    UI_GRAPH_SOURCE("FloatPH", "📊 PH воды",
+    "value:PH;updatePeriod_of_Time:60;updateStep:5;maxPoints:50;width:100%;height:400;"
+    "xLabel:Time;yLabel:PH;pointColor:#6b66ff;lineColor:#ff5e5e;"
+    "lineWidth:1;pointRadius:3;smooth:false", PH);
         
      UI_POPUP_BEGIN("Cal_PH", "🧪 Калибровка датчика PH", "🪟 Открыть окно калибровки датчика PH");
 
@@ -254,10 +254,10 @@ inline void interface(){ // Декларатиынве функции интер
     UI_NUMBER("ORP_setting", ORP_setting, "⬇️ Нижний предел ORP, мВ", false);
     UI_SELECT("H2O2_Work", H2O2_Work, dosingOptions, "⏳ Период дозирования NaOCl");
 
-    UI_GRAPH_SOURCE("FloatTrend2", "📊 Temperature2 Trend",
-    "value:Temperatura;updatePeriod_of_Time:60;updateStep:5;maxPoints:30;width:100%;height:400;"
-    "xLabel:Time;yLabel:Temperature;pointColor:#6b66ff;lineColor:#ff5e5e;"
-    "lineWidth:1;pointRadius:3;smooth:false", Temperatura);
+    UI_GRAPH_SOURCE("FloatСl", "📊 Хлор в воде, ppmCl",
+    "value:ppmCl;updatePeriod_of_Time:60;updateStep:5;maxPoints:50;width:100%;height:400;"
+    "xLabel:Time;yLabel:Хлор,мг/л;pointColor:#6b66ff;lineColor:#ff5e5e;"
+    "lineWidth:1;pointRadius:3;smooth:false", ppmCl);
 
         UI_POPUP_BEGIN("CL", "Калибровка датчика хлора", "Открыть окно калибровки датчика CL хлора}");
             static String Cl_Cal_str = String(corrected_ORP_Eh_mV) + "-" + String(CalRastvor256mV) + "=" + String(CalRastvor256mV - corrected_ORP_Eh_mV);   
