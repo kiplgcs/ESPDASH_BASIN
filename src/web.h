@@ -995,7 +995,7 @@ private:
                                    "box-shadow:0 10px 20px rgba(0,0,0,0.45); z-index:2;";
 
               html += "<div id='"+overlay.id+"' style='"+panelStyle+"'>"+overlay.label+"</div>";
-          }
+            }
 
 
 
@@ -2352,7 +2352,7 @@ window.addEventListener('resize', ()=>{
     if(document.getElementById('OverlayHeaterTemp')) document.getElementById('OverlayHeaterTemp').innerText=j.OverlayHeaterTemp;
     if(document.getElementById('OverlayLevelUpper')) document.getElementById('OverlayLevelUpper').innerText=j.OverlayLevelUpper;
     if(document.getElementById('OverlayLevelLower')) document.getElementById('OverlayLevelLower').innerText=j.OverlayLevelLower;
-       
+    
     syncDashButton('button1', j.button1);
     syncDashButton('button2', j.button2);
     syncDashButton('button_Lamp', j.button_Lamp);
@@ -2862,13 +2862,11 @@ server.on("/getImage", HTTP_GET, [](AsyncWebServerRequest *r){
       }
     });
 
-    // ?????? ?????? ???? ? ?????? (???????????)
+
+    server.serveStatic("/anim1.gif", SPIFFS, "/anim1.gif");
     server.serveStatic("/Basin.jpg", SPIFFS, "/Basin.jpg");
     server.serveStatic("/img1.jpg", SPIFFS, "/img1.jpg");
     server.serveStatic("/img2.jpg", SPIFFS, "/img2.jpg");
-    server.serveStatic("/anim1.gif", SPIFFS, "/anim1.gif");
-    server.serveStatic("/anim2.gif", SPIFFS, "/anim2.gif");
-
     server.begin();
   }
 } dash;

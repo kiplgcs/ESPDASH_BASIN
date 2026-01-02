@@ -315,8 +315,11 @@ loop_CL2(2100);
   OverlayHeaterTemp = "♨️ После нагревателя: " + String(DS2, 1) + " °C";
   OverlayLevelUpper = String("🛟 Верхний уровень: ") + (WaterLevelSensorUpper ? "Активен" : "Нет уровня");
   OverlayLevelLower = String("🛟 Нижний уровень: ") + (WaterLevelSensorLower ? "Активен" : "Нет уровня");
+  // OverlayPh = "🧪 pH: " + String(PH, 2);
+  // OverlayChlorine = "🧴 Cl: " + String(ppmCl, 3) + " ppm";
+  // OverlayFilterState = String("🧽 Фильтр: ") + (Power_Clean ? "Промывка" : (Power_Filtr ? "Фильтрация" : "Остановлен"));
 
-
+  
   if (Power_Clean) {
     jpg = 2;
   } else if (Power_Filtr) {
