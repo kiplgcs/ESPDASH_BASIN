@@ -64,7 +64,7 @@ inline bool dashInterfaceInitialized = false; // Флаг, что интерфе
 extern float DS1;
 extern float DS2;
 
-
+void appendUiRegistryValues(JsonDocument &doc);
 
 
 
@@ -1883,6 +1883,37 @@ function updateSelectValue(id, value){
   if(el.value != text) el.value = text;
 }
 
+function applyLiveValue(id, value){
+  const el = document.getElementById(id);
+  if(!el || el.dataset.manual === '1') return;
+  if(el.matches('button[data-type="dashButton"]')){
+    syncDashButton(id, value);
+    return;
+  }
+  if(el.matches('input[type=checkbox]')){
+    updateCheckboxValue(id, value);
+    return;
+  }
+  if(el.matches('input[type=range]')){
+    updateSliderDisplay(id, value);
+    return;
+  }
+  if(el.matches('input[type=text],input[type=number],input[type=time],input[type=color]')){
+    updateInputValue(id, value);
+    return;
+  }
+  if(el.tagName === 'SELECT'){
+    updateSelectValue(id, value);
+    return;
+  }
+  if(el.matches('div[id$="DaysSelect"]')){
+    updateDaysSelection(id, value);
+    return;
+  }
+  updateStat(id, value);
+}
+
+
 function updateDaysSelection(id, value){
   const container = document.getElementById(id);
   if(!container || container.dataset.manual === '1') return;
@@ -2371,7 +2402,8 @@ window.addEventListener('resize', ()=>{
     if(typeof j.LedAutoplay !== 'undefined') updateSelectValue('LedAutoplay', j.LedAutoplay);
     if(typeof j.LedAutoplayDuration !== 'undefined') updateSliderDisplay('LedAutoplayDuration', j.LedAutoplayDuration);
     if(typeof j.ModeSelect !== 'undefined') updateSelectValue('ModeSelect', j.ModeSelect);
-        if(typeof j.SetLamp !== 'undefined') updateSelectValue('SetLamp', j.SetLamp);
+    if(typeof j.ThemeColor !== 'undefined') updateInputValue('ThemeColor', j.ThemeColor); 
+    if(typeof j.SetLamp !== 'undefined') updateSelectValue('SetLamp', j.SetLamp);
        if(typeof j.SetRGB !== 'undefined') updateSelectValue('SetRGB', j.SetRGB);
         if(typeof j.DaysSelect !== 'undefined') updateDaysSelection('DaysSelect', j.DaysSelect);
     if(typeof j.IntInput !== 'undefined') updateInputValue('IntInput', j.IntInput);
@@ -2382,12 +2414,12 @@ window.addEventListener('resize', ()=>{
     if(typeof j.Ul_light_Time !== 'undefined') updateCheckboxValue('Ul_light_Time', j.Ul_light_Time);
     if(typeof j.WS2815_Time1 !== 'undefined') updateCheckboxValue('WS2815_Time1', j.WS2815_Time1);
  if(typeof j.Activation_Water_Level !== 'undefined') updateCheckboxValue('Activation_Water_Level', j.Activation_Water_Level);
-        if(typeof j.Power_Filtr !== 'undefined') updateCheckboxValue('Power_Filtr', j.Power_Filtr);
+        if(typeof j.Power_Filtr !== 'undefined') syncDashButton('Power_Filtr', j.Power_Filtr);
     if(typeof j.Filtr_Time1 !== 'undefined') updateCheckboxValue('Filtr_Time1', j.Filtr_Time1);
     if(typeof j.Filtr_Time2 !== 'undefined') updateCheckboxValue('Filtr_Time2', j.Filtr_Time2);
     if(typeof j.Filtr_Time3 !== 'undefined') updateCheckboxValue('Filtr_Time3', j.Filtr_Time3);
 
-    if(typeof j.Power_Clean !== 'undefined') updateCheckboxValue('Power_Clean', j.Power_Clean);
+    if(typeof j.Power_Clean !== 'undefined') syncDashButton('Power_Clean', j.Power_Clean);
     if(typeof j.Clean_Time1 !== 'undefined') updateCheckboxValue('Clean_Time1', j.Clean_Time1);
     if(Array.isArray(timerIds)){
       timerIds.forEach(id=>{
@@ -2434,6 +2466,8 @@ window.addEventListener('resize', ()=>{
       }
     }
     
+    Object.keys(j).forEach(key=>applyLiveValue(key, j[key]));
+
     });
   }
 setInterval(fetchLive, 1000);
@@ -2615,7 +2649,8 @@ function setImg(x){
           if(!ensureAuthorized(r)) return;
       // Увеличенный буфер, чтобы сериализация не обрезалась на длинных строках
       // StaticJsonDocument<4096> doc;
-      StaticJsonDocument<6144> doc;
+      // StaticJsonDocument<6144> doc;
+            StaticJsonDocument<12288> doc;
       doc["CurrentTime"] = CurrentTime;
       doc["RandomVal"] = RandomVal;
       doc["InfoString"] = InfoString;
@@ -2642,6 +2677,8 @@ function setImg(x){
       doc["LedAutoplay"] = LedAutoplay ? 1 : 0;
       doc["LedAutoplayDuration"] = LedAutoplayDuration;
       doc["ModeSelect"] = ModeSelect;
+            doc["ThemeColor"] = ThemeColor;
+      doc["ThemeColor"] = ThemeColor;
       doc["SetLamp"] = SetLamp;
       doc["SetRGB"] = SetRGB;
       doc["DaysSelect"] = DaysSelect;
@@ -2694,6 +2731,7 @@ function setImg(x){
       doc["Power_H2O2_Button"] = powerH2O2Active ? 1 : 0;
       doc["Lumen_Ul"] = Lumen_Ul;
       doc["Comment"] = Comment;
+            appendUiRegistryValues(doc);
       String s;
       serializeJson(doc, s);
       r->send(200, "application/json", s);

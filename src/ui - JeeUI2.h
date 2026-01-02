@@ -343,11 +343,21 @@ public:
         return true; // подтверждает успешное применение значения
     }
 
+    const std::vector<UIDeclarativeElement*> &all() const{ return elements; } // возвращает список всех зарегистрированных элементов
+
 private:
     std::vector<UIDeclarativeElement*> elements; // контейнер всех зарегистрированных UI-элементов
 };
 
 inline UIDeclarativeRegistry uiRegistry; // глобальный реестр декларативных UI-элементов
+
+inline void appendUiRegistryValues(JsonDocument &doc){
+    for(auto *element : uiRegistry.all()){
+        if(!element) continue;
+        if(doc.containsKey(element->id)) continue;
+        doc[element->id] = element->valueString();
+    }
+}
 
 class UICheckboxElement : public UIDeclarativeElement { // UI-элемент чекбокса, связанный с bool-переменной
 public:
