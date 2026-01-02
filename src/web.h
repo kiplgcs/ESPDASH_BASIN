@@ -43,6 +43,9 @@ inline String OverlayPoolTemp;   // Температура воды в басс�
 inline String OverlayHeaterTemp; // Температура после нагревателя (оверлей)
 inline String OverlayLevelUpper; // Верхний датчик уровня (оверлей)
 inline String OverlayLevelLower; // Нижний датчик уровня (оверлей)
+inline String OverlayPh;         // pH воды (оверлей)
+inline String OverlayChlorine;   // Хлор (оверлей)
+inline String OverlayFilterState; // Состояние фильтра (оверлей)
 inline String ModeSelect;        // Режим работы (например, Auto/Manual)
 inline String DaysSelect;        // Выбор дней недели
 inline String SetLamp;           // Режим работы лампы
@@ -529,7 +532,9 @@ private:
     server.on("/", HTTP_GET, [self](AsyncWebServerRequest *r){
       if(!ensureAuthorized(r)) return;
        // Формируем HTML-страницу
-      String html = "<!DOCTYPE html><html><head><meta charset='UTF-8'><meta http-equiv='Content-Type' content='text/html; charset=UTF-8'><title>";
+      String html;
+      html.reserve(48000);
+      html = "<!DOCTYPE html><html><head><meta charset='UTF-8'><meta http-equiv='Content-Type' content='text/html; charset=UTF-8'><title>";
       html += dashAppTitle;
       html += "</title>"
       "<style>" // Начало встроенных CSS-стилей интерфейса
@@ -964,7 +969,7 @@ private:
                                    "text-align:center; box-sizing:border-box; white-space:nowrap; max-width:90%; "
                                    "box-shadow:0 10px 20px rgba(0,0,0,0.45); z-index:2;";
 
-              html += "<div id='"+overlay.id+"' style='"+panelStyle+"'>"+overlay.label+"</div>"; // Вывод абсолютного текстового блока
+              html += "<div id='"+overlay.id+"' style='"+panelStyle+"'></div>"; // Вывод абсолютного текстового блока
             }
 
 
@@ -2354,7 +2359,9 @@ window.addEventListener('resize', ()=>{
     if(document.getElementById('OverlayHeaterTemp')) document.getElementById('OverlayHeaterTemp').innerText=j.OverlayHeaterTemp;
     if(document.getElementById('OverlayLevelUpper')) document.getElementById('OverlayLevelUpper').innerText=j.OverlayLevelUpper;
     if(document.getElementById('OverlayLevelLower')) document.getElementById('OverlayLevelLower').innerText=j.OverlayLevelLower;
-    
+        if(document.getElementById('OverlayPh')) document.getElementById('OverlayPh').innerText=j.OverlayPh;
+    if(document.getElementById('OverlayChlorine')) document.getElementById('OverlayChlorine').innerText=j.OverlayChlorine;
+    if(document.getElementById('OverlayFilterState')) document.getElementById('OverlayFilterState').innerText=j.OverlayFilterState;
     syncDashButton('button1', j.button1);
     syncDashButton('button2', j.button2);
     syncDashButton('button_Lamp', j.button_Lamp);
@@ -2627,10 +2634,13 @@ function setImg(x){
       doc["InfoString1"] = InfoString1;
       doc["InfoString2"] = InfoString2;
       doc["InfoStringDIN"] = InfoStringDIN;
-            doc["OverlayPoolTemp"] = OverlayPoolTemp;
+      doc["OverlayPoolTemp"] = OverlayPoolTemp;
       doc["OverlayHeaterTemp"] = OverlayHeaterTemp;
       doc["OverlayLevelUpper"] = OverlayLevelUpper;
       doc["OverlayLevelLower"] = OverlayLevelLower;
+      doc["OverlayPh"] = OverlayPh;
+      doc["OverlayChlorine"] = OverlayChlorine;
+      doc["OverlayFilterState"] = OverlayFilterState;
       doc["FilterImageState"] = jpg;
       doc["button1"] = button1;
       doc["button2"] = button2;
