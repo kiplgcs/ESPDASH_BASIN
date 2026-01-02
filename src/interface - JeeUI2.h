@@ -21,11 +21,6 @@ inline void interface(){ // Декларатиынве функции интер
     // Общая информация по бассейну
     UI_PAGE();
     UI_IMAGE("Image1", "/Basin.jpg", "width:150%;height:550; x:-30%;y:95%;");
-    // UI_IMAGE("FilterImage", "/anim1.gif", "width:20%;height:110; x:60%;y:70%;");
-    // UI_TEXT("OverlayPoolTemp", OverlayPoolTemp, "x:30%;y:52%;fontSize:14;color:#00ff00");
-    // UI_TEXT("OverlayHeaterTemp", OverlayHeaterTemp, "x:68%;y:52%;fontSize:14;color:#00ff00");
-    // UI_TEXT("OverlayLevelUpper", OverlayLevelUpper, "x:18%;y:28%;fontSize:13;color:#00ff00");
-    // UI_TEXT("OverlayLevelLower", OverlayLevelLower, "x:18%;y:78%;fontSize:13;color:#00ff00");
     UI_IMAGE("FilterImage", "/anim1.gif", "width:200;height:200; x:23%;y:823%;");
     UI_TEXT("OverlayPoolTemp", OverlayPoolTemp, "x:55%;y:150;fontSize:14;color:#00ff00");
     UI_TEXT("OverlayHeaterTemp", OverlayHeaterTemp, "x:70%;y:150;fontSize:14;color:#00ff00");
