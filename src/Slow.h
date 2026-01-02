@@ -194,6 +194,18 @@ const bool onSetFiltrPage = (Nx_page_id == 3); // Страница таймер�
 const bool onCleanPage = (Nx_page_id == 4); // Страница таймера промывки активна
 const bool onHeatPage = (Nx_page_id == 5); // Страница нагрева активна
 const bool onDispensersPage = (Nx_page_id == 9); // Страница дозаторов активна
+
+
+Lamp          = ReadRelayArray[0];
+Pow_WS2815    = ReadRelayArray[1];
+Power_Filtr  = ReadRelayArray[8];
+Power_Clean  = ReadRelayArray[3];
+Power_Heat   = ReadRelayArray[4];
+Power_H2O2   = ReadRelayArray[5];
+Power_ACO    = ReadRelayArray[6];
+Power_Topping= ReadRelayArray[10];
+
+
 switch (sync_step) {
   case 0:
     myNex.writeNum("page0.b0.pic", Lamp ? 2 : 1);
