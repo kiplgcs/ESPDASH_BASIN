@@ -441,13 +441,43 @@ void ControlModbusRelay(int interval) {
 //---------------------------------------------------------------------------------
 //---------------------------------------------------------------------------------
 
-  if (RoomTemper && DS1 < RoomTempOn) {
-    Power_Warm_floor_heating = true;
-  } else if (RoomTemper && DS1 > RoomTempOff) {
-    Power_Warm_floor_heating = false;
-  } else if (!RoomTemper) {
-    Power_Warm_floor_heating = false;
+  // if (RoomTemper && DS1 < RoomTempOn) {
+  //   Power_Warm_floor_heating = true;
+  // } else if (RoomTemper && DS1 > RoomTempOff) {
+  //   Power_Warm_floor_heating = false;
+  // } else if (!RoomTemper) {
+  //   Power_Warm_floor_heating = false;
+  // }
+
+const bool roomTempInRange = DS1 >= RoomTempOn && DS1 <= RoomTempOff; // true, если текущая температура DS1 находится в зоне гистерезиса между порогом включения и порогом выключения
+
+if (RoomTemper && !roomTempInRange && DS1 < RoomTempOn) {             // если режим температурного контроля включён, температура вышла из допустимого диапазона и опустилась ниже порога включения
+    // здесь должно происходить включение тёплого пола (условие "холодно, нужно греть")
+} else {
+    Power_Warm_floor_heating = false;                                 // во всех остальных случаях подогрев принудительно выключается, чтобы исключить перегрев и ложные включения
+}
+
+
+if (AktualReadInput) {
+    WaterLevelSensorUpper = ReadInputArray[0]; // Датчик верхнего уровня (вход №1)
+    WaterLevelSensorLower = ReadInputArray[1]; // Датчик нижнего уровня (вход №2)
   }
+
+  if (AktualReadRelay) {
+    Power_Topping_State = ReadRelayArray[10]; // Состояние реле №11 (соленоид долива воды)
+  } else {
+    Power_Topping_State = Power_Topping;
+  }
+
+  if (Activation_Water_Level) {
+    if (!WaterLevelSensorLower) {
+      Power_Topping = true;
+    }
+    if (WaterLevelSensorUpper) {
+      Power_Topping = false;
+    }
+  }
+
 
   Error err = RS485.addRequest(40001, 1, 0x05, 0, Lamp ? devices[0].value : devices[1].value); // реле№1 для Lamp
   err = RS485.addRequest(40001, 1, 0x05, 1, Pow_WS2815 ? devices[0].value : devices[1].value); //реле№2 для Pow_WS2815
@@ -462,7 +492,7 @@ void ControlModbusRelay(int interval) {
 
   err = RS485.addRequest(40001, 1, 0x05, 14, Power_Warm_floor_heating ? devices[0].value : devices[1].value); // реле№15 теплый пол
   err = RS485.addRequest(40001, 1, 0x05, 15, Pow_Ul_light ? devices[0].value : devices[1].value); //Уличное освещение на столбе
-
+  err = RS485.addRequest(40001, 1, 0x05, 10, Power_Topping ? devices[0].value : devices[1].value); // реле№11 соленоид долива воды
 //   Error err = RS485.addRequest(40001,1,0x05,5, Power_H2O2 ? devices[0].value : devices[1].value); //реле№6 для Power_H2O2
   // err = RS485.addRequest(40001, 1, 0x05, 5, Power_H2O2 ? devices[0].value : devices[1].value); //реле№6 для Power_H2O2
   // err = RS485.addRequest(40001, 1, 0x05, 6, Power_ACO ? devices[0].value : devices[1].value); //реле№7 для Power_ACO
