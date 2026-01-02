@@ -20,10 +20,10 @@ inline void interface(){ // Декларатиынве функции интер
 
     // Общая информация по бассейну
     UI_PAGE();
-    // UI_IMAGE("Image1", "/anim1.gif", "width:40%;height:200; x:25%;y:50%;");
-    UI_IMAGE("Image1", "/Basin.jpg", "width:40%;height:200; x:25%;y:50%;");
-      UI_TEXT("InfoString", InfoString, "x:10%;y:10%;fontSize:12;color:#00ff00");
-    UI_TEXT("InfoString1", InfoString1, "x:20%;y:50%;fontSize:12;color:#00ff00");
+    UI_IMAGE("Image1", "/Basin.jpg", "width:150%;height:550; x:-30%;y:95%;");
+    UI_IMAGE("Image2", "/anim1.gif", "width:30%;height:150; x:25%;y:50%;");
+    UI_TEXT("InfoString", InfoString, "x:30%;y:40%;fontSize:12;color:#00ff00");
+    UI_TEXT("InfoString1", InfoString1, "x:70%;y:70%;fontSize:12;color:#00ff00");
 
 
     
