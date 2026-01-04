@@ -1866,6 +1866,13 @@ function updateSelectValue(id, value){
 function applyLiveValue(id, value){
   const el = document.getElementById(id);
   if(!el || el.dataset.manual === '1') return;
+  if(el.classList.contains('range-slider')){
+    const parts = String(value||'').split('-').map(v=>v.trim()).filter(Boolean);
+    if(parts.length >= 2){
+      setRangeSliderUI(id, parts[0], parts[1]);
+    }
+    return;
+  }
   if(el.matches('button[data-type="dashButton"]')){
     syncDashButton(id, value);
     return;
@@ -2358,7 +2365,7 @@ window.addEventListener('resize', ()=>{
     if(document.getElementById('InfoString2')) document.getElementById('InfoString2').innerText=j.InfoString2;
         if(document.getElementById('InfoStringDIN')) document.getElementById('InfoStringDIN').innerText=j.InfoStringDIN;
        
-           if(document.getElementById('OverlayPoolTemp')) document.getElementById('OverlayPoolTemp').innerText=j.OverlayPoolTemp;
+    if(document.getElementById('OverlayPoolTemp')) document.getElementById('OverlayPoolTemp').innerText=j.OverlayPoolTemp;
     if(document.getElementById('OverlayHeaterTemp')) document.getElementById('OverlayHeaterTemp').innerText=j.OverlayHeaterTemp;
     if(document.getElementById('OverlayLevelUpper')) document.getElementById('OverlayLevelUpper').innerText=j.OverlayLevelUpper;
     if(document.getElementById('OverlayLevelLower')) document.getElementById('OverlayLevelLower').innerText=j.OverlayLevelLower;

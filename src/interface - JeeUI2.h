@@ -268,7 +268,7 @@ inline void interface(){ // Декларатиынве функции интер
     // Контроль температуры в помещении
     UI_PAGE();
     UI_DISPLAY_FLOAT("RoomTemp", DS1, "🌡 Температура в помещении, °C");
-    UI_DUAL_RANGE_KEYS("RoomTempRange", RoomTempOn, RoomTempOff, "RoomTempOn", "RoomTempOff", 0.0, 30.0, 0.5, "🎚️ Включение/выключение обогрева, °C");
+    UI_DUAL_RANGE_KEYS("RoomTempRange", RoomTempOn, RoomTempOff, "RoomTempOn", "RoomTempOff", 1.0, 30.0, 0.5, "🎚️ Включение/выключение обогрева, °C");
     UI_CHECKBOX("RoomTemper", RoomTemper, "✅ Контроль температуры в помещении");
     UI_DISPLAY_BOOL("Power_Warm_floor_heating", Power_Warm_floor_heating, "♨️ Обогрев пола", "🔥 Включен", "⏹️ Откл.");
 
