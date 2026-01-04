@@ -533,7 +533,7 @@ private:
       if(!ensureAuthorized(r)) return;
        // Формируем HTML-страницу
       String html;
-      html.reserve(48000);
+      html.reserve(120000);
       html = "<!DOCTYPE html><html><head><meta charset='UTF-8'><meta http-equiv='Content-Type' content='text/html; charset=UTF-8'><title>";
       html += dashAppTitle;
       html += "</title>"
@@ -956,6 +956,9 @@ private:
               String borderRadius = readProp("borderRadius"); if(borderRadius.length() == 0) borderRadius = "14px"; // Скругление углов
               String leftRaw = readProp("x"); // Координата X
               String topRaw = readProp("y"); // Координата Y
+                            String whiteSpace = readProp("white-space");
+              if(whiteSpace.length() == 0) whiteSpace = readProp("whiteSpace");
+              if(whiteSpace.length() == 0) whiteSpace = "nowrap";
               bool hasLeft = leftRaw.length(); // Есть X
               bool hasTop = topRaw.length(); // Есть Y
               String leftValue = hasLeft ? normalizeCoord(leftRaw) : "50%"; // Позиция по X
@@ -966,7 +969,7 @@ private:
               String panelStyle = "position:absolute; left:"+leftValue+"; top:"+topValue+"; transform:"+transform+"; " // Итоговый стиль панели
                                    "background:"+bgColor+"; color:"+color+"; font-size:"+String(fontSize)+"px; padding:"+padding+"; "
                                    "border-radius:"+borderRadius+"; display:inline-flex; align-items:center; justify-content:center; "
-                                   "text-align:center; box-sizing:border-box; white-space:nowrap; max-width:90%; "
+                                   "text-align:center; box-sizing:border-box; white-space:"+whiteSpace+"; max-width:90%; "
                                    "box-shadow:0 10px 20px rgba(0,0,0,0.45); z-index:2;";
 
               html += "<div id='"+overlay.id+"' style='"+panelStyle+"'></div>"; // Вывод абсолютного текстового блока

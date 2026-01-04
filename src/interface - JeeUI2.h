@@ -27,9 +27,9 @@ inline void interface(){ // Декларатиынве функции интер
     UI_TEXT("OverlayLevelUpper", OverlayLevelUpper, "x:36%;y:130;fontSize:13;color:#00ff00");
     UI_TEXT("OverlayLevelLower", OverlayLevelLower, "x:36%;y:170;fontSize:13;color:#00ff00");
    
-    // UI_TEXT("OverlayPh", OverlayPh, "x:780;y:140;fontSize:13;color:#00ff00");
-    // UI_TEXT("OverlayChlorine", OverlayChlorine, "x:780;y:380;fontSize:13;color:#00ff00");
-    // UI_TEXT("OverlayFilterState", OverlayFilterState, "x:670;y:430;fontSize:12;color:#00ff00");
+    UI_TEXT("OverlayPh", OverlayPh, "x:680;y:250;fontSize:13;color:#00ff00");
+    UI_TEXT("OverlayChlorine", OverlayChlorine, "x:780;y:250;fontSize:13;color:#00ff00");
+    UI_TEXT("OverlayFilterState", OverlayFilterState, "x:300;y:400;fontSize:12;color:#00ff00");
 
     
     // Controls tab
