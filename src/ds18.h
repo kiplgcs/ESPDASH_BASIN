@@ -5,8 +5,8 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 
-DeviceAddress sensor1 = {0x28, 0xff, 0x64, 0x1e, 0x83, 0x7a, 0x05, 0x83}; // Указываем адрес датчика 28-ff-64-1e-83-7a-05-83
-DeviceAddress sensor0 = {0x28, 0xff, 0x64, 0x1e, 0x83, 0x61, 0xbe, 0x5e}; // Указываем адрес датчика 28-ff-64-1e-83-61-be-5e
+DeviceAddress sensor0 = {0x28, 0xff, 0x64, 0x1e, 0x83, 0x7a, 0x05, 0x83}; // Указываем адрес датчика 28-ff-64-1e-83-7a-05-83
+DeviceAddress sensor1= {0x28, 0xff, 0x64, 0x1e, 0x83, 0x61, 0xbe, 0x5e}; // Указываем адрес датчика 28-ff-64-1e-83-61-be-5e
 
 
 #define ONE_WIRE_BUS 14  // перенесено с GPIO4, т.к. GPIO4 занят под RS485 RX; альтернативные: 13,32,33
@@ -22,6 +22,12 @@ DallasTemperature sensors(&oneWire); // Инициализируем объек�
 
 float DS1 = 0, Saved_DS1;
 float DS2 = 0, Saved_DS2;
+inline bool DS1Available = false;
+inline bool DS2Available = false;
+
+inline String formatTemperatureString(float value, bool available) {
+  return available ? (String(value, 1) + " \u00B0C") : "n/a";
+}
 
 
 // bool ds_setup = false; // Флаг настройки датчиков
@@ -141,15 +147,19 @@ void Temp_DS18B20(int interval_Temp_DS18B20) {
   sensors.requestTemperatures(); // Запрашиваем температуру со всех датчиков
 
   // Датчик 1
+  DS1Available = false;
   float temp1 = sensors.getTempC(sensor1);
   if (temp1 != DEVICE_DISCONNECTED_C && temp1 > -100 && temp1 < 150) {
     DS1 = roundf(temp1 * 10) / 10.0;  // округление до десятых
+    DS1Available = true;
   }
 
   // Датчик 0
+  DS2Available = false;
   float temp0 = sensors.getTempC(sensor0);
   if (temp0 != DEVICE_DISCONNECTED_C && temp0 > -100 && temp0 < 150) {
     DS2 = roundf(temp0 * 10) / 10.0;  // округление до десятых
+    DS2Available = true;
   }
 }
 

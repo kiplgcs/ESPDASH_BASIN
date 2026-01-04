@@ -66,6 +66,9 @@ inline bool dashInterfaceInitialized = false; // Флаг, что интерфе
 
 extern float DS1;
 extern float DS2;
+extern bool DS1Available;
+extern bool DS2Available;
+String formatTemperatureString(float value, bool available);
 
 void appendUiRegistryValues(JsonDocument &doc);
 
@@ -2690,8 +2693,8 @@ function setImg(x){
       doc["Filtr_Time3"] = Filtr_Time3 ? 1 : 0;
       doc["Power_Clean"] = Power_Clean ? 1 : 0;
       doc["Clean_Time1"] = Clean_Time1 ? 1 : 0;
-      doc["DS1"] = String(DS1, 1) + " °C";
-      doc["RoomTemp"] = String(DS1, 1) + " °C";
+      doc["DS1"] = formatTemperatureString(DS1, DS1Available); // не передает на страницу пока происходит изменение
+      doc["RoomTemp"] = formatTemperatureString(DS1, DS1Available);
       doc["Sider_heat"] = Sider_heat;
       doc["Activation_Heat"] = Activation_Heat ? 1 : 0;
       doc["Power_Heat"] = Power_Heat ? "Нагрев" : "Откл.";

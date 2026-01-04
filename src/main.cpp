@@ -307,8 +307,8 @@ loop_CL2(2100);
               + " RangeSlider = " + String(RangeMin) + " / " + String(RangeMax);
   
    
-  OverlayPoolTemp = "🌡 Бассейн: " + String(DS1, 1) + " °C";
-  OverlayHeaterTemp = "♨️ После нагревателя: " + String(DS2, 1) + " °C";
+  OverlayPoolTemp = "🌡 Бассейн: " + formatTemperatureString(DS1, DS1Available);
+  OverlayHeaterTemp = "♨️ После нагревателя: " + formatTemperatureString(DS2, DS2Available);
   OverlayLevelUpper = String("🛟 Верхний уровень: ") + (WaterLevelSensorUpper ? "Активен" : "Нет уровня");
   OverlayLevelLower = String("🛟 Нижний уровень: ") + (WaterLevelSensorLower ? "Активен" : "Нет уровня");
   OverlayPh = "🧪 pH: " + String(PH, 2);
