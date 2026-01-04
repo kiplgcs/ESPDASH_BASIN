@@ -376,7 +376,7 @@ public:
         saveValue<int>(id.c_str(), storage ? 1 : 0); // записывает bool как 0/1 для совместимости с хранилищем
     }
 
-    String valueString() const override{ return storage ? "1" : "0"; } // возвращает строковое представление состояния чекбокса
+    String valueString() const override{ return resolveUiValueOverride(id, storage ? "1" : "0"); } // результат чекбокса с возможным переопределением
 
     void setFromString(const String &value) override{ // обновляет состояние чекбокса из строкового значения UI
         storage = value.toInt() != 0; // интерпретирует любое ненулевое значение как true
@@ -406,7 +406,7 @@ public:
         saveButtonState(id.c_str(), asInt(storage)); // приводит состояние к int и записывает в хранилище
     }
 
-    String valueString() const override{ return String(asInt(storage)); } // возвращает текущее состояние кнопки в виде строки
+    String valueString() const override{ return resolveUiValueOverride(id, String(asInt(storage))); } // состояние кнопки с учётом провайдера
 
     void setFromString(const String &value) override{ // применяет значение, пришедшее из UI
         storage = fromInt(value.toInt()); // преобразует строку в int, затем в целевой тип
@@ -444,7 +444,7 @@ public:
         saveValue<T>(id.c_str(), storage); // записывает значение в постоянное хранилище
     }
 
-    String valueString() const override{ return String(storage); } // возвращает значение в строковом виде
+    String valueString() const override{ return resolveUiValueOverride(id, String(storage)); } // число с возможным форматором
 
     void setFromString(const String &value) override{ // применяет значение из UI
         if(asFloat) storage = static_cast<T>(value.toFloat()); // для float — парсит как float
@@ -478,7 +478,7 @@ public:
         saveValue<T>(id.c_str(), storage); // записывает значение в хранилище
     }
 
-    String valueString() const override{ return String(storage); } // возвращает текущее значение диапазона
+    String valueString() const override{ return resolveUiValueOverride(id, String(storage)); } // значение диапазона с возможным переопределением
 
     void setFromString(const String &value) override{ // применяет значение, полученное из UI
         storage = static_cast<T>(value.toFloat()); // парсит значение как float (универсально)
@@ -526,7 +526,7 @@ public:
         saveValue<T>(maxStorageKey.c_str(), maxStorage); // сохраняет максимальное значение
     }
 
-    String valueString() const override{ return String(minStorage) + '-' + String(maxStorage); } // возвращает диапазон в формате min-max
+    String valueString() const override{ return resolveUiValueOverride(id, String(minStorage) + '-' + String(maxStorage)); } // диапазон min-max с учётом провайдера
 
     void setFromString(const String &value) override{ // применяет строку диапазона из UI
         int sep = value.indexOf('-'); // ищет разделитель значений
@@ -583,7 +583,7 @@ public:
         saveValue<String>(id.c_str(), storage); // записывает строку в хранилище
     }
 
-    String valueString() const override{ return storage; } // возвращает текущее значение строки
+    String valueString() const override{ return resolveUiValueOverride(id, storage); } // текст с возможным прокси-генератором
 
     void setFromString(const String &value) override{ storage = value; } // обновляет строковое состояние из UI
 
@@ -599,7 +599,7 @@ public:
     void build(OABuilder &builder) override{ builder.display(id, label, storage); } // добавляет отображаемое поле в UI с текущим значением
     void load() override{ storage = loadValue<String>(id.c_str(), storage); } // загружает отображаемое значение из постоянного хранилища
     void save() const override{ saveValue<String>(id.c_str(), storage); } // сохраняет значение, если оно было обновлено программно
-    String valueString() const override{ return storage; } // возвращает текущее значение для запросов UI
+    String valueString() const override{ return resolveUiValueOverride(id, storage); } // отображение строки с возможным переопределением
     void setFromString(const String &value) override{ storage = value; } // позволяет обновить отображаемое значение извне
 
 private:
@@ -614,7 +614,7 @@ public:
     void build(OABuilder &builder) override{ builder.display(id, label, String(storage)); } // отображает текущее int-значение
     void load() override{ storage = loadValue<int>(id.c_str(), storage); } // загружает сохранённое значение
     void save() const override{ saveValue<int>(id.c_str(), storage); } // сохраняет целочисленное значение
-    String valueString() const override{ return String(storage); } // возвращает значение как строку
+    String valueString() const override{ return resolveUiValueOverride(id, String(storage)); } // int-значение с возможной подменой
     void setFromString(const String &value) override{ storage = value.toInt(); } // обновляет значение из UI
 
 private:
@@ -629,7 +629,7 @@ public:
     void build(OABuilder &builder) override{ builder.display(id, label, String(storage)); } // отображает текущее float-значение
     void load() override{ storage = loadValue<float>(id.c_str(), storage); } // загружает сохранённое значение
     void save() const override{ saveValue<float>(id.c_str(), storage); } // сохраняет float-значение
-    String valueString() const override{ return String(storage); } // возвращает значение для UI
+    String valueString() const override{ return resolveUiValueOverride(id, String(storage)); } // float-значение с возможным форматированием
     void setFromString(const String &value) override{ storage = value.toFloat(); } // обновляет значение из строкового представления
 
 private:
@@ -646,7 +646,7 @@ public:
     void build(OABuilder &builder) override{ builder.display(id, label, valueString()); } // отображает текстовое состояние вместо 0/1
     void load() override{ storage = loadValue<int>(id.c_str(), storage ? 1 : 0) != 0; } // загружает bool из сохранённого int
     void save() const override{ saveValue<int>(id.c_str(), storage ? 1 : 0); } // сохраняет bool как 0/1
-    String valueString() const override{ return storage ? onText : offText; } // возвращает текст состояния
+    String valueString() const override{ return resolveUiValueOverride(id, storage ? onText : offText); } // bool-лента с кастомным текстом
     void setFromString(const String &value) override{
         storage = value.toInt() != 0; // позволяет управлять состоянием через UI
     }
@@ -665,7 +665,7 @@ public:
     void build(OABuilder &builder) override{ builder.time(id, label, storage); } // добавляет time picker в UI
     void load() override{ storage = loadValue<String>(id.c_str(), storage); } // загружает сохранённое время
     void save() const override{ saveValue<String>(id.c_str(), storage); } // сохраняет выбранное время
-    String valueString() const override{ return storage; } // возвращает текущее значение времени
+    String valueString() const override{ return resolveUiValueOverride(id, storage); } // время, проходящее через провайдер
     void setFromString(const String &value) override{ storage = value; } // обновляет время из UI
 
 private:
@@ -683,7 +683,7 @@ public:
 
     void load() override{} // состояние таймера хранится в backend UI
     void save() const override{} // сохранение выполняется через ui.timer
-    String valueString() const override{ return String(ui.timer(id).on) + '-' + String(ui.timer(id).off); } // возвращает интервалы таймера
+    String valueString() const override{ return resolveUiValueOverride(id, String(ui.timer(id).on) + '-' + String(ui.timer(id).off)); } // интервалы таймера с опциональным провайдером
     void setFromString(const String &value) override{
         int sep = value.indexOf('-'); // ищет разделитель интервалов
         if(sep < 0) return; // игнорирует неверный формат
@@ -724,7 +724,7 @@ public:
             saveValue<T>(id.c_str(), storage); // запись значения без преобразований
         }
     }
-    String valueString() const override{ return toString(storage); } // возвращает текущее значение в строковом виде для UI
+    String valueString() const override{ return resolveUiValueOverride(id, toString(storage)); } // select с возможной кастомной строкой
 
     void setFromString(const String &value) override{ // применяется значение, выбранное пользователем в UI
         storage = fromString(value); // преобразует строку в тип T
@@ -765,7 +765,7 @@ public:
         syncCleanDaysFromSelection(); // синхронизирует внутренние флаги дней с выбранным значением
     }
     void save() const override{ saveValue<String>(id.c_str(), storage); } // сохраняет выбранные дни
-    String valueString() const override{ return storage; } // возвращает строковое представление выбранных дней
+    String valueString() const override{ return resolveUiValueOverride(id, storage); } // дни недели с возможным переопределением
     void setFromString(const String &value) override{
         storage = value; // обновляет выбранные дни из UI
         syncCleanDaysFromSelection(); // обновляет внутреннюю логику после изменения
@@ -783,7 +783,7 @@ public:
     void build(OABuilder &builder) override{ builder.color(id, label, storage); } // добавляет color picker в UI
     void load() override{ storage = loadValue<String>(id.c_str(), storage); } // загружает сохранённый цвет
     void save() const override{ saveValue<String>(id.c_str(), storage); } // сохраняет выбранный цвет
-    String valueString() const override{ return storage; } // возвращает цвет в строковом виде
+    String valueString() const override{ return resolveUiValueOverride(id, storage); } // цвет с учётом провайдера
     void setFromString(const String &value) override{ storage = value; } // обновляет цвет из UI
 
 private:

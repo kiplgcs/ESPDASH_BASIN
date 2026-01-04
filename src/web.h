@@ -7,6 +7,7 @@
 #include <esp_system.h>
 #include <vector>                // STL вектор для хранения элементов UI
 #include <functional>
+#include <map>                   // контейнер для провайдеров значений UI
 #include <esp_chip_info.h>
 #include <esp_efuse.h>
 #include "graph.h"               // Пользовательские графики (кастомные)
@@ -16,6 +17,21 @@
 #include <ArduinoJson.h>
 
 using std::vector;              // Используем vector без указания std:: каждый раз
+
+inline std::map<String, std::function<String()>> uiValueProviders; // Простая карта пользовательских генераторов значений UI
+
+inline void registerUiValueProvider(const String &id, const std::function<String()> &provider){ // Регистрация генератора значения по id
+  if(!id.length() || !provider) return; // Проверка на валидность
+  uiValueProviders[id] = provider; // Сохраняем генератор значения для последующего переопределения
+}
+
+inline String resolveUiValueOverride(const String &id, const String &fallback){ // Получение значения через переопределение
+  auto it = uiValueProviders.find(id); // Ищем пользовательский генератор по идентификатору
+  if(it != uiValueProviders.end() && it->second){ // Если есть генератор
+    return it->second(); // Возвращаем результат генератора
+  }
+  return fallback; // Иначе возвращаем исходное значение по умолчанию
+}
 
 // ---------- Создание веб-сервера ----------
 inline AsyncWebServer server(80);  // Создаем веб-сервер на порту 80
@@ -250,7 +266,6 @@ inline uint16_t parseTimeToMinutes(const String &value){ // Преобразуе
   minutes = constrain(minutes, 0, 59); // Ограничиваем минуты допустимым диапазоном
   return static_cast<uint16_t>(hours * 60 + minutes); // Возвращаем общее количество минут
 }
-
 
 
 inline String formatMinutesToTime(uint16_t minutes){
@@ -530,6 +545,24 @@ private:
 // Настройка веб-сервера
   void setupServer(){
     MiniDash *self=this; // Указатель на текущий экземпляр для использования в колбэках
+
+    // Подключаем кастомные генераторы значений UI, чтобы объединять состояния и форматировать строки
+    registerUiValueProvider("DS1", [](){ return formatTemperatureString(DS1, DS1Available); }); // отображение температуры с учетом доступности датчика
+    registerUiValueProvider("RoomTemp", [](){ return formatTemperatureString(DS1, DS1Available); }); // дублирует формат DS1 для помещения
+    registerUiValueProvider("Power_ACO", [](){ // подставляем статус работы дозатора ACO
+      const bool active = Power_ACO || ManualPulse_ACO_Active;
+      return active ? String("? Работа") : String("?? Откл.");
+    });
+    registerUiValueProvider("Power_ACO_Button", [](){ // кнопка также светится при ручном импульсе
+      return (Power_ACO || ManualPulse_ACO_Active) ? String("1") : String("0");
+    });
+    registerUiValueProvider("Power_H2O2", [](){ // статус дозатора H2O2
+      const bool active = Power_H2O2 || ManualPulse_H2O2_Active;
+      return active ? String("? Работа") : String("?? Откл.");
+    });
+    registerUiValueProvider("Power_H2O2_Button", [](){ // кнопка H2O2 реагирует на импульсы
+      return (Power_H2O2 || ManualPulse_H2O2_Active) ? String("1") : String("0");
+    });
 
 
     server.on("/", HTTP_GET, [self](AsyncWebServerRequest *r){
@@ -2641,89 +2674,13 @@ function setImg(x){
       // StaticJsonDocument<4096> doc;
       // StaticJsonDocument<6144> doc;
             StaticJsonDocument<12288> doc;
-      doc["CurrentTime"] = CurrentTime;
-      doc["RandomVal"] = RandomVal;
-      doc["InfoString"] = InfoString;
-      doc["InfoString1"] = InfoString1;
-      doc["InfoString2"] = InfoString2;
-      doc["InfoStringDIN"] = InfoStringDIN;
-      doc["OverlayPoolTemp"] = OverlayPoolTemp;
-      doc["OverlayHeaterTemp"] = OverlayHeaterTemp;
-      doc["OverlayLevelUpper"] = OverlayLevelUpper;
-      doc["OverlayLevelLower"] = OverlayLevelLower;
-      doc["OverlayPh"] = OverlayPh;
-      doc["OverlayChlorine"] = OverlayChlorine;
-      doc["OverlayFilterState"] = OverlayFilterState;
-      doc["FilterImageState"] = jpg;
-      doc["button1"] = button1;
-      doc["button2"] = button2;
-      doc["button_Lamp"] = Lamp ? 1 : 0;
-      doc["Pow_Ul_light"] = Pow_Ul_light ? 1 : 0;
-      doc["MotorSpeed"] = MotorSpeedSetting;
-      doc["RangeMin"] = RangeMin;
-      doc["RangeMax"] = RangeMax;
-      doc["LEDColor"] = LEDColor;
-      doc["LedPattern"] = LedPattern;
-      doc["LedColorMode"] = LedColorMode;
-      doc["LedColorOrder"] = LedColorOrder;
-      doc["LedBrightness"] = LedBrightness;
-      doc["LedAutoplay"] = LedAutoplay ? 1 : 0;
-      doc["LedAutoplayDuration"] = LedAutoplayDuration;
-      doc["ModeSelect"] = ModeSelect;
-            doc["ThemeColor"] = ThemeColor;
-      doc["ThemeColor"] = ThemeColor;
-      doc["SetLamp"] = SetLamp;
-      doc["SetRGB"] = SetRGB;
-      doc["DaysSelect"] = DaysSelect;
-      doc["IntInput"] = IntInput;
-      doc["FloatInput"] = FloatInput;
-      doc["Timer1"] = Timer1;
-      doc["Power_Time1"] = Power_Time1 ? 1 : 0;
-      doc["Ul_light_Time"] = Ul_light_Time ? 1 : 0;
+      doc["CurrentTime"] = CurrentTime; // Временная метка для синхронизации времени страницы
+      doc["FilterImageState"] = jpg; // Выбор картинки бассейна (анимация/статик)
+      doc["button_Lamp"] = Lamp ? 1 : 0; // Отображение состояния кнопки лампы, которая не объявлена через UI
       for (const auto &timer : ui.allTimers()) {
         doc[String(timer.id + "_ON")] = formatMinutesToTime(timer.on);
         doc[String(timer.id + "_OFF")] = formatMinutesToTime(timer.off);
       }
-      doc["WS2815_Time1"] = WS2815_Time1 ? 1 : 0;
-      doc["Activation_Water_Level"] = Activation_Water_Level ? 1 : 0;
-      doc["Power_Topping"] = Power_Topping ? 1 : 0;
-      doc["Power_Filtr"] = Power_Filtr ? 1 : 0;
-      doc["Filtr_Time1"] = Filtr_Time1 ? 1 : 0;
-      doc["Filtr_Time2"] = Filtr_Time2 ? 1 : 0;
-      doc["Filtr_Time3"] = Filtr_Time3 ? 1 : 0;
-      doc["Power_Clean"] = Power_Clean ? 1 : 0;
-      doc["Clean_Time1"] = Clean_Time1 ? 1 : 0;
-      doc["DS1"] = formatTemperatureString(DS1, DS1Available); // не передает на страницу пока происходит изменение
-      doc["RoomTemp"] = formatTemperatureString(DS1, DS1Available);
-      doc["Sider_heat"] = Sider_heat;
-      doc["Activation_Heat"] = Activation_Heat ? 1 : 0;
-      doc["Power_Heat"] = Power_Heat ? "Нагрев" : "Откл.";
-      doc["RoomTempOn"] = RoomTempOn;
-      doc["RoomTempOff"] = RoomTempOff;
-      doc["RoomTemper"] = RoomTemper ? 1 : 0;
-      doc["Power_Warm_floor_heating"] = Power_Warm_floor_heating ? "Включен" : "Откл.";
-      doc["WaterLevelSensorUpper"] = WaterLevelSensorUpper ? "Активен" : "Откл.";
-      doc["WaterLevelSensorLower"] = WaterLevelSensorLower ? "Активен" : "Откл.";
-      doc["Power_Topping_State"] = Power_Topping_State ? "Включен" : "Откл.";
-      doc["PH"] = String(PH, 2);
-      doc["analogValuePH"] = String(analogValuePH_Comp) + " mV";
-      doc["Temper_Reference"] = Temper_Reference;
-      doc["PH_Control_ACO"] = PH_Control_ACO ? 1 : 0;
-      doc["PH_setting"] = PH_setting;
-      doc["ACO_Work"] = ACO_Work;
-      const bool powerAcoActive = Power_ACO || ManualPulse_ACO_Active;
-      const bool powerH2O2Active = Power_H2O2 || ManualPulse_H2O2_Active;
-      doc["Power_ACO"] = powerAcoActive ? "Работа" : "Откл.";
-      doc["Power_ACO_Button"] = powerAcoActive ? 1 : 0;
-      doc["ppmCl"] = String(ppmCl, 3);
-      doc["corrected_ORP_Eh_mV"] = String(corrected_ORP_Eh_mV);
-      doc["NaOCl_H2O2_Control"] = NaOCl_H2O2_Control ? 1 : 0;
-      doc["ORP_setting"] = ORP_setting;
-      doc["H2O2_Work"] = H2O2_Work;
-      doc["Power_H2O2"] = powerH2O2Active ? "Работа" : "Откл.";
-      doc["Power_H2O2_Button"] = powerH2O2Active ? 1 : 0;
-      doc["Lumen_Ul"] = Lumen_Ul;
-      doc["Comment"] = Comment;
             appendUiRegistryValues(doc);
       String s;
       serializeJson(doc, s);
