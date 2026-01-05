@@ -175,6 +175,23 @@ bool WS2815_Time1, Saved_WS2815_Time1;
 
 uint16_t Saved_timeON_WS2815, Saved_timeOFF_WS2815;
 
+inline int TimertestON = 0;        // Значение включения тестового таймера (минуты от начала суток)
+inline int TimertestOFF = 0;       // Значение отключения тестового таймера (минуты от начала суток)
+inline int FiltrTimer1ON = 0;      // Время включения фильтрации №1 в минутах
+inline int FiltrTimer1OFF = 0;     // Время отключения фильтрации №1 в минутах
+inline int FiltrTimer2ON = 0;      // Время включения фильтрации №2
+inline int FiltrTimer2OFF = 0;     // Время отключения фильтрации №2
+inline int FiltrTimer3ON = 0;      // Время включения фильтрации №3
+inline int FiltrTimer3OFF = 0;     // Время отключения фильтрации №3
+inline int CleanTimer1ON = 0;      // Время включения промывки в минутах
+inline int CleanTimer1OFF = 0;     // Время отключения промывки в минутах
+inline int LampTimerON = 0;        // Таймер лампы: начало
+inline int LampTimerOFF = 0;       // Таймер лампы: конец
+inline int RgbTimerON = 0;         // Таймер RGB-подсветки: начало
+inline int RgbTimerOFF = 0;        // Таймер RGB-подсветки: конец
+inline int UlLightTimerON = 0;     // Таймер уличного освещения: начало
+inline int UlLightTimerOFF = 0;    // Таймер уличного освещения: конец
+
 
 bool ColorRGB = false;    //режим ручного задания цвета
 int new_bright = 200; //переменная с яркостью установленной в интерфейсе вручную

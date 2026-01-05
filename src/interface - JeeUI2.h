@@ -61,7 +61,7 @@ inline void interface(){ // Декларатиынве функции интер
     // test
     UI_PAGE();
     UI_SELECT_DAYS("Daystest", DaysSelect, "📅 Дни промывки");
-    UI_TIMER("Timertest", "⏱️ Таймер test", noopTimerCallback);
+    UI_TIMER("Timertest", "⏱️ Таймер test", TimertestON, TimertestOFF);
 
     
     UI_TIME("Timertest", Timer1, "⏰ Start Time");
@@ -80,18 +80,18 @@ inline void interface(){ // Декларатиынве функции интер
 
     // Настройка фильтрации, Промывка фильтра
     UI_PAGE();
-    UI_BUTTON("Power_Filtr", Power_Filtr, "gray", "🧽 Фильтрация (вручную)");
+        UI_BUTTON("Power_Filtr", Power_Filtr, "gray", "🧽 Фильтрация (вручную)");
     // UI_CHECKBOX("Power_Filtr", Power_Filtr, "Фильтрация (вручную)");
     UI_CHECKBOX("Filtr_Time1", Filtr_Time1, "⏱️ Таймер фильтрации №1");
-    UI_TIMER("FiltrTimer1", "⏱️ Таймер фильтрации №1", noopTimerCallback);
+        UI_TIMER("FiltrTimer1", "⏱️ Таймер фильтрации №1", FiltrTimer1ON, FiltrTimer1OFF, noopTimerCallback);
     UI_CHECKBOX("Filtr_Time2", Filtr_Time2, "⏱️ Таймер фильтрации №2");
-    UI_TIMER("FiltrTimer2", "⏱️ Таймер фильтрации №2", noopTimerCallback);
+        UI_TIMER("FiltrTimer2", "⏱️ Таймер фильтрации №2", FiltrTimer2ON, FiltrTimer2OFF, noopTimerCallback);
     UI_CHECKBOX("Filtr_Time3", Filtr_Time3, "⏱️ Таймер фильтрации №3");
-    UI_TIMER("FiltrTimer3", "⏱️ Таймер фильтрации №3", noopTimerCallback);
+        UI_TIMER("FiltrTimer3", "⏱️ Таймер фильтрации №3", FiltrTimer3ON, FiltrTimer3OFF, noopTimerCallback);
     UI_BUTTON("Power_Clean", Power_Clean, "gray", "🧼 Промывка фильтра (вручную)");
     // UI_CHECKBOX("Power_Clean", Power_Clean, "Промывка фильтра (вручную)");
     UI_CHECKBOX("Clean_Time1", Clean_Time1, "🗓️ Таймер промывки");
-    UI_TIMER("CleanTimer1", "🗓️ Таймер промывки", noopTimerCallback);
+        UI_TIMER("CleanTimer1", "🗓️ Таймер промывки", CleanTimer1ON, CleanTimer1OFF, noopTimerCallback);
     UI_SELECT_DAYS("DaysSelect", DaysSelect, "📅 Дни промывки");
 
     
@@ -108,7 +108,7 @@ inline void interface(){ // Декларатиынве функции интер
     static String Lumen_Ul_str = String(Lumen_Ul); 
     UI_TEXT("Lumen_Ul", Lumen_Ul_str, "🔆 Освещенность на улице, %");
 
-    UI_TIMER("LampTimer", "⏲️ Таймер лампы", onLampTimerChange);
+        UI_TIMER("LampTimer", "⏲️ Таймер лампы", LampTimerON, LampTimerOFF, onLampTimerChange);
 
     // Управление RGB подсветкой
     UI_PAGE();
@@ -118,8 +118,8 @@ inline void interface(){ // Декларатиынве функции интер
                                    {"on", "RGB подсветка включена постоянно"},
                                    {"auto", "Включение по датчику освещенности (<20%)"},
                                    {"timer", "Включение по таймеру"}}), "🎛️ Режим управления RGB подсветкой", onSetRgbChange);
-    UI_TIMER("RgbTimer", "⏲️ Таймер RGB ленты", noopTimerCallback);
-    UI_COLOR("LEDColor", LEDColor, "🎨 Цвет подсветки");
+        UI_TIMER("RgbTimer", "⏲️ Таймер RGB ленты", RgbTimerON, RgbTimerOFF, noopTimerCallback);
+UI_COLOR("LEDColor", LEDColor, "🎨 Цвет подсветки");
     UI_SELECT_CB("LedColorMode", LedColorMode, (std::initializer_list<UIOption>{{"auto", "Автоматически"},
                                                {"manual", "Ручной цвет"}}), "🎨 Режим цвета", onLedColorModeChange);
     UI_RANGE_CB("LedBrightness", LedBrightness, 10, 255, 1, "🔆 Яркость", onLedBrightnessChange);
@@ -295,7 +295,7 @@ inline void interface(){ // Декларатиынве функции интер
 
     // Уличное освещение
     UI_PAGE();
-    UI_BUTTON("Pow_Ul_light", Pow_Ul_light, "gray", "🚏 Включить/Отключить освещение вручную");
+UI_BUTTON("Pow_Ul_light", Pow_Ul_light, "gray", "🚏 Включить/Отключить освещение вручную");
     UI_CHECKBOX("Ul_light_Time", Ul_light_Time, "⏱️ Таймер уличного освещения");
-    UI_TIMER("UlLightTimer", "⏲️ Таймер уличного освещения", noopTimerCallback);
+        UI_TIMER("UlLightTimer", "⏲️ Таймер уличного освещения", UlLightTimerON, UlLightTimerOFF, noopTimerCallback);
 }

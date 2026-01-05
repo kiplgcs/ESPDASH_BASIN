@@ -674,15 +674,24 @@ private:
 
 class UITimerElement : public UIDeclarativeElement { // UI-элемент таймера с интервалами включения/выключения
 public:
-    UITimerElement(const String &elementId, const String &elementLabel, const std::function<void(uint16_t, uint16_t)> &cb)
-        : UIDeclarativeElement(elementId, elementLabel), callback(cb) {} // callback вызывается при изменении таймера
+    UITimerElement(const String &elementId, const String &elementLabel, int *onRef, int *offRef,
+                   const std::function<void(uint16_t, uint16_t)> &cb = nullptr)
+        : UIDeclarativeElement(elementId, elementLabel), callback(cb), onStorage(onRef), offStorage(offRef) {} // callback вызывается при изменении таймера и можно привязать внешние переменные
 
     void build(OABuilder &builder) override{
         builder.timer(id, label, callback); // регистрирует таймер в UI и backend
     }
 
-    void load() override{} // состояние таймера хранится в backend UI
-    void save() const override{} // сохранение выполняется через ui.timer
+    void load() override{ // при регистрации таймеров синхронизируем внешние значения с backend
+        UITimerEntry &entry = ui.timer(id); // обеспечивает существование таймера и его сохранённого состояния
+        if(onStorage) *onStorage = entry.on; // обновляем значение включения в минутах
+        if(offStorage) *offStorage = entry.off; // обновляем значение отключения
+    }
+    void save() const override{ // сохраняем значения из backend в привязанные переменные
+        UITimerEntry &entry = ui.timer(id);
+        if(onStorage) *onStorage = entry.on;
+        if(offStorage) *offStorage = entry.off;
+    }
     String valueString() const override{ return resolveUiValueOverride(id, String(ui.timer(id).on) + '-' + String(ui.timer(id).off)); } // интервалы таймера с опциональным провайдером
     void setFromString(const String &value) override{
         int sep = value.indexOf('-'); // ищет разделитель интервалов
@@ -690,10 +699,14 @@ public:
         uint16_t onMinutes = static_cast<uint16_t>(value.substring(0, sep).toInt()); // парсит время включения
         uint16_t offMinutes = static_cast<uint16_t>(value.substring(sep + 1).toInt()); // парсит время выключения
         ui.setTimerMinutes(id, onMinutes, offMinutes, true); // применяет таймер и активирует его
+        if(onStorage) *onStorage = onMinutes; // синхронизируем внешние переменные
+        if(offStorage) *offStorage = offMinutes;
     }
 
 private:
     std::function<void(uint16_t, uint16_t)> callback; // пользовательский обработчик изменения таймера
+    int *onStorage; // ссылка на внешнюю переменную времени включения (в минутах)
+    int *offStorage; // ссылка на внешнюю переменную времени отключения
 };
 
 template <typename T>
@@ -982,9 +995,9 @@ inline bool uiApplyValueForId(const String &id, const String &value){ // при�
 #define UI_TIME(id, state, label) \
     do { static UITimeElement UI_UNIQUE_NAME(ui_time_)(id, state, label); UI_REGISTER_ELEMENT(UI_UNIQUE_NAME(ui_time_)); } while(false)
 
-// элемент таймера с on/off интервалами
-#define UI_TIMER(id, label, callback) \
-    do { static UITimerElement UI_UNIQUE_NAME(ui_timer_)(id, label, callback); UI_REGISTER_ELEMENT(UI_UNIQUE_NAME(ui_timer_)); } while(false)
+// элемент таймера с on/off интервалами и явной привязкой внешних переменных времени включения/выключения
+#define UI_TIMER(id, label, onValue, offValue, ...) \
+    do { static UITimerElement UI_UNIQUE_NAME(ui_timer_)(id, label, &(onValue), &(offValue), ##__VA_ARGS__); UI_REGISTER_ELEMENT(UI_UNIQUE_NAME(ui_timer_)); } while(false)
 
 // выпадающий список без callback
 #define UI_SELECT(id, state, options, label) \
@@ -995,6 +1008,7 @@ inline bool uiApplyValueForId(const String &id, const String &value){ // при�
     do { static UISelectElement<decltype(state)> UI_UNIQUE_NAME(ui_select_)(id, state, label, options, callback); UI_REGISTER_ELEMENT(UI_UNIQUE_NAME(ui_select_)); } while(false)
 
 // специализированный select выбора дней недели
+// Сохраняет дни как строку вида "Mon,Tue" в переменной состояния; используйте syncCleanDaysFromSelection/syncDaysSelectionFromClean для согласованности
 #define UI_SELECT_DAYS(id, state, label) \
     do { static UISelectDaysElement UI_UNIQUE_NAME(ui_select_days_)(id, state, label); UI_REGISTER_ELEMENT(UI_UNIQUE_NAME(ui_select_days_)); } while(false)
 
