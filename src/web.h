@@ -1946,7 +1946,8 @@ function applyLiveValue(id, value){
     updateSelectValue(id, value);
     return;
   }
-  if(el.matches('div[id$="DaysSelect"]')){
+  if(el.matches('div.select-days')){
+    // Обновляем любой элемент выбора дней, независимо от суффикса id.
     updateDaysSelection(id, value);
     return;
   }
@@ -2065,7 +2066,8 @@ document.querySelectorAll('input[type=checkbox][id]').forEach(el=>{
   listenToManual(el);
 });
 
-document.querySelectorAll('div[id$="DaysSelect"]').forEach(el=>{
+document.querySelectorAll('div.select-days').forEach(el=>{
+  // Сохраняем выбор по каждому .select-days, даже если id отличается.
   el.querySelectorAll('input[type=checkbox]').forEach(chk=>{
     chk.addEventListener('change', ()=>{
       let selected = Array.from(el.querySelectorAll('input[type=checkbox]:checked')).map(c=>c.value).join(',');
