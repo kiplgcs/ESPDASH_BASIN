@@ -190,6 +190,13 @@ UI_COLOR("LEDColor", LEDColor, "🎨 Цвет подсветки");
     "value:Temperatura;updatePeriod_of_Time:60;updateStep:5;maxPoints:40;width:100%;height:240;"
     "xLabel:Time;yLabel:Temperature;pointColor:#6b66ff;lineColor:#ff5e5e;"
     "lineWidth:1;pointRadius:3;smooth:false", DS1);
+
+
+
+        UI_POPUP_BEGIN("DallasSensorsInfo", "🧪 Поиск информации о DS18B20", "🪟 Открыть окно поиска информации DS18B20");
+        
+        UI_POPUP_END();
+
         
 
     // Контроль PH (NaOCl)
