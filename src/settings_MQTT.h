@@ -41,6 +41,81 @@ extern bool Activation_Heat; // управление нагревом
 extern String SetLamp; // режим лампы
 extern String SetRGB; // режим RGB
 
+
+inline void publishMqttStateString(const char* topic, const String &value); // forward declaration
+inline void publishMqttStateBool(const char* topic, bool value); // forward declaration
+
+inline bool mqttPayloadIsOn(String payload){ // проверка включения
+  payload.trim(); // очистка
+  payload.toLowerCase(); // нижний регистр
+  return payload == "1" || payload == "on" || payload == "true"; // ON
+}
+
+inline bool mqttPayloadIsOff(String payload){ // проверка выключения
+  payload.trim(); // очистка
+  payload.toLowerCase(); // нижний регистр
+  return payload == "0" || payload == "off" || payload == "false"; // OFF
+}
+
+inline bool mqttIsAllowedMode(const String &value){ // проверка режима
+  return value == "off" || value == "on" || value == "auto" || value == "timer"; // допустимые режимы
+}
+
+inline void handleMqttCommandMessage(char* topic, byte* payload, unsigned int length){ // обработка MQTT команд
+  String topicStr(topic); // топик
+  String message; // payload строкой
+  message.reserve(length); // резерв
+  for(unsigned int i = 0; i < length; ++i){
+    message += static_cast<char>(payload[i]); // сбор payload
+  }
+  message.trim(); // очистка
+
+  if(topicStr == "home/esp32/Power_Filtr/set"){
+    Power_Filtr = mqttPayloadIsOn(message); // обновление состояния
+    saveValue<int>("Power_Filtr", Power_Filtr ? 1 : 0); // сохранение
+    publishMqttStateBool("home/esp32/Power_Filtr", Power_Filtr); // публикация
+    return;
+  }
+
+  if(topicStr == "home/esp32/Pow_Ul_light/set"){
+    Pow_Ul_light = mqttPayloadIsOn(message); // обновление состояния
+    saveValue<int>("Pow_Ul_light", Pow_Ul_light ? 1 : 0); // сохранение
+    publishMqttStateBool("home/esp32/Pow_Ul_light", Pow_Ul_light); // публикация
+    return;
+  }
+
+  if(topicStr == "home/esp32/Activation_Heat/set"){
+    Activation_Heat = mqttPayloadIsOn(message); // обновление состояния
+    saveValue<int>("Activation_Heat", Activation_Heat ? 1 : 0); // сохранение
+    publishMqttStateBool("home/esp32/Activation_Heat", Activation_Heat); // публикация
+    return;
+  }
+
+  if(topicStr == "home/esp32/SetLamp/set"){
+    if(mqttIsAllowedMode(message)){
+      SetLamp = message; // обновление режима
+      saveValue<String>("SetLamp", SetLamp); // сохранение
+      publishMqttStateString("home/esp32/SetLamp", SetLamp); // публикация
+    }
+    return;
+  }
+
+  if(topicStr == "home/esp32/SetRGB/set"){
+    if(mqttIsAllowedMode(message)){
+      SetRGB = message; // обновление режима
+      saveValue<String>("SetRGB", SetRGB); // сохранение
+      publishMqttStateString("home/esp32/SetRGB", SetRGB); // публикация
+    }
+    return;
+  }
+
+  if(topicStr == "home/esp32/button/restart/set"){
+    ESP.restart(); // перезапуск
+    return;
+  }
+}
+
+
 inline String mqttDiscoveryDeviceId(){ // идентификатор устройства для Discovery
   String id = WiFi.macAddress(); // MAC-адрес
   id.replace(":", ""); // удаление двоеточий
@@ -129,15 +204,15 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
   publishedAll = publishEntity("sensor", "ppmCl", "Free Chlorine", "home/esp32/ppmCl", nullptr, nullptr, "mg/L", "measurement", nullptr, nullptr, nullptr) && publishedAll;
   publishedAll = publishEntity("sensor", "OverlayFilterState", "Filter State", "home/esp32/OverlayFilterState", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr) && publishedAll;
 
-  publishedAll = publishEntity("binary_sensor", "Power_H2O2", "NaOCl Pump State", "home/esp32/Power_H2O2", nullptr, nullptr, nullptr, nullptr, nullptr, "1", "0") && publishedAll;
-  publishedAll = publishEntity("binary_sensor", "Power_ACO", "ACO Pump State", "home/esp32/Power_ACO", nullptr, nullptr, nullptr, nullptr, nullptr, "1", "0") && publishedAll;
-  publishedAll = publishEntity("binary_sensor", "Power_Heat", "Heating State", "home/esp32/Power_Heat", nullptr, nullptr, nullptr, nullptr, nullptr, "1", "0") && publishedAll;
-  publishedAll = publishEntity("binary_sensor", "Power_Topping_State", "Water Top Up State", "home/esp32/Power_Topping_State", nullptr, nullptr, nullptr, nullptr, nullptr, "1", "0") && publishedAll;
+  publishedAll = publishEntity("binary_sensor", "Power_H2O2", "NaOCl Pump State", "home/esp32/Power_H2O2", nullptr, "power", nullptr, nullptr, nullptr, "1", "0") && publishedAll;
+  publishedAll = publishEntity("binary_sensor", "Power_ACO", "ACO Pump State", "home/esp32/Power_ACO", nullptr, "power", nullptr, nullptr, nullptr, "1", "0") && publishedAll;
+  publishedAll = publishEntity("binary_sensor", "Power_Heat", "Heating State", "home/esp32/Power_Heat", nullptr, "power", nullptr, nullptr, nullptr, "1", "0") && publishedAll;
+  publishedAll = publishEntity("binary_sensor", "Power_Topping_State", "Water Top Up State", "home/esp32/Power_Topping_State", nullptr, "power", nullptr, nullptr, nullptr, "1", "0") && publishedAll;
 
   publishedAll = publishEntity("switch", "Power_Filtr", "Pool Filter (Manual)", "home/esp32/Power_Filtr", "home/esp32/Power_Filtr/set", nullptr, nullptr, nullptr, nullptr, "1", "0") && publishedAll;
   publishedAll = publishEntity("switch", "Pow_Ul_light", "Outdoor Light (Manual)", "home/esp32/Pow_Ul_light", "home/esp32/Pow_Ul_light/set", nullptr, nullptr, nullptr, nullptr, "1", "0") && publishedAll;
   publishedAll = publishEntity("switch", "Activation_Heat", "Heating Control", "home/esp32/Activation_Heat", "home/esp32/Activation_Heat/set", nullptr, nullptr, nullptr, nullptr, "1", "0") && publishedAll;
-
+  publishedAll = publishEntity("button", "restart", "ESP32 Restart", nullptr, "home/esp32/button/restart/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr) && publishedAll;
   {
     JsonDocument doc; // JSON-документ
     const String uniqueId = deviceId + "_SetLamp"; // уникальный id
@@ -270,6 +345,7 @@ inline void saveMqttSettings(){ // сохранение настроек MQTT
 
 inline void configureMqttServer(){ // настройка сервера MQTT
   mqttClient.setServer(mqttHost.c_str(), mqttPort); // установка host и port
+  mqttClient.setCallback(handleMqttCommandMessage); // обработчик входящих команд
 }
 
 inline void connectMqtt(){ // подключение к MQTT
@@ -295,6 +371,13 @@ bool connected = mqttClient.connect( // подключение с логином
       mqttDiscoveryPending = true; // публикация MQTT Discovery после первого loop
 publishHomeAssistantDiscovery(); // попытка публикации сразу после подключения
       mqttClient.subscribe("home/esp32/tempSet", 0); // подписка на топик
+      mqttClient.subscribe("home/esp32/Power_Filtr/set", 0); // команда фильтра
+      mqttClient.subscribe("home/esp32/Pow_Ul_light/set", 0); // команда освещения
+      mqttClient.subscribe("home/esp32/Activation_Heat/set", 0); // команда нагрева
+      mqttClient.subscribe("home/esp32/SetLamp/set", 0); // команда режима лампы
+      mqttClient.subscribe("home/esp32/SetRGB/set", 0); // команда режима RGB
+      mqttClient.subscribe("home/esp32/button/restart/set", 0); // команда перезапуска
+    
     } else { // если не удалось подключиться
       mqttIsConnected = false; // сброс флага
     }
