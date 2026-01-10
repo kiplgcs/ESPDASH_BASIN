@@ -24,6 +24,21 @@ inline unsigned long mqttLastPublish = 0; // время последней пу�
 inline const char* mqttAvailabilityTopic = "home/esp32/availability"; // топик доступности устройства
 inline const char* mqttDiscoveryPrefix = "homeassistant"; // префикс MQTT Discovery
 inline bool mqttDiscoveryPending = false; // публикация после первого успешного MQTT loop
+
+inline unsigned long mqttDiscoveryLastAttempt = 0; // время последней попытки discovery
+inline const unsigned long mqttDiscoveryInterval = 250; // интервал между пакетами discovery
+inline const uint8_t mqttDiscoveryBatchSize = 4; // максимум сущностей за loop
+
+enum DiscoveryStage {
+  DISCOVERY_NONE,
+  DISCOVERY_TEST_SENSOR,
+  DISCOVERY_MAIN_ENTITIES,
+  DISCOVERY_DONE
+};
+
+inline DiscoveryStage mqttDiscoveryStage = DISCOVERY_NONE; // этап discovery
+inline size_t mqttDiscoveryIndex = 0; // индекс публикации сущностей
+
 // mqttDiscovery публикуется один раз после успешного подключения и availability=online.
 
 extern float DS1; // температура воды
@@ -132,144 +147,163 @@ inline void publishMqttAvailability(const char* payload, bool retain = true){ //
   mqttClient.publish(mqttAvailabilityTopic, payload, retain); // публикация статуса
 }
 
+inline void publishDiscoveryDeviceBlock(JsonDocument &doc, const String &deviceId, const String &deviceName){ // блок device
+  JsonObject device = doc["device"].to<JsonObject>(); // объект устройства
+  JsonArray identifiers = device["identifiers"].to<JsonArray>(); // идентификаторы
+  identifiers.add(deviceId); // добавление id
+  device["name"] = deviceName; // имя устройства
+  device["model"] = "ESP32-S3"; // модель
+  device["manufacturer"] = "Espressif"; // производитель
+}
+
+struct MqttDiscoveryEntity {
+  const char* component;
+  const char* id;
+  const char* name;
+  const char* stateTopic;
+  const char* commandTopic;
+  const char* deviceClass;
+  const char* unit;
+  const char* stateClass;
+  const char* valueTemplate;
+  const char* payloadOn;
+  const char* payloadOff;
+};
+
+inline bool publishMqttDiscoveryEntity(const MqttDiscoveryEntity &entity,
+                                       const String &deviceId,
+                                       const String &deviceName){ // публикация сущности
+  JsonDocument doc; // JSON-документ
+  const String uniqueId = deviceId + "_" + entity.id; // уникальный id
+  const String topic = String(mqttDiscoveryPrefix) + "/" + entity.component + "/" + uniqueId + "/config"; // топик config
+
+  doc["unique_id"] = uniqueId; // unique_id
+  doc["name"] = entity.name; // name
+  doc["availability_topic"] = mqttAvailabilityTopic; // availability_topic
+  doc["payload_available"] = "online"; // payload available
+  doc["payload_not_available"] = "offline"; // payload not available
+  if(entity.stateTopic) doc["state_topic"] = entity.stateTopic; // state_topic
+  if(entity.commandTopic) doc["command_topic"] = entity.commandTopic; // command_topic
+  if(entity.deviceClass) doc["device_class"] = entity.deviceClass; // device_class
+  if(entity.unit) doc["unit_of_measurement"] = entity.unit; // unit_of_measurement
+  if(entity.stateClass) doc["state_class"] = entity.stateClass; // state_class
+  if(entity.valueTemplate) doc["value_template"] = entity.valueTemplate; // value_template
+  if(entity.payloadOn) doc["payload_on"] = entity.payloadOn; // payload_on
+  if(entity.payloadOff) doc["payload_off"] = entity.payloadOff; // payload_off
+
+  publishDiscoveryDeviceBlock(doc, deviceId, deviceName); // блок device
+
+  String payload; // строка JSON
+  serializeJson(doc, payload); // сериализация JSON
+  return mqttClient.publish(topic.c_str(), payload.c_str(), true); // публикация config с retain
+}
+
+inline bool publishMqttDiscoverySelect(const char* id,
+                                       const char* name,
+                                       const char* stateTopic,
+                                       const char* commandTopic,
+                                       const char* const* options,
+                                       size_t optionsCount,
+                                       const String &deviceId,
+                                       const String &deviceName){ // публикация select
+  JsonDocument doc; // JSON-документ
+  const String uniqueId = deviceId + "_" + id; // уникальный id
+  const String topic = String(mqttDiscoveryPrefix) + "/select/" + uniqueId + "/config"; // топик config
+
+  doc["unique_id"] = uniqueId; // unique_id
+  doc["name"] = name; // name
+  doc["availability_topic"] = mqttAvailabilityTopic; // availability_topic
+  doc["payload_available"] = "online"; // payload available
+  doc["payload_not_available"] = "offline"; // payload not available
+  doc["state_topic"] = stateTopic; // state_topic
+  doc["command_topic"] = commandTopic; // command_topic
+  JsonArray optionsArray = doc["options"].to<JsonArray>(); // options
+  for(size_t i = 0; i < optionsCount; ++i){
+    optionsArray.add(options[i]);
+  }
+
+  publishDiscoveryDeviceBlock(doc, deviceId, deviceName); // блок device
+
+  String payload; // строка JSON
+  serializeJson(doc, payload); // сериализация JSON
+  return mqttClient.publish(topic.c_str(), payload.c_str(), true); // публикация config с retain
+}
+
 inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discovery
   if(!mqttClient.connected()) return; // выход если нет подключения
+  if(mqttDiscoveryStage == DISCOVERY_DONE){ // завершено
+    mqttDiscoveryPending = false; // сброс ожидания
+    return;
+  }
+
+  const unsigned long now = millis(); // текущее время
+  if(now - mqttDiscoveryLastAttempt < mqttDiscoveryInterval) return; // интервал между пакетами
+  mqttDiscoveryLastAttempt = now; // обновление таймера
 
   const String deviceId = mqttDiscoveryDeviceId(); // id устройства
   const String deviceName = mqttDiscoveryDeviceName(); // имя устройства
 
-  bool publishedAll = true; // флаг успешной публикации всех сущностей
-
-  auto publishEntity = [&](const char* component,
-                           const char* id,
-                           const char* name,
-                           const char* stateTopic,
-                           const char* commandTopic,
-                           const char* deviceClass,
-                           const char* unit,
-                           const char* stateClass,
-                           const char* valueTemplate,
-                           const char* payloadOn,
-                           const char* payloadOff) -> bool {
-    StaticJsonDocument<256> doc; // JSON-документ
-    const String uniqueId = deviceId + "_" + id; // уникальный id
-    const String topic = String(mqttDiscoveryPrefix) + "/" + component + "/" + uniqueId + "/config"; // топик config
-
-    doc["unique_id"] = uniqueId; // unique_id
-    doc["name"] = name; // name
-    doc["availability_topic"] = mqttAvailabilityTopic; // availability_topic
-    doc["payload_available"] = "online"; // payload available
-    doc["payload_not_available"] = "offline"; // payload not available
-    if(stateTopic) doc["state_topic"] = stateTopic; // state_topic
-    if(commandTopic) doc["command_topic"] = commandTopic; // command_topic
-    if(deviceClass) doc["device_class"] = deviceClass; // device_class
-    if(unit) doc["unit_of_measurement"] = unit; // unit_of_measurement
-    if(stateClass) doc["state_class"] = stateClass; // state_class
-    if(valueTemplate) doc["value_template"] = valueTemplate; // value_template
-    if(payloadOn) doc["payload_on"] = payloadOn; // payload_on
-    if(payloadOff) doc["payload_off"] = payloadOff; // payload_off
-
-    JsonObject device = doc["device"].to<JsonObject>(); // объект устройства
-    JsonArray identifiers = device["identifiers"].to<JsonArray>(); // идентификаторы
-    identifiers.add(deviceId); // добавление id
-    device["name"] = deviceName; // имя устройства
-    device["model"] = "ESP32-S3"; // модель
-    device["manufacturer"] = "Espressif"; // производитель
-
-    String payload; // строка JSON
-    serializeJson(doc, payload); // сериализация JSON
-    return mqttClient.publish(topic.c_str(), payload.c_str(), true); // публикация config с retain
+static const MqttDiscoveryEntity baseEntities[] = {
+    {"sensor", "status", "ESP32 Uptime", "home/esp32/status", nullptr, "duration", "s", "measurement", "{{ value | replace('ESP32 uptime: ', '') | replace('s','') }}", nullptr, nullptr},
+    {"sensor", "test", "ESP32 Test Sensor", "home/esp32/test", nullptr, nullptr, nullptr, "measurement", nullptr, nullptr, nullptr},
+    {"sensor", "DS1", "Pool Water Temperature", "home/esp32/DS1", nullptr, "temperature", "°C", "measurement", nullptr, nullptr, nullptr},
+    {"sensor", "RoomTemp", "Room Temperature", "home/esp32/RoomTemp", nullptr, "temperature", "°C", "measurement", nullptr, nullptr, nullptr},
+    {"sensor", "PH", "Pool pH", "home/esp32/PH", nullptr, nullptr, "pH", "measurement", nullptr, nullptr, nullptr},
+    {"sensor", "corrected_ORP_Eh_mV", "ORP", "home/esp32/corrected_ORP_Eh_mV", nullptr, nullptr, "mV", "measurement", nullptr, nullptr, nullptr},
+    {"sensor", "ppmCl", "Free Chlorine", "home/esp32/ppmCl", nullptr, nullptr, "mg/L", "measurement", nullptr, nullptr, nullptr},
+    {"sensor", "OverlayFilterState", "Filter State", "home/esp32/OverlayFilterState", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"binary_sensor", "Power_H2O2", "NaOCl Pump State", "home/esp32/Power_H2O2", nullptr, "power", nullptr, nullptr, nullptr, "1", "0"},
+    {"binary_sensor", "Power_ACO", "ACO Pump State", "home/esp32/Power_ACO", nullptr, "power", nullptr, nullptr, nullptr, "1", "0"},
+    {"binary_sensor", "Power_Heat", "Heating State", "home/esp32/Power_Heat", nullptr, "power", nullptr, nullptr, nullptr, "1", "0"},
+    {"binary_sensor", "Power_Topping_State", "Water Top Up State", "home/esp32/Power_Topping_State", nullptr, "power", nullptr, nullptr, nullptr, "1", "0"},
+    {"switch", "Power_Filtr", "Pool Filter (Manual)", "home/esp32/Power_Filtr", "home/esp32/Power_Filtr/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"switch", "Pow_Ul_light", "Outdoor Light (Manual)", "home/esp32/Pow_Ul_light", "home/esp32/Pow_Ul_light/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"switch", "Activation_Heat", "Heating Control", "home/esp32/Activation_Heat", "home/esp32/Activation_Heat/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"button", "restart", "ESP32 Restart", nullptr, "home/esp32/button/restart/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr}
   };
 
-  publishedAll = publishEntity(
-    "sensor",
-    "status",
-    "ESP32 Uptime",
-    "home/esp32/status",
-    nullptr,
-    "duration",
-    "s",
-    "measurement",
-    "{{ value | replace('ESP32 uptime: ', '') | replace('s','') }}",
-    nullptr,
-    nullptr
-  ) && publishedAll;
+  static const char* const selectOptions[] = {"off", "on", "auto", "timer"}; // варианты для select
+  const size_t baseCount = sizeof(baseEntities) / sizeof(baseEntities[0]); // количество base сущностей
+  const size_t totalCount = baseCount + 2; // +2 select
 
-  publishedAll = publishEntity("sensor", "test", "ESP32 Test Sensor", "home/esp32/test", nullptr, nullptr, nullptr, "measurement", nullptr, nullptr, nullptr) && publishedAll;
-
-  publishedAll = publishEntity("sensor", "DS1", "Pool Water Temperature", "home/esp32/DS1", nullptr, "temperature", "°C", "measurement", nullptr, nullptr, nullptr) && publishedAll;
-  publishedAll = publishEntity("sensor", "RoomTemp", "Room Temperature", "home/esp32/RoomTemp", nullptr, "temperature", "°C", "measurement", nullptr, nullptr, nullptr) && publishedAll;
-  publishedAll = publishEntity("sensor", "PH", "Pool pH", "home/esp32/PH", nullptr, nullptr, "pH", "measurement", nullptr, nullptr, nullptr) && publishedAll;
-  publishedAll = publishEntity("sensor", "corrected_ORP_Eh_mV", "ORP", "home/esp32/corrected_ORP_Eh_mV", nullptr, nullptr, "mV", "measurement", nullptr, nullptr, nullptr) && publishedAll;
-  publishedAll = publishEntity("sensor", "ppmCl", "Free Chlorine", "home/esp32/ppmCl", nullptr, nullptr, "mg/L", "measurement", nullptr, nullptr, nullptr) && publishedAll;
-  publishedAll = publishEntity("sensor", "OverlayFilterState", "Filter State", "home/esp32/OverlayFilterState", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr) && publishedAll;
-
-  publishedAll = publishEntity("binary_sensor", "Power_H2O2", "NaOCl Pump State", "home/esp32/Power_H2O2", nullptr, "power", nullptr, nullptr, nullptr, "1", "0") && publishedAll;
-  publishedAll = publishEntity("binary_sensor", "Power_ACO", "ACO Pump State", "home/esp32/Power_ACO", nullptr, "power", nullptr, nullptr, nullptr, "1", "0") && publishedAll;
-  publishedAll = publishEntity("binary_sensor", "Power_Heat", "Heating State", "home/esp32/Power_Heat", nullptr, "power", nullptr, nullptr, nullptr, "1", "0") && publishedAll;
-  publishedAll = publishEntity("binary_sensor", "Power_Topping_State", "Water Top Up State", "home/esp32/Power_Topping_State", nullptr, "power", nullptr, nullptr, nullptr, "1", "0") && publishedAll;
-
-  publishedAll = publishEntity("switch", "Power_Filtr", "Pool Filter (Manual)", "home/esp32/Power_Filtr", "home/esp32/Power_Filtr/set", nullptr, nullptr, nullptr, nullptr, "1", "0") && publishedAll;
-  publishedAll = publishEntity("switch", "Pow_Ul_light", "Outdoor Light (Manual)", "home/esp32/Pow_Ul_light", "home/esp32/Pow_Ul_light/set", nullptr, nullptr, nullptr, nullptr, "1", "0") && publishedAll;
-  publishedAll = publishEntity("switch", "Activation_Heat", "Heating Control", "home/esp32/Activation_Heat", "home/esp32/Activation_Heat/set", nullptr, nullptr, nullptr, nullptr, "1", "0") && publishedAll;
-  publishedAll = publishEntity("button", "restart", "ESP32 Restart", nullptr, "home/esp32/button/restart/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr) && publishedAll;
-  {
-    JsonDocument doc; // JSON-документ
-    const String uniqueId = deviceId + "_SetLamp"; // уникальный id
-    const String topic = String(mqttDiscoveryPrefix) + "/select/" + uniqueId + "/config"; // топик config
-    doc["unique_id"] = uniqueId; // unique_id
-    doc["name"] = "Lamp Mode"; // name
-    doc["availability_topic"] = mqttAvailabilityTopic; // availability_topic
-    doc["payload_available"] = "online"; // payload available
-    doc["payload_not_available"] = "offline"; // payload not available
-    doc["state_topic"] = "home/esp32/SetLamp"; // state_topic
-    doc["command_topic"] = "home/esp32/SetLamp/set"; // command_topic
-    JsonArray options = doc["options"].to<JsonArray>(); // options
-    options.add("off");
-    options.add("on");
-    options.add("auto");
-    options.add("timer");
-    JsonObject device = doc["device"].to<JsonObject>(); // объект устройства
-    JsonArray identifiers = device["identifiers"].to<JsonArray>(); // идентификаторы
-    identifiers.add(deviceId); // добавление id
-    device["name"] = deviceName; // имя устройства
-    device["model"] = "ESP32-S3"; // модель
-    device["manufacturer"] = "Espressif"; // производитель
-    String payload; // строка JSON
-    serializeJson(doc, payload); // сериализация JSON
-    publishedAll = mqttClient.publish(topic.c_str(), payload.c_str(), true) && publishedAll; // публикация config с retain
+  if(mqttDiscoveryStage == DISCOVERY_NONE){
+    mqttDiscoveryStage = DISCOVERY_TEST_SENSOR; // старт этапа
   }
 
-  {
-    
-    JsonDocument doc; // JSON-документ
-    const String uniqueId = deviceId + "_SetRGB"; // уникальный id
-    const String topic = String(mqttDiscoveryPrefix) + "/select/" + uniqueId + "/config"; // топик config
-    doc["unique_id"] = uniqueId; // unique_id
-    doc["name"] = "RGB Mode"; // name
-    doc["availability_topic"] = mqttAvailabilityTopic; // availability_topic
-    doc["payload_available"] = "online"; // payload available
-    doc["payload_not_available"] = "offline"; // payload not available
-    doc["state_topic"] = "home/esp32/SetRGB"; // state_topic
-    doc["command_topic"] = "home/esp32/SetRGB/set"; // command_topic
-JsonArray options = doc["options"].to<JsonArray>(); // options
-    options.add("off");
-    options.add("on");
-    options.add("auto");
-    options.add("timer");
-    JsonObject device = doc["device"].to<JsonObject>(); // объект устройства
-    JsonArray identifiers = device["identifiers"].to<JsonArray>(); // идентификаторы
-    identifiers.add(deviceId); // добавление id
-    device["name"] = deviceName; // имя устройства
-    device["model"] = "ESP32-S3"; // модель
-    device["manufacturer"] = "Espressif"; // производитель
-    String payload; // строка JSON
-    serializeJson(doc, payload); // сериализация JSON
-    publishedAll = mqttClient.publish(topic.c_str(), payload.c_str(), true) && publishedAll; // публикация config с retain
+if(mqttDiscoveryStage == DISCOVERY_TEST_SENSOR){
+    const MqttDiscoveryEntity testSensor = {"sensor", "alive", "ESP32 Alive", "home/esp32/alive", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
+    if(publishMqttDiscoveryEntity(testSensor, deviceId, deviceName)){
+      mqttClient.publish("home/esp32/alive", "1", true); // якорный сенсор
+      mqttDiscoveryStage = DISCOVERY_MAIN_ENTITIES; // переход к основным сущностям
+      mqttDiscoveryIndex = 0; // сброс индекса
+    }
+    return;
   }
 
-  if(publishedAll){
-    mqttDiscoveryPending = false; // сброс ожидания только при успехе публикации
+if(mqttDiscoveryStage == DISCOVERY_MAIN_ENTITIES){
+    uint8_t publishedCount = 0; // опубликовано в этом loop
+    while(publishedCount < mqttDiscoveryBatchSize && mqttDiscoveryIndex < totalCount){
+      bool published = false;
+      if(mqttDiscoveryIndex < baseCount){
+        published = publishMqttDiscoveryEntity(baseEntities[mqttDiscoveryIndex], deviceId, deviceName);
+      } else if(mqttDiscoveryIndex == baseCount){
+        published = publishMqttDiscoverySelect("SetLamp", "Lamp Mode", "home/esp32/SetLamp", "home/esp32/SetLamp/set", selectOptions, 4, deviceId, deviceName);
+      } else if(mqttDiscoveryIndex == baseCount + 1){
+        published = publishMqttDiscoverySelect("SetRGB", "RGB Mode", "home/esp32/SetRGB", "home/esp32/SetRGB/set", selectOptions, 4, deviceId, deviceName);
+      }
+
+      if(!published){
+        break; // повторим в следующем loop
+      }
+
+      mqttDiscoveryIndex++;
+      publishedCount++;
+    }
+
+    if(mqttDiscoveryIndex >= totalCount){
+      mqttDiscoveryStage = DISCOVERY_DONE; // завершено
+      mqttDiscoveryPending = false; // сброс ожидания
+    }
   }
 }
 
@@ -367,9 +401,12 @@ bool connected = mqttClient.connect( // подключение с логином
 
     if(connected){ // если подключение успешно
       mqttIsConnected = true; // обновление флага
-            publishMqttAvailability("online", true); // публикация доступности
+       publishMqttAvailability("online", true); // публикация доступности
       mqttDiscoveryPending = true; // публикация MQTT Discovery после первого loop
 publishHomeAssistantDiscovery(); // попытка публикации сразу после подключения
+      mqttDiscoveryStage = DISCOVERY_NONE; // сброс этапа discovery
+      mqttDiscoveryIndex = 0; // сброс индекса
+      mqttDiscoveryLastAttempt = 0; // сброс таймера
       mqttClient.subscribe("home/esp32/tempSet", 0); // подписка на топик
       mqttClient.subscribe("home/esp32/Power_Filtr/set", 0); // команда фильтра
       mqttClient.subscribe("home/esp32/Pow_Ul_light/set", 0); // команда освещения
@@ -389,6 +426,9 @@ inline void stopMqttService(){ // остановка MQTT
   mqttClient.disconnect(); // отключение от брокера
   mqttIsConnected = false; // сброс флага подключения
   mqttLastPublish = 0; // сброс таймера публикаций
+    mqttDiscoveryPending = false; // сброс discovery
+  mqttDiscoveryStage = DISCOVERY_NONE; // сброс этапа
+  mqttDiscoveryIndex = 0; // сброс индекса
 }
 
 inline void applyMqttState(){ // применение состояния MQTT
