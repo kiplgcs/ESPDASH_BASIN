@@ -94,8 +94,8 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
     if(payloadOn) doc["payload_on"] = payloadOn; // payload_on
     if(payloadOff) doc["payload_off"] = payloadOff; // payload_off
 
-    JsonObject device = doc.createNestedObject("device"); // объект устройства
-    JsonArray identifiers = device.createNestedArray("identifiers"); // идентификаторы
+    JsonObject device = doc["device"].to<JsonObject>(); // объект устройства
+    JsonArray identifiers = device["identifiers"].to<JsonArray>(); // идентификаторы
     identifiers.add(deviceId); // добавление id
     device["name"] = deviceName; // имя устройства
     device["model"] = "ESP32-S3"; // модель
@@ -120,6 +120,8 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
     nullptr
   ) && publishedAll;
 
+  publishedAll = publishEntity("sensor", "test", "ESP32 Test Sensor", "home/esp32/test", nullptr, nullptr, nullptr, "measurement", nullptr, nullptr, nullptr) && publishedAll;
+
   publishedAll = publishEntity("sensor", "DS1", "Pool Water Temperature", "home/esp32/DS1", nullptr, "temperature", "°C", "measurement", nullptr, nullptr, nullptr) && publishedAll;
   publishedAll = publishEntity("sensor", "RoomTemp", "Room Temperature", "home/esp32/RoomTemp", nullptr, "temperature", "°C", "measurement", nullptr, nullptr, nullptr) && publishedAll;
   publishedAll = publishEntity("sensor", "PH", "Pool pH", "home/esp32/PH", nullptr, nullptr, "pH", "measurement", nullptr, nullptr, nullptr) && publishedAll;
@@ -137,7 +139,7 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
   publishedAll = publishEntity("switch", "Activation_Heat", "Heating Control", "home/esp32/Activation_Heat", "home/esp32/Activation_Heat/set", nullptr, nullptr, nullptr, nullptr, "1", "0") && publishedAll;
 
   {
-    StaticJsonDocument<256> doc; // JSON-документ
+    JsonDocument doc; // JSON-документ
     const String uniqueId = deviceId + "_SetLamp"; // уникальный id
     const String topic = String(mqttDiscoveryPrefix) + "/select/" + uniqueId + "/config"; // топик config
     doc["unique_id"] = uniqueId; // unique_id
@@ -147,13 +149,13 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
     doc["payload_not_available"] = "offline"; // payload not available
     doc["state_topic"] = "home/esp32/SetLamp"; // state_topic
     doc["command_topic"] = "home/esp32/SetLamp/set"; // command_topic
-    JsonArray options = doc.createNestedArray("options"); // options
+    JsonArray options = doc["options"].to<JsonArray>(); // options
     options.add("off");
     options.add("on");
     options.add("auto");
     options.add("timer");
-    JsonObject device = doc.createNestedObject("device"); // объект устройства
-    JsonArray identifiers = device.createNestedArray("identifiers"); // идентификаторы
+    JsonObject device = doc["device"].to<JsonObject>(); // объект устройства
+    JsonArray identifiers = device["identifiers"].to<JsonArray>(); // идентификаторы
     identifiers.add(deviceId); // добавление id
     device["name"] = deviceName; // имя устройства
     device["model"] = "ESP32-S3"; // модель
@@ -164,7 +166,8 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
   }
 
   {
-    StaticJsonDocument<256> doc; // JSON-документ
+    
+    JsonDocument doc; // JSON-документ
     const String uniqueId = deviceId + "_SetRGB"; // уникальный id
     const String topic = String(mqttDiscoveryPrefix) + "/select/" + uniqueId + "/config"; // топик config
     doc["unique_id"] = uniqueId; // unique_id
@@ -174,13 +177,13 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
     doc["payload_not_available"] = "offline"; // payload not available
     doc["state_topic"] = "home/esp32/SetRGB"; // state_topic
     doc["command_topic"] = "home/esp32/SetRGB/set"; // command_topic
-    JsonArray options = doc.createNestedArray("options"); // options
+JsonArray options = doc["options"].to<JsonArray>(); // options
     options.add("off");
     options.add("on");
     options.add("auto");
     options.add("timer");
-    JsonObject device = doc.createNestedObject("device"); // объект устройства
-    JsonArray identifiers = device.createNestedArray("identifiers"); // идентификаторы
+    JsonObject device = doc["device"].to<JsonObject>(); // объект устройства
+    JsonArray identifiers = device["identifiers"].to<JsonArray>(); // идентификаторы
     identifiers.add(deviceId); // добавление id
     device["name"] = deviceName; // имя устройства
     device["model"] = "ESP32-S3"; // модель
@@ -220,7 +223,7 @@ inline void publishMqttStateInt(const char* topic, int value){ // публика
 
 inline void persistMqttSettings(){ // сохранение настроек MQTT
   if(!spiffsMounted) return; // выход если SPIFFS не смонтирован
-  StaticJsonDocument<256> doc; // JSON-документ
+  JsonDocument doc; // JSON-документ
   doc["host"] = mqttHost; // адрес брокера
   doc["port"] = mqttPort; // порт брокера
   doc["user"] = mqttUsername; // пользователь
@@ -238,7 +241,7 @@ inline void loadMqttSettings(){ // загрузка настроек MQTT
   if(spiffsMounted && SPIFFS.exists(mqttConfigPath)){ // если файл существует
     File file = SPIFFS.open(mqttConfigPath, FILE_READ); // открытие файла
     if(file){ // если файл открыт
-      StaticJsonDocument<256> doc; // JSON-документ
+      JsonDocument doc; // JSON-документ
       DeserializationError err = deserializeJson(doc, file); // парсинг JSON
       if(!err){ // если без ошибок
         mqttHost = doc["host"] | mqttHost; // адрес брокера
@@ -276,33 +279,21 @@ inline void connectMqtt(){ // подключение к MQTT
 
   if(!mqttClient.connected()){ // если не подключены
    String clientId = mqttDiscoveryDeviceId(); // уникальный clientId
-    bool connected = false; // флаг подключения
-   if(mqttUsername.length()){
-      connected = mqttClient.connect( // подключение с логином и LWT
-        clientId.c_str(),
-        mqttUsername.c_str(),
-        mqttPassword.c_str(),
-        mqttAvailabilityTopic,
-        0,
-        true,
-        "offline"
-      );
-    } else {
-      connected = mqttClient.connect( // подключение без логина и LWT
-        clientId.c_str(),
-        mqttAvailabilityTopic,
-        0,
-        true,
-        "offline"
-      );
-    }
-
+bool connected = mqttClient.connect( // подключение с логином и LWT
+      clientId.c_str(),
+      mqttUsername.c_str(),
+      mqttPassword.c_str(),
+      mqttAvailabilityTopic,
+      0,
+      true,
+      "offline"
+    );
 
     if(connected){ // если подключение успешно
       mqttIsConnected = true; // обновление флага
             publishMqttAvailability("online", true); // публикация доступности
       mqttDiscoveryPending = true; // публикация MQTT Discovery после первого loop
-
+publishHomeAssistantDiscovery(); // попытка публикации сразу после подключения
       mqttClient.subscribe("home/esp32/tempSet", 0); // подписка на топик
     } else { // если не удалось подключиться
       mqttIsConnected = false; // сброс флага
@@ -343,9 +334,10 @@ inline void handleMqttLoop(){ // основной цикл MQTT
     mqttLastPublish = now; // обновление времени
     if(mqttClient.connected()){ // если подключены
       String payload = String("ESP32 uptime: ") + String(now / 1000) + "s"; // сообщение
-      // mqttClient.publish("home/esp32/status", 0, false, payload.c_str());
+      
       mqttClient.publish("home/esp32/status", payload.c_str(), true); // публикация
     
+      publishMqttStateString("home/esp32/test", "123");
       publishMqttStateFloat("home/esp32/DS1", DS1);
       publishMqttStateFloat("home/esp32/RoomTemp", DS1); // RoomTemp использует DS1 в UI
       publishMqttStateFloat("home/esp32/PH", PH);
