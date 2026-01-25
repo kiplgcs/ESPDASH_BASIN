@@ -37,17 +37,16 @@ inline String resolveUiValueOverride(const String &id, const String &fallback){ 
 inline AsyncWebServer server(80);  // Создаем веб-сервер на порту 80
 
 // ---------- Глобальные переменные для UI ----------
-// Эти переменные управляют значениями элементов интерфейса
-inline String ThemeColor;        // Цвет темы интерфейса
-inline String ColorLED; //Выбор цвета для лентиы WS2815
-inline String LEDColor;          // Цвет LED-индикатора
-inline int MotorSpeedSetting;    // Настройка скорости мотора (0-100)
-inline int IntInput;             // Целочисленный ввод от пользователя
-inline float FloatInput;         // Ввод с плавающей точкой
+inline String ThemeColor = "#1e1e1e"; // Цвет темы интерфейса
+inline String ColorLED = "#00ff00"; // Выбор цвета для лентиы WS2815
+inline String LEDColor = "#00ff00"; // Цвет LED-индикатора
+inline int MotorSpeedSetting = 25; // Настройка скорости мотора (0-100)
+inline int IntInput = 10; // Целочисленный ввод от пользователя
+inline float FloatInput = 3.14f; // Ввод с плавающей точкой
 inline float Speed;              // Скорость (например, датчика)
 inline float Temperatura;        // Температура
-inline String Timer1;            // Таймер 1
-inline String Comment;           // Текстовый комментарий
+inline String Timer1 = "12:00"; // Таймер 1
+inline String Comment = "Hello!"; // Текстовый комментарий
 inline String CurrentTime;       // Текущее время
 inline int RandomVal;            // Случайное значение (например, для демонстрации)
 inline String InfoString;        // Информационная строка
@@ -62,10 +61,10 @@ inline String OverlayLevelLower; // Нижний датчик уровня (ов
 inline String OverlayPh;         // pH воды (оверлей)
 inline String OverlayChlorine;   // Хлор (оверлей)
 inline String OverlayFilterState; // Состояние фильтра (оверлей)
-inline String ModeSelect;        // Режим работы (например, Auto/Manual)
-inline String DaysSelect;        // Выбор дней недели
-inline String SetLamp;           // Режим работы лампы
-inline String SetRGB;            // Режим управления RGB подсветкой
+inline String ModeSelect = "Normal"; // Режим работы (например, Auto/Manual)
+inline String DaysSelect = "Mon,Wed,Fri"; // Выбор дней недели
+inline String SetLamp = "off"; // Режим работы лампы
+inline String SetRGB = "off"; // Режим управления RGB подсветкой
 inline String StoredAPSSID;      // Сохраненный SSID точки доступа
 inline String StoredAPPASS;      // Сохраненный пароль точки доступа
 inline String authUsername;      // Логин для доступа к веб-интерфейсу
@@ -1372,7 +1371,8 @@ private:
                           "  if(!minEl || !maxEl) return;"
                           "  const minLimit = "+String(minCfg)+";"
                           "  const maxLimit = "+String(maxCfg)+";"
-                          "  const updateRangeSlider = () => {"
+                          "  let saveTimer = null;"
+                          "  const updateRangeSlider = (shouldSave = true) => {"
                           "    let min = parseFloat(minEl.value);"
                           "    let max = parseFloat(maxEl.value);"
                           "    if(min > max){ [min, max] = [max, min]; minEl.value=min; maxEl.value=max; }"
@@ -1382,13 +1382,18 @@ private:
                           "    const minPct = ((min - minLimit) / span) * 100;"
                           "    const maxPct = ((max - minLimit) / span) * 100;"
                           "    if(track) track.style.background = `linear-gradient(to right, #444 ${minPct}%, #1e88e5 ${minPct}%, #1e88e5 ${maxPct}%, #444 ${maxPct}%)`;"
-                          "    const minSaved = min.toFixed(fixed);"
-                          "    const maxSaved = max.toFixed(fixed);"
-                          "    fetch('/save?key=' + encodeURIComponent(rangeId) + '&val=' + encodeURIComponent(minSaved + '-' + maxSaved));"
+                          "    if(shouldSave){"
+                          "      const minSaved = min.toFixed(fixed);"
+                          "      const maxSaved = max.toFixed(fixed);"
+                          "      if(saveTimer) clearTimeout(saveTimer);"
+                          "      saveTimer = setTimeout(() => {"
+                          "        fetch('/save?key=' + encodeURIComponent(rangeId) + '&val=' + encodeURIComponent(minSaved + '-' + maxSaved));"
+                          "      }, 300);"
+                          "    }"
                           "  };"
-                          "  minEl.addEventListener('input', updateRangeSlider);"
-                          "  maxEl.addEventListener('input', updateRangeSlider);"
-                          "  updateRangeSlider();"
+                          "  minEl.addEventListener('input', () => updateRangeSlider(true));"
+                          "  maxEl.addEventListener('input', () => updateRangeSlider(true));"
+                          "  updateRangeSlider(false);"
                           "})();"
                           "</script>";
               }
@@ -1883,10 +1888,24 @@ const clearManualFlag = (el, delay=600)=>{
     if(el.dataset.manual === '1') el.dataset.manual = '';
   }, delay);
 };
+
+// Debounce сохранения для часто меняющихся контролов
+const saveDebounceTimers = {};
+const scheduleSave = (key, value, delay=300)=>{
+  if(!key) return;
+  if(saveDebounceTimers[key]) clearTimeout(saveDebounceTimers[key]);
+  saveDebounceTimers[key] = setTimeout(()=>{
+    fetch('/save?key='+encodeURIComponent(key)+'&val='+encodeURIComponent(value));
+    delete saveDebounceTimers[key];
+  }, delay);
+};
+
+
+
 // Обновление слайдера и отправка значения на сервер
 function updateSlider(el){
  document.getElementById(el.id+'Val').innerText=' '+el.value;
- fetch('/save?key='+el.id+'&val='+encodeURIComponent(el.value));
+ scheduleSave(el.id, el.value);
 }
 // Обновление значения input (текст, число и т.д.) с проверкой ручного ввода
 function updateInputValue(id, value){

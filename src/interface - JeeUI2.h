@@ -6,9 +6,11 @@
 inline void interface(){ // Декларатиынве функции интерфейса
     UI_APP("🏊 Система управления бассейном");
 
+    UI_HIDDEN("ThemeColor", ThemeColor);
+
     UI_MENU("📊 Общая информация по бассейну");
     UI_MENU("🧰 Controls");
-    UI_MENU("🧰 test");
+    //UI_MENU("🧰 test");
     UI_MENU("🧹 Настройка фильтрации, Промывка фильтра");
     UI_MENU("💡 Управление лампой");
     UI_MENU("🌈 Управление RGB подсветкой");
@@ -58,24 +60,24 @@ inline void interface(){ // Декларатиынве функции интер
 
     UI_POPUP_END();
 
-    // test
-    UI_PAGE();
-    UI_SELECT_DAYS("Daystest", DaysSelect, "📅 Дни промывки");
-    UI_TIMER("Timertest", "⏱️ Таймер test", TimertestON, TimertestOFF);
+    // // test
+    // UI_PAGE();
+    // UI_SELECT_DAYS("Daystest", DaysSelect, "📅 Дни промывки");
+    // UI_TIMER("Timertest", "⏱️ Таймер test", TimertestON, TimertestOFF);
 
     
-    UI_TIME("Timertest", Timer1, "⏰ Start Time");
+    // UI_TIME("TimertestTime", Timer1, "⏰ Start Time");
 
 
-    UI_BUTTON("button_test", button1, "gray", "🔘 My Button");
-    UI_TEXT("Popuptest", PopupComment, "💬 Комментарий");
+    // UI_BUTTON("button_test", button1, "gray", "🔘 My Button");
+    // UI_TEXT("Popuptest", PopupComment, "💬 Комментарий");
     
-    UI_DISPLAY_INT("Randomtest", RandomVal, "🔢 Random Number");
-    UI_NUMBER("Inttest", IntInput, "🔢 Enter Integer", false);
-    UI_NUMBER("Floattest", FloatInput, "🔣 Enter Float", true);
-    UI_RANGE("Motortest", MotorSpeedSetting, 0, 100, 1, "⚙️ Motor Speed");
-    UI_DUAL_RANGE_KEYS("Rangetest", RangeMin, RangeMax, "RangeMin", "RangeMax", 10, 40, 1, "🎚️ Range Min-Max");
-     UI_TEXT("Overlaytest", OverlayFilterState, "x:300;y:400;fontSize:12;color:#00ff00");
+    // UI_DISPLAY_INT("Randomtest", RandomVal, "🔢 Random Number");
+    // UI_NUMBER("Inttest", IntInput, "🔢 Enter Integer", false);
+    // UI_NUMBER("Floattest", FloatInput, "🔣 Enter Float", true);
+    // UI_RANGE("Motortest", MotorSpeedSetting, 0, 100, 1, "⚙️ Motor Speed");
+    // UI_DUAL_RANGE_KEYS("Rangetest", RangeMin, RangeMax, "RangeMin", "RangeMax", 10, 40, 1, "🎚️ Range Min-Max");
+    //  UI_TEXT("Overlaytest", OverlayFilterState, "x:300;y:400;fontSize:12;color:#00ff00");
     
 
     // Настройка фильтрации, Промывка фильтра
@@ -175,7 +177,7 @@ UI_COLOR("LEDColor", LEDColor, "🎨 Цвет подсветки");
     UI_PAGE();
     UI_DISPLAY_FLOAT("DS1", DS1, "🌡 Температура воды, °C");
     UI_RANGE("Sider_heat", Sider_heat, 5, 30, 1, "🎯 Уставка нагрева");
-    UI_NUMBER("Sider_heat", Sider_heat, "🎯 Уставка нагрева, °C", false);
+    // UI_NUMBER("Sider_heat", Sider_heat, "🎯 Уставка нагрева, °C", false);
     UI_CHECKBOX("Activation_Heat", Activation_Heat, "🔥 Контроль нагрева");
     UI_DISPLAY_BOOL("Power_Heat", Power_Heat, "♨️ Состояние нагрева", "🔥 Нагрев", "⏹️ Откл.");
     

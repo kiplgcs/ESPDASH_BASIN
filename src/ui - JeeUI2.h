@@ -313,6 +313,53 @@ public:
     virtual void setFromString(const String &value) = 0; // обновляет состояние элемента из строки
 };
 
+
+template <typename T>
+class UIHiddenElement : public UIDeclarativeElement { // скрытый элемент для хранения состояния без отображения
+public:
+    UIHiddenElement(const String &elementId, T &storageRef)
+        : UIDeclarativeElement(elementId, String()), storage(storageRef) {}
+
+    void build(OABuilder &builder) override{ (void)builder; } // скрытый элемент не добавляется в UI
+
+    void load() override{ // загружает сохранённое значение
+        if constexpr (std::is_same<T, bool>::value){
+            storage = loadValue<int>(id.c_str(), storage ? 1 : 0) != 0;
+        } else {
+            storage = loadValue<T>(id.c_str(), storage);
+        }
+    }
+
+    void save() const override{ // сохраняет значение
+        if constexpr (std::is_same<T, bool>::value){
+            saveValue<int>(id.c_str(), storage ? 1 : 0);
+        } else {
+            saveValue<T>(id.c_str(), storage);
+        }
+    }
+
+    String valueString() const override{ return toString(storage); } // возвращает строковое значение
+
+    void setFromString(const String &value) override{ storage = fromString(value); } // применяет строковое значение
+
+private:
+    T &storage; // ссылка на хранимое значение
+
+    static String toString(const String &value){ return value; }
+    static String toString(const char *value){ return String(value); }
+    static String toString(int value){ return String(value); }
+    static String toString(float value){ return String(value); }
+    static String toString(bool value){ return value ? "1" : "0"; }
+
+    static T fromString(const String &value){
+        if constexpr (std::is_same<T, String>::value) return value;
+        else if constexpr (std::is_same<T, bool>::value) return value.toInt() != 0;
+        else if constexpr (std::is_same<T, float>::value) return value.toFloat();
+        else return static_cast<T>(value.toInt());
+    }
+};
+
+
 class UIDeclarativeRegistry { // реестр всех декларативных UI-элементов
 public:
     void registerElement(UIDeclarativeElement *element){ // регистрирует элемент, если он ещё не зарегистрирован
@@ -1007,6 +1054,12 @@ inline bool uiApplyValueForId(const String &id, const String &value){ // при�
 // display-элемент для bool с текстовыми состояниями
 #define UI_DISPLAY_BOOL(id, state, label, onLabel, offLabel) \
     do { static UIDisplayBoolElement UI_UNIQUE_NAME(ui_display_bool_)(id, state, label, onLabel, offLabel); UI_REGISTER_ELEMENT(UI_UNIQUE_NAME(ui_display_bool_)); } while(false)
+
+// скрытый элемент для хранения значения без отображения в UI
+#define UI_HIDDEN(id, state) \
+    do { static UIHiddenElement<decltype(state)> UI_UNIQUE_NAME(ui_hidden_)(id, state); UI_REGISTER_ELEMENT(UI_UNIQUE_NAME(ui_hidden_)); } while(false)
+
+
 
 // элемент выбора времени
 #define UI_TIME(id, state, label) \

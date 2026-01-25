@@ -127,78 +127,80 @@ void setup() {
   setup_ds18();
 
 
-  // ---------- Загрузка сохранённых значений ----------
-  ThemeColor = loadValue<String>("ThemeColor","#1e1e1e");  // Цвет темы
-  LEDColor = loadValue<String>("LEDColor","#00ff00");      // Цвет LED
-  MotorSpeedSetting = loadValue<int>("MotorSpeed",25);     // Скорость мотора
-  IntInput = loadValue<int>("IntInput",10);               // Целое число
-  FloatInput = loadValue<float>("FloatInput",3.14);       // Число с плавающей точкой
-  Timer1 = loadValue<String>("Timer1","12:00");           // Таймер
-  Comment = loadValue<String>("Comment","Hello!");        // Комментарий
+  // // ---------- Загрузка сохранённых значений ----------
+  // ThemeColor = loadValue<String>("ThemeColor","#1e1e1e");  // Цвет темы
+  // LEDColor = loadValue<String>("LEDColor","#00ff00");      // Цвет LED
+  // MotorSpeedSetting = loadValue<int>("MotorSpeed",25);     // Скорость мотора
+  // IntInput = loadValue<int>("IntInput",10);               // Целое число
+  // FloatInput = loadValue<float>("FloatInput",3.14);       // Число с плавающей точкой
+  // Timer1 = loadValue<String>("Timer1","12:00");           // Таймер
+  // Comment = loadValue<String>("Comment","Hello!");        // Комментарий
+  // // ModeSelect = loadValue<String>("ModeSelect","Normal");  // Режим работы
   // ModeSelect = loadValue<String>("ModeSelect","Normal");  // Режим работы
-  ModeSelect = loadValue<String>("ModeSelect","Normal");  // Режим работы
-  DaysSelect = loadValue<String>("DaysSelect","Mon,Wed,Fri"); // Дни недели
-  RangeMin = loadValue<float>("RangeMin", RangeMin);        // Минимум диапазона
-  RangeMax = loadValue<float>("RangeMax", RangeMax);        // Максимум диапазона
-  // PH1_CAL = loadValue<float>("PH1_CAL", PH1_CAL);         // АЦП_mV для PH1
-  // PH2_CAL = loadValue<float>("PH2_CAL", PH2_CAL);         // АЦП_mV для PH2
-  PH1 = loadValue<float>("PH1_MIN", PH1);                 // Точки калибровки PH (минимум)
-  PH2 = loadValue<float>("PH2_MAX", PH2);                 // Точки калибровки PH (максимум)
-  Temper_Reference = loadValue<float>("Temper_Reference", Temper_Reference);
-  Power_Filtr = loadValue<int>("Power_Filtr", 0) != 0;
-  Filtr_Time1 = loadValue<int>("Filtr_Time1", 0) != 0;
-  Filtr_Time2 = loadValue<int>("Filtr_Time2", 0) != 0;
-  Filtr_Time3 = loadValue<int>("Filtr_Time3", 0) != 0;
-  // Filtr_timeON1 = loadValue<String>("Filtr_timeON1", "00:00");
-  // Filtr_timeOFF1 = loadValue<String>("Filtr_timeOFF1", "00:00");
-  // Filtr_timeON2 = loadValue<String>("Filtr_timeON2", "00:00");
-  // Filtr_timeOFF2 = loadValue<String>("Filtr_timeOFF2", "00:00");
-  // Filtr_timeON3 = loadValue<String>("Filtr_timeON3", "00:00");
-  // Filtr_timeOFF3 = loadValue<String>("Filtr_timeOFF3", "00:00");
-  Power_Clean = loadValue<int>("Power_Clean", 0) != 0;
-  Clean_Time1 = loadValue<int>("Clean_Time1", 0) != 0;
-  // Clean_timeON1 = loadValue<String>("Clean_timeON1", "00:00");
-  // Clean_timeOFF1 = loadValue<String>("Clean_timeOFF1", "00:00");
+  // DaysSelect = loadValue<String>("DaysSelect","Mon,Wed,Fri"); // Дни недели
+  // RangeMin = loadValue<float>("RangeMin", RangeMin);        // Минимум диапазона
+  // RangeMax = loadValue<float>("RangeMax", RangeMax);        // Максимум диапазона
+  // // PH1_CAL = loadValue<float>("PH1_CAL", PH1_CAL);         // АЦП_mV для PH1
+  // // PH2_CAL = loadValue<float>("PH2_CAL", PH2_CAL);         // АЦП_mV для PH2
+  // PH1 = loadValue<float>("PH1_MIN", PH1);                 // Точки калибровки PH (минимум)
+  // PH2 = loadValue<float>("PH2_MAX", PH2);                 // Точки калибровки PH (максимум)
+  // Temper_Reference = loadValue<float>("Temper_Reference", Temper_Reference);
+  // Power_Filtr = loadValue<int>("Power_Filtr", 0) != 0;
+  // Filtr_Time1 = loadValue<int>("Filtr_Time1", 0) != 0;
+  // Filtr_Time2 = loadValue<int>("Filtr_Time2", 0) != 0;
+  // Filtr_Time3 = loadValue<int>("Filtr_Time3", 0) != 0;
+  // // Filtr_timeON1 = loadValue<String>("Filtr_timeON1", "00:00");
+  // // Filtr_timeOFF1 = loadValue<String>("Filtr_timeOFF1", "00:00");
+  // // Filtr_timeON2 = loadValue<String>("Filtr_timeON2", "00:00");
+  // // Filtr_timeOFF2 = loadValue<String>("Filtr_timeOFF2", "00:00");
+  // // Filtr_timeON3 = loadValue<String>("Filtr_timeON3", "00:00");
+  // // Filtr_timeOFF3 = loadValue<String>("Filtr_timeOFF3", "00:00");
+  // Power_Clean = loadValue<int>("Power_Clean", 0) != 0;
+  // Clean_Time1 = loadValue<int>("Clean_Time1", 0) != 0;
+  // // Clean_timeON1 = loadValue<String>("Clean_timeON1", "00:00");
+  // // Clean_timeOFF1 = loadValue<String>("Clean_timeOFF1", "00:00");
+    // ---------- Загрузка значений интерфейса через декларативные элементы ----------
+  interface();
   syncCleanDaysFromSelection();
 
 
 
 
-  Pow_WS2815 = loadButtonState("button_WS2815", 1) != 0;
-    Pow_WS2815_autosvet = loadValue<int>("Pow_WS2815_autosvet", 0) != 0;
-  WS2815_Time1 = loadValue<int>("WS2815_Time1", 0) != 0;
-  // timeON_WS2815 = loadValue<String>("timeON_WS2815", "00:00");
-  // timeOFF_WS2815 = loadValue<String>("timeOFF_WS2815", "00:00");
-    SetRGB = loadValue<String>("SetRGB", "off");
-  ColorLED = loadValue<String>("LEDColor","#00ff00");      // WS2815
-  LedPattern = loadValue<String>("LedPattern", LedPattern);
-  LedColorMode = loadValue<String>("LedColorMode", LedColorMode);
-  LedColorOrder = loadValue<String>("LedColorOrder", LedColorOrder);
+  // Pow_WS2815 = loadButtonState("button_WS2815", 1) != 0;
+  //   Pow_WS2815_autosvet = loadValue<int>("Pow_WS2815_autosvet", 0) != 0;
+  // WS2815_Time1 = loadValue<int>("WS2815_Time1", 0) != 0;
+  // // timeON_WS2815 = loadValue<String>("timeON_WS2815", "00:00");
+  // // timeOFF_WS2815 = loadValue<String>("timeOFF_WS2815", "00:00");
+  //   SetRGB = loadValue<String>("SetRGB", "off");
+  // ColorLED = loadValue<String>("LEDColor","#00ff00");      // WS2815
+  // LedPattern = loadValue<String>("LedPattern", LedPattern);
+  // LedColorMode = loadValue<String>("LedColorMode", LedColorMode);
+  // LedColorOrder = loadValue<String>("LedColorOrder", LedColorOrder);
   ColorRGB = LedColorMode.equalsIgnoreCase("manual");
-  LedAutoplay = loadValue<int>("LedAutoplay", LedAutoplay ? 1 : 0) != 0;
-  LedAutoplayDuration = loadValue<int>("LedAutoplayDuration", LedAutoplayDuration);
+  // LedAutoplay = loadValue<int>("LedAutoplay", LedAutoplay ? 1 : 0) != 0;
+  // LedAutoplayDuration = loadValue<int>("LedAutoplayDuration", LedAutoplayDuration);
   if(LedAutoplayDuration < 1) LedAutoplayDuration = 1;
-  LedBrightness = loadValue<int>("LedBrightness", LedBrightness);
+  // LedBrightness = loadValue<int>("LedBrightness", LedBrightness);
   new_bright = LedBrightness;
 
 
-  // SetLamp = loadValue<String>("SetLamp", "");
-  Lamp = loadButtonState("button_Lamp", 0) != 0;
-  // Lamp_autosvet = false;
-  Lamp_autosvet = loadValue<int>("Lamp_autosvet", 0) != 0;
-  Power_Time1 = loadValue<int>("Power_Time1", 0) != 0;
-  // Lamp_timeON1 = loadValue<String>("Lamp_timeON1", "00:00");
-  // Lamp_timeOFF1 = loadValue<String>("Lamp_timeOFF1", "00:00");
-  // if (SetLamp.length()) {
-  //   applyLampModeFromSetLamp();
-  // } else {
-  //   syncSetLampFromFlags();
-  //   saveValue<String>("SetLamp", SetLamp);
-  // }
-   SetLamp = loadValue<String>("SetLamp", "off");
+  // // SetLamp = loadValue<String>("SetLamp", "");
+  // Lamp = loadButtonState("button_Lamp", 0) != 0;
+  // // Lamp_autosvet = false;
+  // Lamp_autosvet = loadValue<int>("Lamp_autosvet", 0) != 0;
+  // Power_Time1 = loadValue<int>("Power_Time1", 0) != 0;
+  // // Lamp_timeON1 = loadValue<String>("Lamp_timeON1", "00:00");
+  // // Lamp_timeOFF1 = loadValue<String>("Lamp_timeOFF1", "00:00");
+  // // if (SetLamp.length()) {
+  // //   applyLampModeFromSetLamp();
+  // // } else {
+  // //   syncSetLampFromFlags();
+  // //   saveValue<String>("SetLamp", SetLamp);
+  // // }
+  //  SetLamp = loadValue<String>("SetLamp", "off");
 
-  Pow_Ul_light = loadButtonState("Pow_Ul_light", 0) != 0;
-  Ul_light_Time = loadValue<int>("Ul_light_Time", 0) != 0;
+  // Pow_Ul_light = loadButtonState("Pow_Ul_light", 0) != 0;
+  // Ul_light_Time = loadValue<int>("Ul_light_Time", 0) != 0;
   setup_WS2815();
 
 
