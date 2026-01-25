@@ -46,6 +46,12 @@ WiFiUDP ntpUDP;
 void setup() {
   Serial.begin(115200);
 
+  // if (!SPIFFS.begin(true)) {   // true = форматировать, если пусто/битое
+  //   Serial.println("SPIFFS mount failed");
+  // } else {
+  //   Serial.println("SPIFFS mounted");
+  // }
+
   delay(100);
   Serial.println("\n[BOOT] ESPDASH starting...");
   const char *resetReasonText = []() -> const char * {

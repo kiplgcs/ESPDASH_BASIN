@@ -402,11 +402,12 @@ bool connected = mqttClient.connect( // подключение с логином
     if(connected){ // если подключение успешно
       mqttIsConnected = true; // обновление флага
        publishMqttAvailability("online", true); // публикация доступности
-      mqttDiscoveryPending = true; // публикация MQTT Discovery после первого loop
-publishHomeAssistantDiscovery(); // попытка публикации сразу после подключения
+ 
       mqttDiscoveryStage = DISCOVERY_NONE; // сброс этапа discovery
       mqttDiscoveryIndex = 0; // сброс индекса
       mqttDiscoveryLastAttempt = 0; // сброс таймера
+            mqttDiscoveryPending = true; // публикация MQTT Discovery после первого loop
+      publishHomeAssistantDiscovery(); // попытка публикации сразу после подключения
       mqttClient.subscribe("home/esp32/tempSet", 0); // подписка на топик
       mqttClient.subscribe("home/esp32/Power_Filtr/set", 0); // команда фильтра
       mqttClient.subscribe("home/esp32/Pow_Ul_light/set", 0); // команда освещения
