@@ -376,7 +376,7 @@ public:
         saveValue<int>(id.c_str(), storage ? 1 : 0); // записывает bool как 0/1 для совместимости с хранилищем
     }
 
-    String valueString() const override{ return storage ? "1" : "0"; } // возвращает строковое представление состояния чекбокса
+    String valueString() const override{ return resolveUiValueOverride(id, storage ? "1" : "0"); } // результат чекбокса с возможным переопределением
 
     void setFromString(const String &value) override{ // обновляет состояние чекбокса из строкового значения UI
         storage = value.toInt() != 0; // интерпретирует любое ненулевое значение как true
@@ -406,7 +406,7 @@ public:
         saveButtonState(id.c_str(), asInt(storage)); // приводит состояние к int и записывает в хранилище
     }
 
-    String valueString() const override{ return String(asInt(storage)); } // возвращает текущее состояние кнопки в виде строки
+    String valueString() const override{ return resolveUiValueOverride(id, String(asInt(storage))); } // состояние кнопки с учётом провайдера
 
     void setFromString(const String &value) override{ // применяет значение, пришедшее из UI
         storage = fromInt(value.toInt()); // преобразует строку в int, затем в целевой тип
@@ -444,7 +444,7 @@ public:
         saveValue<T>(id.c_str(), storage); // записывает значение в постоянное хранилище
     }
 
-    String valueString() const override{ return String(storage); } // возвращает значение в строковом виде
+    String valueString() const override{ return resolveUiValueOverride(id, String(storage)); } // число с возможным форматором
 
     void setFromString(const String &value) override{ // применяет значение из UI
         if(asFloat) storage = static_cast<T>(value.toFloat()); // для float — парсит как float
@@ -478,7 +478,7 @@ public:
         saveValue<T>(id.c_str(), storage); // записывает значение в хранилище
     }
 
-    String valueString() const override{ return String(storage); } // возвращает текущее значение диапазона
+    String valueString() const override{ return resolveUiValueOverride(id, String(storage)); } // значение диапазона с возможным переопределением
 
     void setFromString(const String &value) override{ // применяет значение, полученное из UI
         storage = static_cast<T>(value.toFloat()); // парсит значение как float (универсально)
@@ -526,7 +526,7 @@ public:
         saveValue<T>(maxStorageKey.c_str(), maxStorage); // сохраняет максимальное значение
     }
 
-    String valueString() const override{ return String(minStorage) + '-' + String(maxStorage); } // возвращает диапазон в формате min-max
+    String valueString() const override{ return resolveUiValueOverride(id, String(minStorage) + '-' + String(maxStorage)); } // диапазон min-max с учётом провайдера
 
     void setFromString(const String &value) override{ // применяет строку диапазона из UI
         int sep = value.indexOf('-'); // ищет разделитель значений
@@ -583,7 +583,7 @@ public:
         saveValue<String>(id.c_str(), storage); // записывает строку в хранилище
     }
 
-    String valueString() const override{ return storage; } // возвращает текущее значение строки
+    String valueString() const override{ return resolveUiValueOverride(id, storage); } // текст с возможным прокси-генератором
 
     void setFromString(const String &value) override{ storage = value; } // обновляет строковое состояние из UI
 
@@ -599,7 +599,7 @@ public:
     void build(OABuilder &builder) override{ builder.display(id, label, storage); } // добавляет отображаемое поле в UI с текущим значением
     void load() override{ storage = loadValue<String>(id.c_str(), storage); } // загружает отображаемое значение из постоянного хранилища
     void save() const override{ saveValue<String>(id.c_str(), storage); } // сохраняет значение, если оно было обновлено программно
-    String valueString() const override{ return storage; } // возвращает текущее значение для запросов UI
+    String valueString() const override{ return resolveUiValueOverride(id, storage); } // отображение строки с возможным переопределением
     void setFromString(const String &value) override{ storage = value; } // позволяет обновить отображаемое значение извне
 
 private:
@@ -614,7 +614,7 @@ public:
     void build(OABuilder &builder) override{ builder.display(id, label, String(storage)); } // отображает текущее int-значение
     void load() override{ storage = loadValue<int>(id.c_str(), storage); } // загружает сохранённое значение
     void save() const override{ saveValue<int>(id.c_str(), storage); } // сохраняет целочисленное значение
-    String valueString() const override{ return String(storage); } // возвращает значение как строку
+    String valueString() const override{ return resolveUiValueOverride(id, String(storage)); } // int-значение с возможной подменой
     void setFromString(const String &value) override{ storage = value.toInt(); } // обновляет значение из UI
 
 private:
@@ -629,7 +629,7 @@ public:
     void build(OABuilder &builder) override{ builder.display(id, label, String(storage)); } // отображает текущее float-значение
     void load() override{ storage = loadValue<float>(id.c_str(), storage); } // загружает сохранённое значение
     void save() const override{ saveValue<float>(id.c_str(), storage); } // сохраняет float-значение
-    String valueString() const override{ return String(storage); } // возвращает значение для UI
+    String valueString() const override{ return resolveUiValueOverride(id, String(storage)); } // float-значение с возможным форматированием
     void setFromString(const String &value) override{ storage = value.toFloat(); } // обновляет значение из строкового представления
 
 private:
@@ -646,7 +646,7 @@ public:
     void build(OABuilder &builder) override{ builder.display(id, label, valueString()); } // отображает текстовое состояние вместо 0/1
     void load() override{ storage = loadValue<int>(id.c_str(), storage ? 1 : 0) != 0; } // загружает bool из сохранённого int
     void save() const override{ saveValue<int>(id.c_str(), storage ? 1 : 0); } // сохраняет bool как 0/1
-    String valueString() const override{ return storage ? onText : offText; } // возвращает текст состояния
+    String valueString() const override{ return resolveUiValueOverride(id, storage ? onText : offText); } // bool-лента с кастомным текстом
     void setFromString(const String &value) override{
         storage = value.toInt() != 0; // позволяет управлять состоянием через UI
     }
@@ -665,7 +665,7 @@ public:
     void build(OABuilder &builder) override{ builder.time(id, label, storage); } // добавляет time picker в UI
     void load() override{ storage = loadValue<String>(id.c_str(), storage); } // загружает сохранённое время
     void save() const override{ saveValue<String>(id.c_str(), storage); } // сохраняет выбранное время
-    String valueString() const override{ return storage; } // возвращает текущее значение времени
+    String valueString() const override{ return resolveUiValueOverride(id, storage); } // время, проходящее через провайдер
     void setFromString(const String &value) override{ storage = value; } // обновляет время из UI
 
 private:
@@ -674,26 +674,39 @@ private:
 
 class UITimerElement : public UIDeclarativeElement { // UI-элемент таймера с интервалами включения/выключения
 public:
-    UITimerElement(const String &elementId, const String &elementLabel, const std::function<void(uint16_t, uint16_t)> &cb)
-        : UIDeclarativeElement(elementId, elementLabel), callback(cb) {} // callback вызывается при изменении таймера
+    UITimerElement(const String &elementId, const String &elementLabel, int *onRef, int *offRef,
+                   const std::function<void(uint16_t, uint16_t)> &cb = nullptr)
+        : UIDeclarativeElement(elementId, elementLabel), callback(cb), onStorage(onRef), offStorage(offRef) {} // callback вызывается при изменении таймера и можно привязать внешние переменные
 
     void build(OABuilder &builder) override{
         builder.timer(id, label, callback); // регистрирует таймер в UI и backend
     }
 
-    void load() override{} // состояние таймера хранится в backend UI
-    void save() const override{} // сохранение выполняется через ui.timer
-    String valueString() const override{ return String(ui.timer(id).on) + '-' + String(ui.timer(id).off); } // возвращает интервалы таймера
+    void load() override{ // при регистрации таймеров синхронизируем внешние значения с backend
+        UITimerEntry &entry = ui.timer(id); // обеспечивает существование таймера и его сохранённого состояния
+        if(onStorage) *onStorage = entry.on; // обновляем значение включения в минутах
+        if(offStorage) *offStorage = entry.off; // обновляем значение отключения
+    }
+    void save() const override{ // сохраняем значения из backend в привязанные переменные
+        UITimerEntry &entry = ui.timer(id);
+        if(onStorage) *onStorage = entry.on;
+        if(offStorage) *offStorage = entry.off;
+    }
+    String valueString() const override{ return resolveUiValueOverride(id, String(ui.timer(id).on) + '-' + String(ui.timer(id).off)); } // интервалы таймера с опциональным провайдером
     void setFromString(const String &value) override{
         int sep = value.indexOf('-'); // ищет разделитель интервалов
         if(sep < 0) return; // игнорирует неверный формат
         uint16_t onMinutes = static_cast<uint16_t>(value.substring(0, sep).toInt()); // парсит время включения
         uint16_t offMinutes = static_cast<uint16_t>(value.substring(sep + 1).toInt()); // парсит время выключения
         ui.setTimerMinutes(id, onMinutes, offMinutes, true); // применяет таймер и активирует его
+        if(onStorage) *onStorage = onMinutes; // синхронизируем внешние переменные
+        if(offStorage) *offStorage = offMinutes;
     }
 
 private:
     std::function<void(uint16_t, uint16_t)> callback; // пользовательский обработчик изменения таймера
+    int *onStorage; // ссылка на внешнюю переменную времени включения (в минутах)
+    int *offStorage; // ссылка на внешнюю переменную времени отключения
 };
 
 template <typename T>
@@ -724,7 +737,7 @@ public:
             saveValue<T>(id.c_str(), storage); // запись значения без преобразований
         }
     }
-    String valueString() const override{ return toString(storage); } // возвращает текущее значение в строковом виде для UI
+    String valueString() const override{ return resolveUiValueOverride(id, toString(storage)); } // select с возможной кастомной строкой
 
     void setFromString(const String &value) override{ // применяется значение, выбранное пользователем в UI
         storage = fromString(value); // преобразует строку в тип T
@@ -765,7 +778,7 @@ public:
         syncCleanDaysFromSelection(); // синхронизирует внутренние флаги дней с выбранным значением
     }
     void save() const override{ saveValue<String>(id.c_str(), storage); } // сохраняет выбранные дни
-    String valueString() const override{ return storage; } // возвращает строковое представление выбранных дней
+    String valueString() const override{ return resolveUiValueOverride(id, storage); } // дни недели с возможным переопределением
     void setFromString(const String &value) override{
         storage = value; // обновляет выбранные дни из UI
         syncCleanDaysFromSelection(); // обновляет внутреннюю логику после изменения
@@ -783,7 +796,7 @@ public:
     void build(OABuilder &builder) override{ builder.color(id, label, storage); } // добавляет color picker в UI
     void load() override{ storage = loadValue<String>(id.c_str(), storage); } // загружает сохранённый цвет
     void save() const override{ saveValue<String>(id.c_str(), storage); } // сохраняет выбранный цвет
-    String valueString() const override{ return storage; } // возвращает цвет в строковом виде
+    String valueString() const override{ return resolveUiValueOverride(id, storage); } // цвет с учётом провайдера
     void setFromString(const String &value) override{ storage = value; } // обновляет цвет из UI
 
 private:
@@ -883,28 +896,45 @@ inline void onLedBrightnessChange(const int &value){ // обработчик и�
     new_bright = value; // обновляет глобальную переменную яркости для последующего применения
 }
 
+// ВНИМАНИЕ: // Предупреждение по архитектуре
+// UIApplyHandlerRegistry используется ТОЛЬКО для legacy-кода. // Требование: только для старой логики
+// В новой декларативной архитектуре (Zigbee, сервисные loop’ы) данный механизм НЕ используется и не должен расширяться. // Требование: запрет на новую логику
+class UIApplyHandlerRegistry { // Реестр обработчиков применения значений UI
+public: // Открытая секция для регистрации обработчиков
+    void add(const String &id, const std::function<void(const String &)> &handler){ // Добавляет обработчик по id
+        handlers.push_back({id, handler}); // Сохраняет пару id и callback
+    } // Конец add
+    void apply(const String &id, const String &value) const{ // Вызывает обработчик для id, если он зарегистрирован
+        for(const auto &entry : handlers){ // Перебирает все зарегистрированные обработчики
+            if(entry.id == id){ // Проверяет совпадение id
+                if(entry.handler) entry.handler(value); // Вызывает обработчик, если он задан
+                break; // Прерывает поиск после первого совпадения
+            } // Конец проверки id
+        } // Конец цикла обработчиков
+    } // Конец apply
+private: // Приватная секция данных
+    struct Entry { // Элемент записи обработчика
+        String id; // Идентификатор UI-элемента
+        std::function<void(const String &)> handler; // Callback обработки значения
+    }; // Конец структуры Entry
+    std::vector<Entry> handlers; // Список всех обработчиков
+}; // Конец UIApplyHandlerRegistry
+inline UIApplyHandlerRegistry uiApplyHandlers; // Глобальный реестр обработчиков применения UI
+inline void registerUiApplyHandler(const String &id, const std::function<void(const String &)> &handler){ // Регистрация обработчика UI
+    uiApplyHandlers.add(id, handler); // Добавляет обработчик в реестр
+} // Конец registerUiApplyHandler
+
+
 inline String uiValueForId(const String &id){ // универсальная функция получения текущего значения UI-элемента по id
     UIDeclarativeElement *element = uiRegistry.find(id); // ищет зарегистрированный UI-элемент по идентификатору
     if(!element) return String(); // если элемент не найден — возвращает пустую строку
     return element->valueString(); // возвращает строковое представление текущего значения элемента
 }
 
-inline bool uiApplyValueForId(const String &id, const String &value){ // применяет значение к UI-элементу с учётом спец-логики
-        if(id == "Power_ACO_Button"){ // специальная обработка кнопки ручного импульса ACO
-        if(value.toInt() != 0){ // реагирует только на нажатие (ненулевое значение)
-            ManualPulse_ACO_Active = true; // активирует режим ручного импульса ACO
-            ManualPulse_ACO_StartedAt = millis(); // фиксирует момент запуска импульса
-        }
-        return true; // сигнализирует, что значение обработано
-    }
-    if(id == "Power_H2O2_Button"){ // специальная обработка кнопки ручного импульса H2O2
-        if(value.toInt() != 0){ // реагирует только на нажатие кнопки
-            ManualPulse_H2O2_Active = true; // активирует ручной импульс H2O2
-            ManualPulse_H2O2_StartedAt = millis(); // сохраняет время запуска импульса
-        }
-        return true; // предотвращает стандартную обработку через registry
-    }
-    return uiRegistry.applyValue(id, value); // для остальных элементов применяет значение стандартным способом
+inline bool uiApplyValueForId(const String &id, const String &value){ // применяет значение к UI-элементу
+    bool applied = uiRegistry.applyValue(id, value); // Применяет значение через реестр декларативных элементов
+    if(!applied) return false; // Если элемент не найден — сообщает об ошибке применения
+    return true; // Сообщает об успешном применении значения
 }
 
 
@@ -982,9 +1012,9 @@ inline bool uiApplyValueForId(const String &id, const String &value){ // при�
 #define UI_TIME(id, state, label) \
     do { static UITimeElement UI_UNIQUE_NAME(ui_time_)(id, state, label); UI_REGISTER_ELEMENT(UI_UNIQUE_NAME(ui_time_)); } while(false)
 
-// элемент таймера с on/off интервалами
-#define UI_TIMER(id, label, callback) \
-    do { static UITimerElement UI_UNIQUE_NAME(ui_timer_)(id, label, callback); UI_REGISTER_ELEMENT(UI_UNIQUE_NAME(ui_timer_)); } while(false)
+// элемент таймера с on/off интервалами и явной привязкой внешних переменных времени включения/выключения
+#define UI_TIMER(id, label, onValue, offValue, ...) \
+    do { static UITimerElement UI_UNIQUE_NAME(ui_timer_)(id, label, &(onValue), &(offValue), ##__VA_ARGS__); UI_REGISTER_ELEMENT(UI_UNIQUE_NAME(ui_timer_)); } while(false)
 
 // выпадающий список без callback
 #define UI_SELECT(id, state, options, label) \
@@ -995,6 +1025,7 @@ inline bool uiApplyValueForId(const String &id, const String &value){ // при�
     do { static UISelectElement<decltype(state)> UI_UNIQUE_NAME(ui_select_)(id, state, label, options, callback); UI_REGISTER_ELEMENT(UI_UNIQUE_NAME(ui_select_)); } while(false)
 
 // специализированный select выбора дней недели
+// Сохраняет дни как строку вида "Mon,Tue" в переменной состояния; используйте syncCleanDaysFromSelection/syncDaysSelectionFromClean для согласованности
 #define UI_SELECT_DAYS(id, state, label) \
     do { static UISelectDaysElement UI_UNIQUE_NAME(ui_select_days_)(id, state, label); UI_REGISTER_ELEMENT(UI_UNIQUE_NAME(ui_select_days_)); } while(false)
 

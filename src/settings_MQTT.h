@@ -17,14 +17,322 @@ inline String mqttHost = "192.168.0.100"; //"broker.emqx.io"; // адрес бр
 inline uint16_t mqttPort = 1883; // порт брокера
 inline String mqttUsername = ""; // имя пользователя MQTT
 inline String mqttPassword = ""; // пароль MQTT
-inline bool mqttEnabled = false; // флаг включения MQTT
+inline bool mqttEnabled = true; // флаг включения MQTT
 inline bool mqttIsConnected = false; // флаг подключения MQTT
 inline unsigned long mqttPublishInterval = 10000; // интервал публикации
 inline unsigned long mqttLastPublish = 0; // время последней публикации
+inline const char* mqttAvailabilityTopic = "home/esp32/availability"; // топик доступности устройства
+inline const char* mqttDiscoveryPrefix = "homeassistant"; // префикс MQTT Discovery
+inline bool mqttDiscoveryPending = false; // публикация после первого успешного MQTT loop
+
+inline unsigned long mqttDiscoveryLastAttempt = 0; // время последней попытки discovery
+inline const unsigned long mqttDiscoveryInterval = 250; // интервал между пакетами discovery
+inline const uint8_t mqttDiscoveryBatchSize = 4; // максимум сущностей за loop
+
+enum DiscoveryStage {
+  DISCOVERY_NONE,
+  DISCOVERY_TEST_SENSOR,
+  DISCOVERY_MAIN_ENTITIES,
+  DISCOVERY_DONE
+};
+
+inline DiscoveryStage mqttDiscoveryStage = DISCOVERY_NONE; // этап discovery
+inline size_t mqttDiscoveryIndex = 0; // индекс публикации сущностей
+
+// mqttDiscovery публикуется один раз после успешного подключения и availability=online.
+
+extern float DS1; // температура воды
+extern float PH; // pH воды
+extern float ppmCl; // уровень хлора
+extern int corrected_ORP_Eh_mV; // ORP, мВ
+extern String OverlayFilterState; // состояние фильтрации (строка)
+extern bool Power_H2O2; // состояние насоса NaOCl
+extern bool Power_ACO; // состояние насоса ACO
+extern bool Power_Heat; // состояние нагрева
+extern bool Power_Topping_State; // состояние соленоида долива
+extern bool Power_Filtr; // ручная фильтрация
+extern bool Pow_Ul_light; // ручное освещение
+extern bool Activation_Heat; // управление нагревом
+extern String SetLamp; // режим лампы
+extern String SetRGB; // режим RGB
+
+
+inline void publishMqttStateString(const char* topic, const String &value); // forward declaration
+inline void publishMqttStateBool(const char* topic, bool value); // forward declaration
+
+inline bool mqttPayloadIsOn(String payload){ // проверка включения
+  payload.trim(); // очистка
+  payload.toLowerCase(); // нижний регистр
+  return payload == "1" || payload == "on" || payload == "true"; // ON
+}
+
+inline bool mqttPayloadIsOff(String payload){ // проверка выключения
+  payload.trim(); // очистка
+  payload.toLowerCase(); // нижний регистр
+  return payload == "0" || payload == "off" || payload == "false"; // OFF
+}
+
+inline bool mqttIsAllowedMode(const String &value){ // проверка режима
+  return value == "off" || value == "on" || value == "auto" || value == "timer"; // допустимые режимы
+}
+
+inline void handleMqttCommandMessage(char* topic, byte* payload, unsigned int length){ // обработка MQTT команд
+  String topicStr(topic); // топик
+  String message; // payload строкой
+  message.reserve(length); // резерв
+  for(unsigned int i = 0; i < length; ++i){
+    message += static_cast<char>(payload[i]); // сбор payload
+  }
+  message.trim(); // очистка
+
+  if(topicStr == "home/esp32/Power_Filtr/set"){
+    Power_Filtr = mqttPayloadIsOn(message); // обновление состояния
+    saveValue<int>("Power_Filtr", Power_Filtr ? 1 : 0); // сохранение
+    publishMqttStateBool("home/esp32/Power_Filtr", Power_Filtr); // публикация
+    return;
+  }
+
+  if(topicStr == "home/esp32/Pow_Ul_light/set"){
+    Pow_Ul_light = mqttPayloadIsOn(message); // обновление состояния
+    saveValue<int>("Pow_Ul_light", Pow_Ul_light ? 1 : 0); // сохранение
+    publishMqttStateBool("home/esp32/Pow_Ul_light", Pow_Ul_light); // публикация
+    return;
+  }
+
+  if(topicStr == "home/esp32/Activation_Heat/set"){
+    Activation_Heat = mqttPayloadIsOn(message); // обновление состояния
+    saveValue<int>("Activation_Heat", Activation_Heat ? 1 : 0); // сохранение
+    publishMqttStateBool("home/esp32/Activation_Heat", Activation_Heat); // публикация
+    return;
+  }
+
+  if(topicStr == "home/esp32/SetLamp/set"){
+    if(mqttIsAllowedMode(message)){
+      SetLamp = message; // обновление режима
+      saveValue<String>("SetLamp", SetLamp); // сохранение
+      publishMqttStateString("home/esp32/SetLamp", SetLamp); // публикация
+    }
+    return;
+  }
+
+  if(topicStr == "home/esp32/SetRGB/set"){
+    if(mqttIsAllowedMode(message)){
+      SetRGB = message; // обновление режима
+      saveValue<String>("SetRGB", SetRGB); // сохранение
+      publishMqttStateString("home/esp32/SetRGB", SetRGB); // публикация
+    }
+    return;
+  }
+
+  if(topicStr == "home/esp32/button/restart/set"){
+    ESP.restart(); // перезапуск
+    return;
+  }
+}
+
+
+inline String mqttDiscoveryDeviceId(){ // идентификатор устройства для Discovery
+  String id = WiFi.macAddress(); // MAC-адрес
+  id.replace(":", ""); // удаление двоеточий
+  id.toLowerCase(); // приведение к нижнему регистру
+  return "espdash_" + id; // итоговый id
+}
+
+inline String mqttDiscoveryDeviceName(){ // имя устройства для Discovery
+  return "ESP32 " + WiFi.macAddress(); // имя устройства
+}
+
+inline void publishMqttAvailability(const char* payload, bool retain = true){ // публикация доступности
+  if(!mqttClient.connected()) return; // выход если нет подключения
+  mqttClient.publish(mqttAvailabilityTopic, payload, retain); // публикация статуса
+}
+
+inline void publishDiscoveryDeviceBlock(JsonDocument &doc, const String &deviceId, const String &deviceName){ // блок device
+  JsonObject device = doc["device"].to<JsonObject>(); // объект устройства
+  JsonArray identifiers = device["identifiers"].to<JsonArray>(); // идентификаторы
+  identifiers.add(deviceId); // добавление id
+  device["name"] = deviceName; // имя устройства
+  device["model"] = "ESP32-S3"; // модель
+  device["manufacturer"] = "Espressif"; // производитель
+}
+
+struct MqttDiscoveryEntity {
+  const char* component;
+  const char* id;
+  const char* name;
+  const char* stateTopic;
+  const char* commandTopic;
+  const char* deviceClass;
+  const char* unit;
+  const char* stateClass;
+  const char* valueTemplate;
+  const char* payloadOn;
+  const char* payloadOff;
+};
+
+inline bool publishMqttDiscoveryEntity(const MqttDiscoveryEntity &entity,
+                                       const String &deviceId,
+                                       const String &deviceName){ // публикация сущности
+  JsonDocument doc; // JSON-документ
+  const String uniqueId = deviceId + "_" + entity.id; // уникальный id
+  const String topic = String(mqttDiscoveryPrefix) + "/" + entity.component + "/" + uniqueId + "/config"; // топик config
+
+  doc["unique_id"] = uniqueId; // unique_id
+  doc["name"] = entity.name; // name
+  doc["availability_topic"] = mqttAvailabilityTopic; // availability_topic
+  doc["payload_available"] = "online"; // payload available
+  doc["payload_not_available"] = "offline"; // payload not available
+  if(entity.stateTopic) doc["state_topic"] = entity.stateTopic; // state_topic
+  if(entity.commandTopic) doc["command_topic"] = entity.commandTopic; // command_topic
+  if(entity.deviceClass) doc["device_class"] = entity.deviceClass; // device_class
+  if(entity.unit) doc["unit_of_measurement"] = entity.unit; // unit_of_measurement
+  if(entity.stateClass) doc["state_class"] = entity.stateClass; // state_class
+  if(entity.valueTemplate) doc["value_template"] = entity.valueTemplate; // value_template
+  if(entity.payloadOn) doc["payload_on"] = entity.payloadOn; // payload_on
+  if(entity.payloadOff) doc["payload_off"] = entity.payloadOff; // payload_off
+
+  publishDiscoveryDeviceBlock(doc, deviceId, deviceName); // блок device
+
+  String payload; // строка JSON
+  serializeJson(doc, payload); // сериализация JSON
+  return mqttClient.publish(topic.c_str(), payload.c_str(), true); // публикация config с retain
+}
+
+inline bool publishMqttDiscoverySelect(const char* id,
+                                       const char* name,
+                                       const char* stateTopic,
+                                       const char* commandTopic,
+                                       const char* const* options,
+                                       size_t optionsCount,
+                                       const String &deviceId,
+                                       const String &deviceName){ // публикация select
+  JsonDocument doc; // JSON-документ
+  const String uniqueId = deviceId + "_" + id; // уникальный id
+  const String topic = String(mqttDiscoveryPrefix) + "/select/" + uniqueId + "/config"; // топик config
+
+  doc["unique_id"] = uniqueId; // unique_id
+  doc["name"] = name; // name
+  doc["availability_topic"] = mqttAvailabilityTopic; // availability_topic
+  doc["payload_available"] = "online"; // payload available
+  doc["payload_not_available"] = "offline"; // payload not available
+  doc["state_topic"] = stateTopic; // state_topic
+  doc["command_topic"] = commandTopic; // command_topic
+  JsonArray optionsArray = doc["options"].to<JsonArray>(); // options
+  for(size_t i = 0; i < optionsCount; ++i){
+    optionsArray.add(options[i]);
+  }
+
+  publishDiscoveryDeviceBlock(doc, deviceId, deviceName); // блок device
+
+  String payload; // строка JSON
+  serializeJson(doc, payload); // сериализация JSON
+  return mqttClient.publish(topic.c_str(), payload.c_str(), true); // публикация config с retain
+}
+
+inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discovery
+  if(!mqttClient.connected()) return; // выход если нет подключения
+  if(mqttDiscoveryStage == DISCOVERY_DONE){ // завершено
+    mqttDiscoveryPending = false; // сброс ожидания
+    return;
+  }
+
+  const unsigned long now = millis(); // текущее время
+  if(now - mqttDiscoveryLastAttempt < mqttDiscoveryInterval) return; // интервал между пакетами
+  mqttDiscoveryLastAttempt = now; // обновление таймера
+
+  const String deviceId = mqttDiscoveryDeviceId(); // id устройства
+  const String deviceName = mqttDiscoveryDeviceName(); // имя устройства
+
+static const MqttDiscoveryEntity baseEntities[] = {
+    {"sensor", "status", "ESP32 Uptime", "home/esp32/status", nullptr, "duration", "s", "measurement", "{{ value | replace('ESP32 uptime: ', '') | replace('s','') }}", nullptr, nullptr},
+    {"sensor", "test", "ESP32 Test Sensor", "home/esp32/test", nullptr, nullptr, nullptr, "measurement", nullptr, nullptr, nullptr},
+    {"sensor", "DS1", "Pool Water Temperature", "home/esp32/DS1", nullptr, "temperature", "°C", "measurement", nullptr, nullptr, nullptr},
+    {"sensor", "RoomTemp", "Room Temperature", "home/esp32/RoomTemp", nullptr, "temperature", "°C", "measurement", nullptr, nullptr, nullptr},
+    {"sensor", "PH", "Pool pH", "home/esp32/PH", nullptr, nullptr, "pH", "measurement", nullptr, nullptr, nullptr},
+    {"sensor", "corrected_ORP_Eh_mV", "ORP", "home/esp32/corrected_ORP_Eh_mV", nullptr, nullptr, "mV", "measurement", nullptr, nullptr, nullptr},
+    {"sensor", "ppmCl", "Free Chlorine", "home/esp32/ppmCl", nullptr, nullptr, "mg/L", "measurement", nullptr, nullptr, nullptr},
+    {"sensor", "OverlayFilterState", "Filter State", "home/esp32/OverlayFilterState", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"binary_sensor", "Power_H2O2", "NaOCl Pump State", "home/esp32/Power_H2O2", nullptr, "power", nullptr, nullptr, nullptr, "1", "0"},
+    {"binary_sensor", "Power_ACO", "ACO Pump State", "home/esp32/Power_ACO", nullptr, "power", nullptr, nullptr, nullptr, "1", "0"},
+    {"binary_sensor", "Power_Heat", "Heating State", "home/esp32/Power_Heat", nullptr, "power", nullptr, nullptr, nullptr, "1", "0"},
+    {"binary_sensor", "Power_Topping_State", "Water Top Up State", "home/esp32/Power_Topping_State", nullptr, "power", nullptr, nullptr, nullptr, "1", "0"},
+    {"switch", "Power_Filtr", "Pool Filter (Manual)", "home/esp32/Power_Filtr", "home/esp32/Power_Filtr/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"switch", "Pow_Ul_light", "Outdoor Light (Manual)", "home/esp32/Pow_Ul_light", "home/esp32/Pow_Ul_light/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"switch", "Activation_Heat", "Heating Control", "home/esp32/Activation_Heat", "home/esp32/Activation_Heat/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"button", "restart", "ESP32 Restart", nullptr, "home/esp32/button/restart/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr}
+  };
+
+  static const char* const selectOptions[] = {"off", "on", "auto", "timer"}; // варианты для select
+  const size_t baseCount = sizeof(baseEntities) / sizeof(baseEntities[0]); // количество base сущностей
+  const size_t totalCount = baseCount + 2; // +2 select
+
+  if(mqttDiscoveryStage == DISCOVERY_NONE){
+    mqttDiscoveryStage = DISCOVERY_TEST_SENSOR; // старт этапа
+  }
+
+if(mqttDiscoveryStage == DISCOVERY_TEST_SENSOR){
+    const MqttDiscoveryEntity testSensor = {"sensor", "alive", "ESP32 Alive", "home/esp32/alive", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
+    if(publishMqttDiscoveryEntity(testSensor, deviceId, deviceName)){
+      mqttClient.publish("home/esp32/alive", "1", true); // якорный сенсор
+      mqttDiscoveryStage = DISCOVERY_MAIN_ENTITIES; // переход к основным сущностям
+      mqttDiscoveryIndex = 0; // сброс индекса
+    }
+    return;
+  }
+
+if(mqttDiscoveryStage == DISCOVERY_MAIN_ENTITIES){
+    uint8_t publishedCount = 0; // опубликовано в этом loop
+    while(publishedCount < mqttDiscoveryBatchSize && mqttDiscoveryIndex < totalCount){
+      bool published = false;
+      if(mqttDiscoveryIndex < baseCount){
+        published = publishMqttDiscoveryEntity(baseEntities[mqttDiscoveryIndex], deviceId, deviceName);
+      } else if(mqttDiscoveryIndex == baseCount){
+        published = publishMqttDiscoverySelect("SetLamp", "Lamp Mode", "home/esp32/SetLamp", "home/esp32/SetLamp/set", selectOptions, 4, deviceId, deviceName);
+      } else if(mqttDiscoveryIndex == baseCount + 1){
+        published = publishMqttDiscoverySelect("SetRGB", "RGB Mode", "home/esp32/SetRGB", "home/esp32/SetRGB/set", selectOptions, 4, deviceId, deviceName);
+      }
+
+      if(!published){
+        break; // повторим в следующем loop
+      }
+
+      mqttDiscoveryIndex++;
+      publishedCount++;
+    }
+
+    if(mqttDiscoveryIndex >= totalCount){
+      mqttDiscoveryStage = DISCOVERY_DONE; // завершено
+      mqttDiscoveryPending = false; // сброс ожидания
+    }
+  }
+}
+
+inline void publishMqttStateString(const char* topic, const String &value){ // публикация строкового состояния
+  mqttClient.publish(topic, value.c_str()); // публикация значения (retain не используется)
+}
+
+inline void publishMqttStateBool(const char* topic, bool value){ // публикация bool состояния
+  mqttClient.publish(topic, value ? "1" : "0"); // публикация 1/0
+}
+
+inline void publishMqttStateFloat(const char* topic, float value){ // публикация float состояния
+  if(isnan(value)){
+    mqttClient.publish(topic, "0"); // защита от NaN
+    return;
+  }
+  String payload = String(value); // формирование строки
+  mqttClient.publish(topic, payload.c_str()); // публикация значения
+}
+
+inline void publishMqttStateInt(const char* topic, int value){ // публикация int состояния
+  String payload = String(value); // формирование строки
+  mqttClient.publish(topic, payload.c_str()); // публикация значения
+}
+
 
 inline void persistMqttSettings(){ // сохранение настроек MQTT
   if(!spiffsMounted) return; // выход если SPIFFS не смонтирован
-  StaticJsonDocument<256> doc; // JSON-документ
+  JsonDocument doc; // JSON-документ
   doc["host"] = mqttHost; // адрес брокера
   doc["port"] = mqttPort; // порт брокера
   doc["user"] = mqttUsername; // пользователь
@@ -42,7 +350,7 @@ inline void loadMqttSettings(){ // загрузка настроек MQTT
   if(spiffsMounted && SPIFFS.exists(mqttConfigPath)){ // если файл существует
     File file = SPIFFS.open(mqttConfigPath, FILE_READ); // открытие файла
     if(file){ // если файл открыт
-      StaticJsonDocument<256> doc; // JSON-документ
+      JsonDocument doc; // JSON-документ
       DeserializationError err = deserializeJson(doc, file); // парсинг JSON
       if(!err){ // если без ошибок
         mqttHost = doc["host"] | mqttHost; // адрес брокера
@@ -71,6 +379,7 @@ inline void saveMqttSettings(){ // сохранение настроек MQTT
 
 inline void configureMqttServer(){ // настройка сервера MQTT
   mqttClient.setServer(mqttHost.c_str(), mqttPort); // установка host и port
+  mqttClient.setCallback(handleMqttCommandMessage); // обработчик входящих команд
 }
 
 inline void connectMqtt(){ // подключение к MQTT
@@ -79,14 +388,33 @@ inline void connectMqtt(){ // подключение к MQTT
   if(WiFi.status() != WL_CONNECTED) return; // выход если нет Wi-Fi
 
   if(!mqttClient.connected()){ // если не подключены
-    String clientId = "espdash-" + WiFi.macAddress(); // уникальный clientId
-    bool connected = false; // флаг подключения
-    if(mqttUsername.length()) connected = mqttClient.connect(clientId.c_str(), mqttUsername.c_str(), mqttPassword.c_str()); // подключение с логином
-    else connected = mqttClient.connect(clientId.c_str()); // подключение без логина
+   String clientId = mqttDiscoveryDeviceId(); // уникальный clientId
+bool connected = mqttClient.connect( // подключение с логином и LWT
+      clientId.c_str(),
+      mqttUsername.c_str(),
+      mqttPassword.c_str(),
+      mqttAvailabilityTopic,
+      0,
+      true,
+      "offline"
+    );
 
     if(connected){ // если подключение успешно
       mqttIsConnected = true; // обновление флага
+       publishMqttAvailability("online", true); // публикация доступности
+      mqttDiscoveryPending = true; // публикация MQTT Discovery после первого loop
+publishHomeAssistantDiscovery(); // попытка публикации сразу после подключения
+      mqttDiscoveryStage = DISCOVERY_NONE; // сброс этапа discovery
+      mqttDiscoveryIndex = 0; // сброс индекса
+      mqttDiscoveryLastAttempt = 0; // сброс таймера
       mqttClient.subscribe("home/esp32/tempSet", 0); // подписка на топик
+      mqttClient.subscribe("home/esp32/Power_Filtr/set", 0); // команда фильтра
+      mqttClient.subscribe("home/esp32/Pow_Ul_light/set", 0); // команда освещения
+      mqttClient.subscribe("home/esp32/Activation_Heat/set", 0); // команда нагрева
+      mqttClient.subscribe("home/esp32/SetLamp/set", 0); // команда режима лампы
+      mqttClient.subscribe("home/esp32/SetRGB/set", 0); // команда режима RGB
+      mqttClient.subscribe("home/esp32/button/restart/set", 0); // команда перезапуска
+    
     } else { // если не удалось подключиться
       mqttIsConnected = false; // сброс флага
     }
@@ -94,9 +422,13 @@ inline void connectMqtt(){ // подключение к MQTT
 }
 
 inline void stopMqttService(){ // остановка MQTT
+    if(mqttClient.connected()) publishMqttAvailability("offline", true); // публикация offline
   mqttClient.disconnect(); // отключение от брокера
   mqttIsConnected = false; // сброс флага подключения
   mqttLastPublish = 0; // сброс таймера публикаций
+    mqttDiscoveryPending = false; // сброс discovery
+  mqttDiscoveryStage = DISCOVERY_NONE; // сброс этапа
+  mqttDiscoveryIndex = 0; // сброс индекса
 }
 
 inline void applyMqttState(){ // применение состояния MQTT
@@ -118,14 +450,36 @@ inline void handleMqttLoop(){ // основной цикл MQTT
   }
 
   mqttClient.loop(); // обработка MQTT
+    if(mqttDiscoveryPending) publishHomeAssistantDiscovery(); // публикация после первого loop
 
   unsigned long now = millis(); // текущее время
   if(now - mqttLastPublish >= mqttPublishInterval){ // проверка интервала
     mqttLastPublish = now; // обновление времени
     if(mqttClient.connected()){ // если подключены
       String payload = String("ESP32 uptime: ") + String(now / 1000) + "s"; // сообщение
-      // mqttClient.publish("home/esp32/status", 0, false, payload.c_str());
+      
       mqttClient.publish("home/esp32/status", payload.c_str(), true); // публикация
+    
+      publishMqttStateString("home/esp32/test", "123");
+      publishMqttStateFloat("home/esp32/DS1", DS1);
+      publishMqttStateFloat("home/esp32/RoomTemp", DS1); // RoomTemp использует DS1 в UI
+      publishMqttStateFloat("home/esp32/PH", PH);
+      publishMqttStateInt("home/esp32/corrected_ORP_Eh_mV", corrected_ORP_Eh_mV);
+      publishMqttStateFloat("home/esp32/ppmCl", ppmCl);
+      publishMqttStateString("home/esp32/OverlayFilterState", OverlayFilterState);
+
+      publishMqttStateBool("home/esp32/Power_H2O2", Power_H2O2);
+      publishMqttStateBool("home/esp32/Power_ACO", Power_ACO);
+      publishMqttStateBool("home/esp32/Power_Heat", Power_Heat);
+      publishMqttStateBool("home/esp32/Power_Topping_State", Power_Topping_State);
+
+      publishMqttStateBool("home/esp32/Power_Filtr", Power_Filtr);
+      publishMqttStateBool("home/esp32/Pow_Ul_light", Pow_Ul_light);
+      publishMqttStateBool("home/esp32/Activation_Heat", Activation_Heat);
+
+      publishMqttStateString("home/esp32/SetLamp", SetLamp);
+      publishMqttStateString("home/esp32/SetRGB", SetRGB);
+    
     }
   }
 }

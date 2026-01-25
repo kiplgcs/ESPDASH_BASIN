@@ -11,6 +11,7 @@
 #include "graph.h"       // Функции для графиков и визуализации
 #include "web.h"         // Функции работы Web-панели (ESP-DASH)
 #include "ui - JeeUI2.h"         // Построитель UI в стиле JeeUI2
+#include "Zigbee.h" // Подключение Zigbee логики через внешний модуль
 #include "interface - JeeUI2.h"  // Описание веб-интерфейса
 #include "settings_MQTT.h"       // Настройки и работа с MQTT
 #include "WebUpdate.h"    // OTA-обновление через AsyncOTA
@@ -202,6 +203,9 @@ void setup() {
 
   dash.begin(); // Запуск дашборда
 
+
+  zigbeeApplyCurrentSettings(); // Применяем сохранённые настройки Zigbee после сборки UI
+
   setup_Modbus();
 
 
@@ -216,11 +220,43 @@ Serial.printf(
 }
 
 
+inline void acoServiceLoop(){ // Сервисная обработка кнопки ручного импульса ACO без id-логики
+  static bool lastUiState = false; // Предыдущее состояние UI-кнопки ACO
+  const bool uiState = Power_ACO; // Текущее состояние кнопки из UI
+  const bool actualState = ReadRelayArray[6]; // Фактическое состояние реле ACO из Modbus
+  if(uiState != actualState){ // Если UI изменил состояние относительно фактического
+    if(uiState && !lastUiState){ // Отслеживаем фронт нажатия кнопки
+      ManualPulse_ACO_Active = true; // Активируем ручной импульс ACO
+      ManualPulse_ACO_StartedAt = millis(); // Фиксируем время запуска импульса
+    } // Конец обработки фронта
+    Power_ACO = actualState; // Возвращаем значение к фактическому состоянию
+    saveButtonState("Power_ACO_Button", actualState ? 1 : 0); // Сохраняем корректное состояние кнопки
+  } // Конец обработки расхождения UI и фактического состояния
+  lastUiState = uiState; // Запоминаем состояние кнопки для детекции фронта
+} // Конец acoServiceLoop
+
+inline void h2o2ServiceLoop(){ // Сервисная обработка кнопки ручного импульса H2O2 без id-логики
+  static bool lastUiState = false; // Предыдущее состояние UI-кнопки H2O2
+  const bool uiState = Power_H2O2; // Текущее состояние кнопки из UI
+  const bool actualState = ReadRelayArray[5]; // Фактическое состояние реле H2O2 из Modbus
+  if(uiState != actualState){ // Если UI изменил состояние относительно фактического
+    if(uiState && !lastUiState){ // Отслеживаем фронт нажатия кнопки
+      ManualPulse_H2O2_Active = true; // Активируем ручной импульс H2O2
+      ManualPulse_H2O2_StartedAt = millis(); // Фиксируем время запуска импульса
+    } // Конец обработки фронта
+    Power_H2O2 = actualState; // Возвращаем значение к фактическому состоянию
+    saveButtonState("Power_H2O2_Button", actualState ? 1 : 0); // Сохраняем корректное состояние кнопки
+  } // Конец обработки расхождения UI и фактического состояния
+  lastUiState = uiState; // Запоминаем состояние кнопки для детекции фронта
+} // Конец h2o2ServiceLoop
 
 
 /* ---------- Loop ---------- */
 void loop() {
   wifiModuleLoop();
+  zigbeeLoop(); // Обработка запросов Zigbee в основном цикле
+  acoServiceLoop(); // Обработка ручного импульса ACO по состоянию
+  h2o2ServiceLoop(); // Обработка ручного импульса H2O2 по состоянию
   // Обновление времени через NTP/Nextion/память
   NPT_Time(period_get_NPT_Time);
   CurrentTime = getCurrentDateTime();   // Получение текущего времени

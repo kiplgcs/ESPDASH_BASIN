@@ -2,12 +2,14 @@
 #pragma once
 
 #include "ui - JeeUI2.h"
+#include "Zigbee.h" // Подключаем Zigbee настройки и переменные для UI
 
 inline void interface(){ // Декларатиынве функции интерфейса
     UI_APP("🏊 Система управления бассейном");
 
     UI_MENU("📊 Общая информация по бассейну");
     UI_MENU("🧰 Controls");
+    UI_MENU("🧰 test");
     UI_MENU("🧹 Настройка фильтрации, Промывка фильтра");
     UI_MENU("💡 Управление лампой");
     UI_MENU("🌈 Управление RGB подсветкой");
@@ -17,6 +19,7 @@ inline void interface(){ // Декларатиынве функции интер
     UI_MENU("🧴 Контроль хлора CL (ACO)");
     UI_MENU("🏠 Контроль температуры в помещении");
     UI_MENU("🚏 Уличное освещение");
+    UI_MENU("Настройка Zigbee ESP32"); // Меню настроек Zigbee ESP32
 
     // Общая информация по бассейну
     UI_PAGE();
@@ -50,27 +53,47 @@ inline void interface(){ // Декларатиынве функции интер
     static String PopupComment;
     UI_POPUP_BEGIN("DataEntry", "📝 Ввод данных", "🪟 Открыть окно");
     UI_TEXT("PopupComment", PopupComment, "💬 Комментарий");
+    
 
     // UI_TEXT("InfoString", InfoString, "x:30%;y:40%;fontSize:12;color:#00ff00");
     // UI_TEXT("InfoString1", InfoString1, "x:70%;y:70%;fontSize:12;color:#00ff00");
 
-
     UI_POPUP_END();
+
+    // test
+    UI_PAGE();
+    UI_SELECT_DAYS("Daystest", DaysSelect, "📅 Дни промывки");
+    UI_TIMER("Timertest", "⏱️ Таймер test", TimertestON, TimertestOFF);
+
+    
+    UI_TIME("Timertest", Timer1, "⏰ Start Time");
+
+
+    UI_BUTTON("button_test", button1, "gray", "🔘 My Button");
+    UI_TEXT("Popuptest", PopupComment, "💬 Комментарий");
+    
+    UI_DISPLAY_INT("Randomtest", RandomVal, "🔢 Random Number");
+    UI_NUMBER("Inttest", IntInput, "🔢 Enter Integer", false);
+    UI_NUMBER("Floattest", FloatInput, "🔣 Enter Float", true);
+    UI_RANGE("Motortest", MotorSpeedSetting, 0, 100, 1, "⚙️ Motor Speed");
+    UI_DUAL_RANGE_KEYS("Rangetest", RangeMin, RangeMax, "RangeMin", "RangeMax", 10, 40, 1, "🎚️ Range Min-Max");
+     UI_TEXT("Overlaytest", OverlayFilterState, "x:300;y:400;fontSize:12;color:#00ff00");
+    
 
     // Настройка фильтрации, Промывка фильтра
     UI_PAGE();
-    UI_BUTTON("Power_Filtr", Power_Filtr, "gray", "🧽 Фильтрация (вручную)");
+        UI_BUTTON("Power_Filtr", Power_Filtr, "gray", "🧽 Фильтрация (вручную)");
     // UI_CHECKBOX("Power_Filtr", Power_Filtr, "Фильтрация (вручную)");
     UI_CHECKBOX("Filtr_Time1", Filtr_Time1, "⏱️ Таймер фильтрации №1");
-    UI_TIMER("FiltrTimer1", "⏱️ Таймер фильтрации №1", noopTimerCallback);
+        UI_TIMER("FiltrTimer1", "⏱️ Таймер фильтрации №1", FiltrTimer1ON, FiltrTimer1OFF, noopTimerCallback);
     UI_CHECKBOX("Filtr_Time2", Filtr_Time2, "⏱️ Таймер фильтрации №2");
-    UI_TIMER("FiltrTimer2", "⏱️ Таймер фильтрации №2", noopTimerCallback);
+        UI_TIMER("FiltrTimer2", "⏱️ Таймер фильтрации №2", FiltrTimer2ON, FiltrTimer2OFF, noopTimerCallback);
     UI_CHECKBOX("Filtr_Time3", Filtr_Time3, "⏱️ Таймер фильтрации №3");
-    UI_TIMER("FiltrTimer3", "⏱️ Таймер фильтрации №3", noopTimerCallback);
+        UI_TIMER("FiltrTimer3", "⏱️ Таймер фильтрации №3", FiltrTimer3ON, FiltrTimer3OFF, noopTimerCallback);
     UI_BUTTON("Power_Clean", Power_Clean, "gray", "🧼 Промывка фильтра (вручную)");
     // UI_CHECKBOX("Power_Clean", Power_Clean, "Промывка фильтра (вручную)");
     UI_CHECKBOX("Clean_Time1", Clean_Time1, "🗓️ Таймер промывки");
-    UI_TIMER("CleanTimer1", "🗓️ Таймер промывки", noopTimerCallback);
+        UI_TIMER("CleanTimer1", "🗓️ Таймер промывки", CleanTimer1ON, CleanTimer1OFF, noopTimerCallback);
     UI_SELECT_DAYS("DaysSelect", DaysSelect, "📅 Дни промывки");
 
     
@@ -87,7 +110,7 @@ inline void interface(){ // Декларатиынве функции интер
     static String Lumen_Ul_str = String(Lumen_Ul); 
     UI_TEXT("Lumen_Ul", Lumen_Ul_str, "🔆 Освещенность на улице, %");
 
-    UI_TIMER("LampTimer", "⏲️ Таймер лампы", onLampTimerChange);
+        UI_TIMER("LampTimer", "⏲️ Таймер лампы", LampTimerON, LampTimerOFF, onLampTimerChange);
 
     // Управление RGB подсветкой
     UI_PAGE();
@@ -97,8 +120,8 @@ inline void interface(){ // Декларатиынве функции интер
                                    {"on", "RGB подсветка включена постоянно"},
                                    {"auto", "Включение по датчику освещенности (<20%)"},
                                    {"timer", "Включение по таймеру"}}), "🎛️ Режим управления RGB подсветкой", onSetRgbChange);
-    UI_TIMER("RgbTimer", "⏲️ Таймер RGB ленты", noopTimerCallback);
-    UI_COLOR("LEDColor", LEDColor, "🎨 Цвет подсветки");
+        UI_TIMER("RgbTimer", "⏲️ Таймер RGB ленты", RgbTimerON, RgbTimerOFF, noopTimerCallback);
+UI_COLOR("LEDColor", LEDColor, "🎨 Цвет подсветки");
     UI_SELECT_CB("LedColorMode", LedColorMode, (std::initializer_list<UIOption>{{"auto", "Автоматически"},
                                                {"manual", "Ручной цвет"}}), "🎨 Режим цвета", onLedColorModeChange);
     UI_RANGE_CB("LedBrightness", LedBrightness, 10, 255, 1, "🔆 Яркость", onLedBrightnessChange);
@@ -167,6 +190,13 @@ inline void interface(){ // Декларатиынве функции интер
     "value:Temperatura;updatePeriod_of_Time:60;updateStep:5;maxPoints:40;width:100%;height:240;"
     "xLabel:Time;yLabel:Temperature;pointColor:#6b66ff;lineColor:#ff5e5e;"
     "lineWidth:1;pointRadius:3;smooth:false", DS1);
+
+
+
+        UI_POPUP_BEGIN("DallasSensorsInfo", "🧪 Поиск информации о DS18B20", "🪟 Открыть окно поиска информации DS18B20");
+        
+        UI_POPUP_END();
+
         
 
     // Контроль PH (NaOCl)
@@ -274,7 +304,17 @@ inline void interface(){ // Декларатиынве функции интер
 
     // Уличное освещение
     UI_PAGE();
-    UI_BUTTON("Pow_Ul_light", Pow_Ul_light, "gray", "🚏 Включить/Отключить освещение вручную");
+UI_BUTTON("Pow_Ul_light", Pow_Ul_light, "gray", "🚏 Включить/Отключить освещение вручную");
     UI_CHECKBOX("Ul_light_Time", Ul_light_Time, "⏱️ Таймер уличного освещения");
-    UI_TIMER("UlLightTimer", "⏲️ Таймер уличного освещения", noopTimerCallback);
+        UI_TIMER("UlLightTimer", "⏲️ Таймер уличного освещения", UlLightTimerON, UlLightTimerOFF, noopTimerCallback);
+        
+    // Настройка Zigbee ESP32
+    UI_PAGE(); // Страница настроек Zigbee ESP32
+    UI_SELECT_CB("zb_enable", zb_enable, (std::initializer_list<UIOption>{{"0", "Выключен"}, {"1", "Включен"}}), "Zigbee", nullptr); // Включение/выключение Zigbee
+    UI_SELECT_CB("zb_role", zb_role, (std::initializer_list<UIOption>{{"coordinator", "Координатор"}, {"router", "Роутер"}, {"end_device", "End Device"}}), "Режим", nullptr); // Роль Zigbee
+    UI_SELECT_CB("zb_channel", zb_channel, (std::initializer_list<UIOption>{{"auto", "Авто"}, {"11", "11"}, {"12", "12"}, {"13", "13"}, {"14", "14"}, {"15", "15"}, {"16", "16"}, {"17", "17"}, {"18", "18"}, {"19", "19"}, {"20", "20"}, {"21", "21"}, {"22", "22"}, {"23", "23"}, {"24", "24"}, {"25", "25"}, {"26", "26"}}), "Канал Zigbee", nullptr); // Канал Zigbee или авто
+    UI_TEXT("zb_panid", zb_panid, "PAN ID"); // PAN ID Zigbee (auto или hex)
+    UI_BUTTON("zb_permit_join", zb_permit_join, "gray", "Разрешить подключение"); // Кнопка разрешения подключения
+    UI_BUTTON("zb_factory_reset", zb_factory_reset, "gray", "Сброс Zigbee"); // Кнопка сброса Zigbee
+    UI_DISPLAY_INT("zb_joined", zb_joined, "В сети Zigbee"); // Количество устройств в Zigbee
 }
