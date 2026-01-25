@@ -11,7 +11,6 @@
 #include "graph.h"       // Функции для графиков и визуализации
 #include "web.h"         // Функции работы Web-панели (ESP-DASH)
 #include "ui - JeeUI2.h"         // Построитель UI в стиле JeeUI2
-#include "Zigbee.h" // Подключение Zigbee логики через внешний модуль
 #include "interface - JeeUI2.h"  // Описание веб-интерфейса
 #include "settings_MQTT.h"       // Настройки и работа с MQTT
 #include "WebUpdate.h"    // OTA-обновление через AsyncOTA
@@ -210,7 +209,6 @@ void setup() {
   dash.begin(); // Запуск дашборда
 
 
-  zigbeeApplyCurrentSettings(); // Применяем сохранённые настройки Zigbee после сборки UI
 
   setup_Modbus();
 
@@ -260,7 +258,6 @@ inline void h2o2ServiceLoop(){ // Сервисная обработка кноп
 /* ---------- Loop ---------- */
 void loop() {
   wifiModuleLoop();
-  zigbeeLoop(); // Обработка запросов Zigbee в основном цикле
   acoServiceLoop(); // Обработка ручного импульса ACO по состоянию
   h2o2ServiceLoop(); // Обработка ручного импульса H2O2 по состоянию
   // Обновление времени через NTP/Nextion/память

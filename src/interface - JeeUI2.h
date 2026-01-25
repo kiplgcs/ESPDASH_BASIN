@@ -2,7 +2,6 @@
 #pragma once
 
 #include "ui - JeeUI2.h"
-#include "Zigbee.h" // Подключаем Zigbee настройки и переменные для UI
 
 inline void interface(){ // Декларатиынве функции интерфейса
     UI_APP("🏊 Система управления бассейном");
@@ -19,8 +18,7 @@ inline void interface(){ // Декларатиынве функции интер
     UI_MENU("🧴 Контроль хлора CL (ACO)");
     UI_MENU("🏠 Контроль температуры в помещении");
     UI_MENU("🚏 Уличное освещение");
-    UI_MENU("Настройка Zigbee ESP32"); // Меню настроек Zigbee ESP32
-
+  
     // Общая информация по бассейну
     UI_PAGE();
     UI_IMAGE("Image1", "/Basin.jpg", "width:150%;height:550; x:-30%;y:95%;");
@@ -308,13 +306,4 @@ UI_BUTTON("Pow_Ul_light", Pow_Ul_light, "gray", "🚏 Включить/Откл�
     UI_CHECKBOX("Ul_light_Time", Ul_light_Time, "⏱️ Таймер уличного освещения");
         UI_TIMER("UlLightTimer", "⏲️ Таймер уличного освещения", UlLightTimerON, UlLightTimerOFF, noopTimerCallback);
         
-    // Настройка Zigbee ESP32
-    UI_PAGE(); // Страница настроек Zigbee ESP32
-    UI_SELECT_CB("zb_enable", zb_enable, (std::initializer_list<UIOption>{{"0", "Выключен"}, {"1", "Включен"}}), "Zigbee", nullptr); // Включение/выключение Zigbee
-    UI_SELECT_CB("zb_role", zb_role, (std::initializer_list<UIOption>{{"coordinator", "Координатор"}, {"router", "Роутер"}, {"end_device", "End Device"}}), "Режим", nullptr); // Роль Zigbee
-    UI_SELECT_CB("zb_channel", zb_channel, (std::initializer_list<UIOption>{{"auto", "Авто"}, {"11", "11"}, {"12", "12"}, {"13", "13"}, {"14", "14"}, {"15", "15"}, {"16", "16"}, {"17", "17"}, {"18", "18"}, {"19", "19"}, {"20", "20"}, {"21", "21"}, {"22", "22"}, {"23", "23"}, {"24", "24"}, {"25", "25"}, {"26", "26"}}), "Канал Zigbee", nullptr); // Канал Zigbee или авто
-    UI_TEXT("zb_panid", zb_panid, "PAN ID"); // PAN ID Zigbee (auto или hex)
-    UI_BUTTON("zb_permit_join", zb_permit_join, "gray", "Разрешить подключение"); // Кнопка разрешения подключения
-    UI_BUTTON("zb_factory_reset", zb_factory_reset, "gray", "Сброс Zigbee"); // Кнопка сброса Zigbee
-    UI_DISPLAY_INT("zb_joined", zb_joined, "В сети Zigbee"); // Количество устройств в Zigbee
-}
+    }
