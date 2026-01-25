@@ -219,36 +219,6 @@ uint16_t Saved_Clean_timeON1, Saved_Clean_timeOFF1;
 bool chk1, chk2, chk3, chk4, chk5, chk6, chk7; //Дни недели ПН, ВТ, СР, ЧТ, ПТ, СБ, ВС - для включения таймера в нужные дни
 bool Saved_chk1, Saved_chk2, Saved_chk3, Saved_chk4, Saved_chk5, Saved_chk6, Saved_chk7;
 
-// inline void syncCleanDaysFromSelection(){
-//   const char* tokens[] = {"Mon","Tue","Wed","Thu","Fri","Sat","Sun"};
-//   bool *flags[] = {&chk1, &chk2, &chk3, &chk4, &chk5, &chk6, &chk7};
-//   for(size_t i = 0; i < 7; i++){
-//     *flags[i] = DaysSelect.indexOf(tokens[i]) >= 0;
-//   }
-// }
-
-// inline void syncDaysSelectionFromClean(){
-//   const char* tokens[] = {"Mon","Tue","Wed","Thu","Fri","Sat","Sun"};
-//   const bool flags[] = {chk1, chk2, chk3, chk4, chk5, chk6, chk7};
-//   String next;
-//   for(size_t i = 0; i < 7; i++){
-//     if(flags[i]){
-//       if(next.length()) next += ",";
-//       next += tokens[i];
-//     }
-//   }
-//   DaysSelect = next;
-// }
-
-// inline uint16_t parseTimeToMinutes(const String &value){
-//   int sep = value.indexOf(':');
-//   if(sep < 0) return 0;
-//   int hours = value.substring(0, sep).toInt();
-//   int minutes = value.substring(sep + 1).toInt();
-//   hours = constrain(hours, 0, 23);
-//   minutes = constrain(minutes, 0, 59);
-//   return static_cast<uint16_t>(hours * 60 + minutes);
-// }
 
 inline void syncCleanDaysFromSelection(){ // Синхронизирует флаги дней недели по строке DaysSelect
   const char* tokens[] = {"Mon","Tue","Wed","Thu","Fri","Sat","Sun"}; // Краткие названия дней недели
@@ -292,14 +262,6 @@ inline String formatMinutesToTime(uint16_t minutes){
   snprintf(buffer, sizeof(buffer), "%02u:%02u", hours, mins); // Формирование строки времени с ведущими нулями
   return String(buffer); // Возврат строки времени
 }
-// inline String formatMinutesToTime(uint16_t minutes){
-//   minutes = minutes % 1440;
-//   uint16_t hours = minutes / 60;
-//   uint16_t mins = minutes % 60;
-//   char buffer[6];
-//   snprintf(buffer, sizeof(buffer), "%02u:%02u", hours, mins);
-//   return String(buffer);
-// }
 
 struct UITimerEntry {
   String id; // Идентификатор таймера
