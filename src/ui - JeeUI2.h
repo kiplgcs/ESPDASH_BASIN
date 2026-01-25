@@ -313,51 +313,74 @@ public:
     virtual void setFromString(const String &value) = 0; // обновляет состояние элемента из строки
 };
 
-
+// СКРЫТЫЙ ЭЛЕМЕНТ ДЛЯ СОХРАНЕНИЯ И ВОССТАНОВЛЕНИЯ ДАННЫХ ИЗ EEPROM / NVS
 template <typename T>
-class UIHiddenElement : public UIDeclarativeElement { // скрытый элемент для хранения состояния без отображения
+class UIHiddenElement : public UIDeclarativeElement {
 public:
+    // elementId — имя (ключ) в EEPROM/NVS
+    // storageRef — переменная в RAM, которую нужно сохранять
     UIHiddenElement(const String &elementId, T &storageRef)
         : UIDeclarativeElement(elementId, String()), storage(storageRef) {}
 
-    void build(OABuilder &builder) override{ (void)builder; } // скрытый элемент не добавляется в UI
+    // В UI не отображается
+    void build(OABuilder &builder) override { (void)builder; }
 
-    void load() override{ // загружает сохранённое значение
-        if constexpr (std::is_same<T, bool>::value){
+    // ===== ЧТЕНИЕ ИЗ EEPROM / NVS =====
+    void load() override {
+        // 1. Берём ключ id (строка)
+        // 2. Читаем сохранённое значение из памяти
+        // 3. Если записи нет — берётся текущее значение переменной (по умолчанию)
+        // 4. Записываем результат в переменную storage
+
+        if constexpr (std::is_same<T, bool>::value) {
+            // bool читаем как int (0 или 1)
             storage = loadValue<int>(id.c_str(), storage ? 1 : 0) != 0;
         } else {
+            // остальные типы читаем напрямую
             storage = loadValue<T>(id.c_str(), storage);
         }
     }
 
-    void save() const override{ // сохраняет значение
-        if constexpr (std::is_same<T, bool>::value){
+    // ===== ЗАПИСЬ В EEPROM / NVS =====
+    void save() const override {
+        // 1. Берём ключ id (строка)
+        // 2. Берём текущее значение переменной storage
+        // 3. Записываем значение в энергонезависимую память
+
+        if constexpr (std::is_same<T, bool>::value) {
+            // bool сохраняем как 0 или 1
             saveValue<int>(id.c_str(), storage ? 1 : 0);
         } else {
+            // остальные типы сохраняем напрямую
             saveValue<T>(id.c_str(), storage);
         }
     }
 
-    String valueString() const override{ return toString(storage); } // возвращает строковое значение
+    // Преобразование значения в строку (для логов / UI)
+    String valueString() const override { return toString(storage); }
 
-    void setFromString(const String &value) override{ storage = fromString(value); } // применяет строковое значение
+    // Установка значения из строки (например из Web UI)
+    void setFromString(const String &value) override {
+        storage = fromString(value);
+    }
 
 private:
-    T &storage; // ссылка на хранимое значение
+    T &storage; // ссылка на переменную в RAM
 
-    static String toString(const String &value){ return value; }
-    static String toString(const char *value){ return String(value); }
-    static String toString(int value){ return String(value); }
-    static String toString(float value){ return String(value); }
-    static String toString(bool value){ return value ? "1" : "0"; }
+    static String toString(const String &v) { return v; }
+    static String toString(const char *v)   { return String(v); }
+    static String toString(int v)           { return String(v); }
+    static String toString(float v)         { return String(v); }
+    static String toString(bool v)          { return v ? "1" : "0"; }
 
-    static T fromString(const String &value){
-        if constexpr (std::is_same<T, String>::value) return value;
-        else if constexpr (std::is_same<T, bool>::value) return value.toInt() != 0;
-        else if constexpr (std::is_same<T, float>::value) return value.toFloat();
-        else return static_cast<T>(value.toInt());
+    static T fromString(const String &v) {
+        if constexpr (std::is_same<T, String>::value) return v;
+        else if constexpr (std::is_same<T, bool>::value) return v.toInt() != 0;
+        else if constexpr (std::is_same<T, float>::value) return v.toFloat();
+        else return static_cast<T>(v.toInt());
     }
 };
+
 
 
 class UIDeclarativeRegistry { // реестр всех декларативных UI-элементов
