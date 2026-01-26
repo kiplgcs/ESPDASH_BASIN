@@ -10,6 +10,10 @@
 #include <map>                   // контейнер для провайдеров значений UI
 #include <esp_chip_info.h>
 #include <esp_efuse.h>
+#ifdef ARDUINO_ARCH_ESP32
+#include <esp_partition.h>
+#include <esp_ota_ops.h>
+#endif
 #include "graph.h"               // Пользовательские графики (кастомные)
 #include "fs_utils.h"            // Вспомогательные функции для работы с файловой системой
 #include "wifi_manager.h"                // Логика Wi-Fi и хранение параметров
@@ -1439,9 +1443,12 @@ private:
               "<li><span>MAC Address (уникальный адрес)</span><strong id='stat-mac'>--</strong></li>"
               "</ul></div>"
               "<div class='stat-group'><div class='stat-heading'>Память и хранилище</div><ul class='stat-list'>"
-              "<li><span>Free Heap (свободная оперативная память)</span><strong id='stat-heap'>--</strong></li>"
-               "<li><span>PSRAM (использовано / свободно в PSRAM)</span><strong id='stat-psram'>--</strong></li>"
-              "<li><span>SPIFFS Used / Free (использовано / свободно в SPIFFS)</span><strong id='stat-spiffs'>--</strong></li>"
+              "<li><span>Free Heap (свободная оперативная память) — оперативная память для работы приложения</span><strong id='stat-heap'>--</strong></li>"
+               "<li><span>PSRAM (использовано / свободно) — внешняя оперативная память</span><strong id='stat-psram'>--</strong></li>"
+              "<li><span>Flash (использовано / свободно) — загружается основная прошивка и OTA-обновления</span><strong id='stat-flash'>--</strong></li>"
+              "<li><span>OTA (использовано / свободно) — служебные разделы для обновления прошивки по воздуху</span><strong id='stat-ota'>--</strong></li>"
+              "<li><span>NVS (раздел настроек) — постоянные настройки и конфигурации устройства</span><strong id='stat-nvs'>--</strong></li>"
+              "<li><span>SPIFFS Used / Free (использовано / свободно в SPIFFS) — файлы интерфейса, логи или другие пользовательские данные</span><strong id='stat-spiffs'>--</strong></li>"
               "</ul></div>"
               "</div></div>";
 
@@ -1757,6 +1764,29 @@ function saveProfileSettings(){
         psramText = formatMegaBytes(freePsram);
       }
       updateStat('stat-psram', psramText);
+            const flashUsed = typeof data.flashUsed !== 'undefined' && data.flashUsed !== null ? Number(data.flashUsed) : null;
+      const flashFree = typeof data.flashFree !== 'undefined' && data.flashFree !== null ? Number(data.flashFree) : null;
+      const flashText = (!isNaN(flashUsed) && !isNaN(flashFree))
+        ? `${formatBytes(flashUsed)} / ${formatBytes(flashFree)}`
+        : (typeof data.flashTotal !== 'undefined' && data.flashTotal !== null ? formatBytes(data.flashTotal) : '--');
+      updateStat('stat-flash', flashText);
+      updateStat('stat-nvs', typeof data.nvsTotal !== 'undefined' && data.nvsTotal !== null ? formatBytes(data.nvsTotal) : 'N/A');
+      const otaUsed = typeof data.otaUsed !== 'undefined' && data.otaUsed !== null ? Number(data.otaUsed) : null;
+      const otaFree = typeof data.otaFree !== 'undefined' && data.otaFree !== null ? Number(data.otaFree) : null;
+      const otaParts = [];
+      if(!isNaN(otaUsed) && !isNaN(otaFree)){
+        otaParts.push(`${formatBytes(otaUsed)} / ${formatBytes(otaFree)}`);
+      }
+      if(data.otaRunningLabel){
+        otaParts.push(`Активный: ${data.otaRunningLabel}`);
+      }
+      if(typeof data.otaSlot0Size !== 'undefined' && data.otaSlot0Size !== null){
+        otaParts.push(`ota_0: ${formatBytes(data.otaSlot0Size)}`);
+      }
+      if(typeof data.otaSlot1Size !== 'undefined' && data.otaSlot1Size !== null){
+        otaParts.push(`ota_1: ${formatBytes(data.otaSlot1Size)}`);
+      }
+      updateStat('stat-ota', otaParts.length ? otaParts.join(' · ') : 'N/A');
       updateStat('stat-spiffs', renderSpiffs(data.spiffsUsed, data.spiffsFree, data.spiffsTotal));
     }).catch(()=>{}).finally(()=>{
       if(manual && refreshBtn){
@@ -2721,6 +2751,42 @@ function setImg(x){
       uint32_t freePsramVal = 0;
       uint32_t totalPsramVal = 0;
       bool hasPsram = readPsramStats(freePsramVal, totalPsramVal);
+            size_t flashTotal = 0;
+      size_t nvsTotal = 0;
+      String otaRunningLabel = "";
+      size_t otaRunningSize = 0;
+      size_t otaSlot0Size = 0;
+      size_t otaSlot1Size = 0;
+      size_t flashUsed = 0;
+      size_t flashFree = 0;
+      size_t otaUsed = 0;
+      size_t otaFree = 0;
+#ifdef ARDUINO_ARCH_ESP32
+      flashTotal = ESP.getFlashChipSize();
+      flashFree = ESP.getFreeSketchSpace();
+      if(flashTotal >= flashFree){
+        flashUsed = flashTotal - flashFree;
+      }
+      if(const esp_partition_t *nvsPartition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_NVS, nullptr)){
+        nvsTotal = nvsPartition->size;
+      }
+      if(const esp_partition_t *running = esp_ota_get_running_partition()){
+        if(running->label){
+          otaRunningLabel = running->label;
+        }
+        otaRunningSize = running->size;
+        otaUsed = ESP.getSketchSize();
+        if(otaRunningSize >= otaUsed){
+          otaFree = otaRunningSize - otaUsed;
+        }
+      }
+      if(const esp_partition_t *slot0 = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_0, nullptr)){
+        otaSlot0Size = slot0->size;
+      }
+      if(const esp_partition_t *slot1 = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_1, nullptr)){
+        otaSlot1Size = slot1->size;
+      }
+#endif
 
       String json = "{";
       json += "\"chipModelRevision\":\""+jsonEscape(chipModelRevision)+"\",";
@@ -2734,6 +2800,34 @@ function setImg(x){
       json += ",";
       json += "\"totalPsram\":";
       json += hasPsram ? String(totalPsramVal) : String("null");
+      json += ",";
+            json += "\"flashTotal\":";
+      json += flashTotal ? String(flashTotal) : String("null");
+      json += ",";
+      json += "\"flashUsed\":";
+      json += flashTotal ? String(flashUsed) : String("null");
+      json += ",";
+      json += "\"flashFree\":";
+      json += flashTotal ? String(flashFree) : String("null");
+      json += ",";
+      json += "\"nvsTotal\":";
+      json += nvsTotal ? String(nvsTotal) : String("null");
+      json += ",";
+      json += "\"otaRunningLabel\":\""+jsonEscape(otaRunningLabel)+"\",";
+      json += "\"otaRunningSize\":";
+      json += otaRunningSize ? String(otaRunningSize) : String("null");
+      json += ",";
+      json += "\"otaUsed\":";
+      json += otaRunningSize ? String(otaUsed) : String("null");
+      json += ",";
+      json += "\"otaFree\":";
+      json += otaRunningSize ? String(otaFree) : String("null");
+      json += ",";
+      json += "\"otaSlot0Size\":";
+      json += otaSlot0Size ? String(otaSlot0Size) : String("null");
+      json += ",";
+      json += "\"otaSlot1Size\":";
+      json += otaSlot1Size ? String(otaSlot1Size) : String("null");
       json += ",";
       json += "\"spiffsUsed\":"+String(used)+",";
       json += "\"spiffsFree\":"+String(freeSpace)+",";
