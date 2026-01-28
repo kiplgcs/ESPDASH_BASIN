@@ -23,7 +23,7 @@ inline unsigned long mqttPublishInterval = 10000; // интервал публи
 inline unsigned long mqttLastPublish = 0; // время последней публикации
 inline const char* mqttAvailabilityTopic = "home/esp32/availability"; // топик доступности устройства
 
-#if 0 // MQTT Discovery отключен (слишком много кода и не нужен)
+#if 1 // MQTT Discovery отключен (слишком много кода и не нужен)
 inline const char* mqttDiscoveryPrefix = "homeassistant"; // префикс MQTT Discovery
 inline bool mqttDiscoveryPending = false; // публикация после первого успешного MQTT loop
 
@@ -32,10 +32,11 @@ inline const unsigned long mqttDiscoveryInterval = 250; // интервал ме
 inline const uint8_t mqttDiscoveryBatchSize = 4; // максимум сущностей за loop
 #endif
 
-inline void publishMqttAvailability(const char* payload, bool retain = true){ // публикация доступности
-  if(!mqttClient.connected()) return; // выход если нет подключения
-  mqttClient.publish(mqttAvailabilityTopic, payload, retain); // публикация статуса
-}
+// inline void publishMqttAvailability(const char* payload, bool retain = true){ // публикация доступности
+//   if(!mqttClient.connected()) return; // выход если нет подключения
+//   mqttClient.publish(mqttAvailabilityTopic, payload, retain); // публикация статуса
+// }
+
 inline unsigned long mqttLastConnectAttempt = 0; // время последней попытки подключения
 inline const unsigned long mqttConnectInterval = 5000; // интервал попыток подключения
 inline unsigned long mqttLastResolveAttempt = 0; // время последней попытки DNS
@@ -45,7 +46,7 @@ inline IPAddress mqttResolvedIp; // резолвенный IP адрес
 inline String mqttResolvedHostName; // хост для которого выполнен резолв
 
 
-#if 0 // MQTT Discovery отключен (слишком много кода и не нужен)
+#if 1 // MQTT Discovery отключен (слишком много кода и не нужен)
 enum DiscoveryStage {
   DISCOVERY_NONE,
   DISCOVERY_TEST_SENSOR,
@@ -280,7 +281,7 @@ inline void handleMqttCommandMessage(char* topic, byte* payload, unsigned int le
   }
 }
 
-#if 0 // MQTT Discovery отключен (слишком много кода и не нужен)
+#if 1 // MQTT Discovery отключен (слишком много кода и не нужен)
 inline String mqttDiscoveryDeviceId(){ // идентификатор устройства для Discovery
   String id = WiFi.macAddress(); // MAC-адрес
   id.replace(":", ""); // удаление двоеточий
@@ -600,7 +601,7 @@ bool connected = mqttClient.connect( // подключение с логином
     if(connected){ // если подключение успешно
       mqttIsConnected = true; // обновление флага
        publishMqttAvailability("online", true); // публикация доступности
- #if 0 // MQTT Discovery отключен
+ #if 1 // MQTT Discovery отключен
       mqttDiscoveryStage = DISCOVERY_NONE; // сброс этапа discovery
       mqttDiscoveryIndex = 0; // сброс индекса
       mqttDiscoveryLastAttempt = 0; // сброс таймера
@@ -644,7 +645,7 @@ inline void stopMqttService(){ // остановка MQTT
   mqttLastConnectAttempt = 0; // сброс таймера подключений
   mqttLastResolveAttempt = 0; // сброс таймера резолва
 
-  #if 0 // MQTT Discovery отключен
+  #if 1 // MQTT Discovery отключен
   mqttDiscoveryPending = false; // сброс discovery
   mqttDiscoveryStage = DISCOVERY_NONE; // сброс этапа
   mqttDiscoveryIndex = 0; // сброс индекса
@@ -671,7 +672,7 @@ inline void handleMqttLoop(){ // основной цикл MQTT
 
   mqttClient.loop(); // обработка MQTT
 
-  #if 0 // MQTT Discovery отключен
+  #if 1 // MQTT Discovery отключен
     if(mqttDiscoveryPending) publishHomeAssistantDiscovery(); // публикация после первого loop
 #endif
 
