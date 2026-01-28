@@ -22,13 +22,30 @@ inline bool mqttIsConnected = false; // флаг подключения MQTT
 inline unsigned long mqttPublishInterval = 10000; // интервал публикации
 inline unsigned long mqttLastPublish = 0; // время последней публикации
 inline const char* mqttAvailabilityTopic = "home/esp32/availability"; // топик доступности устройства
+
+#if 0 // MQTT Discovery отключен (слишком много кода и не нужен)
 inline const char* mqttDiscoveryPrefix = "homeassistant"; // префикс MQTT Discovery
 inline bool mqttDiscoveryPending = false; // публикация после первого успешного MQTT loop
 
 inline unsigned long mqttDiscoveryLastAttempt = 0; // время последней попытки discovery
 inline const unsigned long mqttDiscoveryInterval = 250; // интервал между пакетами discovery
 inline const uint8_t mqttDiscoveryBatchSize = 4; // максимум сущностей за loop
+#endif
 
+inline void publishMqttAvailability(const char* payload, bool retain = true){ // публикация доступности
+  if(!mqttClient.connected()) return; // выход если нет подключения
+  mqttClient.publish(mqttAvailabilityTopic, payload, retain); // публикация статуса
+}
+inline unsigned long mqttLastConnectAttempt = 0; // время последней попытки подключения
+inline const unsigned long mqttConnectInterval = 5000; // интервал попыток подключения
+inline unsigned long mqttLastResolveAttempt = 0; // время последней попытки DNS
+inline const unsigned long mqttResolveInterval = 30000; // интервал резолва хоста
+inline bool mqttHasResolvedIp = false; // флаг успешного резолва
+inline IPAddress mqttResolvedIp; // резолвенный IP адрес
+inline String mqttResolvedHostName; // хост для которого выполнен резолв
+
+
+#if 0 // MQTT Discovery отключен (слишком много кода и не нужен)
 enum DiscoveryStage {
   DISCOVERY_NONE,
   DISCOVERY_TEST_SENSOR,
@@ -40,6 +57,7 @@ inline DiscoveryStage mqttDiscoveryStage = DISCOVERY_NONE; // этап discovery
 inline size_t mqttDiscoveryIndex = 0; // индекс публикации сущностей
 
 // mqttDiscovery публикуется один раз после успешного подключения и availability=online.
+#endif
 
 extern float DS1; // температура воды
 extern float PH; // pH воды
@@ -51,10 +69,44 @@ extern bool Power_ACO; // состояние насоса ACO
 extern bool Power_Heat; // состояние нагрева
 extern bool Power_Topping_State; // состояние соленоида долива
 extern bool Power_Filtr; // ручная фильтрация
+extern bool Filtr_Time1; // таймер фильтрации №1
+extern bool Filtr_Time2; // таймер фильтрации №2
+extern bool Filtr_Time3; // таймер фильтрации №3
+extern bool Power_Clean; // промывка фильтра
+extern bool Clean_Time1; // таймер промывки
 extern bool Pow_Ul_light; // ручное освещение
 extern bool Activation_Heat; // управление нагревом
 extern String SetLamp; // режим лампы
 extern String SetRGB; // режим RGB
+extern String DaysSelect; // выбранные дни промывки
+class UIRegistry; // forward declaration
+extern UIRegistry ui; // доступ к UI-реестру таймеров
+void syncCleanDaysFromSelection(); // синхронизация дней промывки
+
+String formatMinutesToTime(uint16_t minutes); // форматирование минут в HH:MM
+bool mqttApplyTimerField(const String &fieldId, const String &value); // применить значение таймера
+uint16_t mqttTimerOnMinutes(const String &id); // время включения таймера
+uint16_t mqttTimerOffMinutes(const String &id); // время выключения таймера
+void mqttApplyDaysSelect(const String &value); // применить выбор дней промывки
+
+// MQTT-помощники для таймеров/дней (перенесены сюда, чтобы MQTT-логика была в одном файле)
+inline bool mqttApplyTimerField(const String &fieldId, const String &value){
+  return ui.updateTimerField(fieldId, value);
+}
+
+inline uint16_t mqttTimerOnMinutes(const String &id){
+  return ui.timer(id).on;
+}
+
+inline uint16_t mqttTimerOffMinutes(const String &id){
+  return ui.timer(id).off;
+}
+
+inline void mqttApplyDaysSelect(const String &value){
+  DaysSelect = value;
+  syncCleanDaysFromSelection();
+  saveValue<String>("DaysSelect", DaysSelect);
+}
 
 
 inline void publishMqttStateString(const char* topic, const String &value); // forward declaration
@@ -91,6 +143,104 @@ inline void handleMqttCommandMessage(char* topic, byte* payload, unsigned int le
     publishMqttStateBool("home/esp32/Power_Filtr", Power_Filtr); // публикация
     return;
   }
+
+  if(topicStr == "home/esp32/Filtr_Time1/set"){
+    Filtr_Time1 = mqttPayloadIsOn(message); // обновление состояния
+    saveValue<int>("Filtr_Time1", Filtr_Time1 ? 1 : 0); // сохранение
+    publishMqttStateBool("home/esp32/Filtr_Time1", Filtr_Time1); // публикация
+    return;
+  }
+
+  if(topicStr == "home/esp32/Filtr_Time2/set"){
+    Filtr_Time2 = mqttPayloadIsOn(message); // обновление состояния
+    saveValue<int>("Filtr_Time2", Filtr_Time2 ? 1 : 0); // сохранение
+    publishMqttStateBool("home/esp32/Filtr_Time2", Filtr_Time2); // публикация
+    return;
+  }
+
+  if(topicStr == "home/esp32/Filtr_Time3/set"){
+    Filtr_Time3 = mqttPayloadIsOn(message); // обновление состояния
+    saveValue<int>("Filtr_Time3", Filtr_Time3 ? 1 : 0); // сохранение
+    publishMqttStateBool("home/esp32/Filtr_Time3", Filtr_Time3); // публикация
+    return;
+  }
+
+  if(topicStr == "home/esp32/Power_Clean/set"){
+    Power_Clean = mqttPayloadIsOn(message); // обновление состояния
+    saveValue<int>("Power_Clean", Power_Clean ? 1 : 0); // сохранение
+    publishMqttStateBool("home/esp32/Power_Clean", Power_Clean); // публикация
+    return;
+  }
+
+  if(topicStr == "home/esp32/Clean_Time1/set"){
+    Clean_Time1 = mqttPayloadIsOn(message); // обновление состояния
+    saveValue<int>("Clean_Time1", Clean_Time1 ? 1 : 0); // сохранение
+    publishMqttStateBool("home/esp32/Clean_Time1", Clean_Time1); // публикация
+    return;
+  }
+
+  if(topicStr == "home/esp32/DaysSelect/set"){
+    mqttApplyDaysSelect(message); // обновление строки дней
+    publishMqttStateString("home/esp32/DaysSelect", DaysSelect); // публикация
+    return;
+  }
+
+  if(topicStr == "home/esp32/FiltrTimer1_ON/set"){
+    if(mqttApplyTimerField("FiltrTimer1_ON", message)){
+      publishMqttStateString("home/esp32/FiltrTimer1_ON", formatMinutesToTime(mqttTimerOnMinutes("FiltrTimer1")));
+    }
+    return;
+  }
+
+  if(topicStr == "home/esp32/FiltrTimer1_OFF/set"){
+    if(mqttApplyTimerField("FiltrTimer1_OFF", message)){
+      publishMqttStateString("home/esp32/FiltrTimer1_OFF", formatMinutesToTime(mqttTimerOffMinutes("FiltrTimer1")));
+    }
+    return;
+  }
+
+  if(topicStr == "home/esp32/FiltrTimer2_ON/set"){
+    if(mqttApplyTimerField("FiltrTimer2_ON", message)){
+      publishMqttStateString("home/esp32/FiltrTimer2_ON", formatMinutesToTime(mqttTimerOnMinutes("FiltrTimer2")));
+    }
+    return;
+  }
+
+  if(topicStr == "home/esp32/FiltrTimer2_OFF/set"){
+    if(mqttApplyTimerField("FiltrTimer2_OFF", message)){
+      publishMqttStateString("home/esp32/FiltrTimer2_OFF", formatMinutesToTime(mqttTimerOffMinutes("FiltrTimer2")));
+    }
+    return;
+  }
+
+  if(topicStr == "home/esp32/FiltrTimer3_ON/set"){
+    if(mqttApplyTimerField("FiltrTimer3_ON", message)){
+      publishMqttStateString("home/esp32/FiltrTimer3_ON", formatMinutesToTime(mqttTimerOnMinutes("FiltrTimer3")));
+    }
+    return;
+  }
+
+  if(topicStr == "home/esp32/FiltrTimer3_OFF/set"){
+    if(mqttApplyTimerField("FiltrTimer3_OFF", message)){
+      publishMqttStateString("home/esp32/FiltrTimer3_OFF", formatMinutesToTime(mqttTimerOffMinutes("FiltrTimer3")));
+    }
+    return;
+  }
+
+  if(topicStr == "home/esp32/CleanTimer1_ON/set"){
+    if(mqttApplyTimerField("CleanTimer1_ON", message)){
+      publishMqttStateString("home/esp32/CleanTimer1_ON", formatMinutesToTime(mqttTimerOnMinutes("CleanTimer1")));
+    }
+    return;
+  }
+
+  if(topicStr == "home/esp32/CleanTimer1_OFF/set"){
+    if(mqttApplyTimerField("CleanTimer1_OFF", message)){
+      publishMqttStateString("home/esp32/CleanTimer1_OFF", formatMinutesToTime(mqttTimerOffMinutes("CleanTimer1")));
+    }
+    return;
+  }
+
 
   if(topicStr == "home/esp32/Pow_Ul_light/set"){
     Pow_Ul_light = mqttPayloadIsOn(message); // обновление состояния
@@ -130,7 +280,7 @@ inline void handleMqttCommandMessage(char* topic, byte* payload, unsigned int le
   }
 }
 
-
+#if 0 // MQTT Discovery отключен (слишком много кода и не нужен)
 inline String mqttDiscoveryDeviceId(){ // идентификатор устройства для Discovery
   String id = WiFi.macAddress(); // MAC-адрес
   id.replace(":", ""); // удаление двоеточий
@@ -306,6 +456,7 @@ if(mqttDiscoveryStage == DISCOVERY_MAIN_ENTITIES){
     }
   }
 }
+#endif
 
 inline void publishMqttStateString(const char* topic, const String &value){ // публикация строкового состояния
   mqttClient.publish(topic, value.c_str()); // публикация значения (retain не используется)
@@ -378,17 +529,64 @@ inline void saveMqttSettings(){ // сохранение настроек MQTT
 }
 
 inline void configureMqttServer(){ // настройка сервера MQTT
-  mqttClient.setServer(mqttHost.c_str(), mqttPort); // установка host и port
+ if(mqttResolvedHostName != mqttHost){
+    mqttResolvedHostName = mqttHost; // обновление хоста
+    mqttHasResolvedIp = false; // сброс IP
+    mqttLastResolveAttempt = 0; // сброс таймера резолва
+  }
+  if(!mqttHasResolvedIp){
+    IPAddress ip;
+    if(ip.fromString(mqttHost)){
+      mqttResolvedIp = ip; // фиксируем IP
+      mqttHasResolvedIp = true;
+    }
+  }
+  if(mqttHasResolvedIp){
+    mqttClient.setServer(mqttResolvedIp, mqttPort); // установка IP и port
+  } else {
+    mqttClient.setServer(mqttHost.c_str(), mqttPort); // установка host и port
+  }
   mqttClient.setCallback(handleMqttCommandMessage); // обработчик входящих команд
+mqttClient.setSocketTimeout(2); // быстрый таймаут сетевых операций
+  mqttClient.setKeepAlive(30); // keep-alive для снижения задержек
+}
+
+inline bool resolveMqttHost(){ // резолв MQTT хоста без блокировки
+  if(mqttHost.length() == 0) return false; // пустой host
+  if(mqttHasResolvedIp && mqttResolvedHostName == mqttHost) return true; // уже есть IP
+  IPAddress ip;
+  if(ip.fromString(mqttHost)){
+    mqttResolvedIp = ip;
+    mqttHasResolvedIp = true;
+    mqttResolvedHostName = mqttHost;
+    return true;
+  }
+  const unsigned long now = millis();
+  if(now - mqttLastResolveAttempt < mqttResolveInterval){
+    return mqttHasResolvedIp; // ждём следующего окна резолва
+  }
+  mqttLastResolveAttempt = now;
+  if(WiFi.status() != WL_CONNECTED) return mqttHasResolvedIp; // нет Wi-Fi
+  if(WiFi.hostByName(mqttHost.c_str(), ip)){
+    mqttResolvedIp = ip;
+    mqttHasResolvedIp = true;
+    mqttResolvedHostName = mqttHost;
+    return true;
+  }
+  return mqttHasResolvedIp; // используем предыдущий IP если был
 }
 
 inline void connectMqtt(){ // подключение к MQTT
   if(!mqttEnabled) return; // выход если MQTT выключен
   if(mqttHost.length() == 0) return; // выход если host пустой
   if(WiFi.status() != WL_CONNECTED) return; // выход если нет Wi-Fi
+if(!resolveMqttHost()) return; // хост не резолвится
+  const unsigned long now = millis(); // текущее время
+  if(now - mqttLastConnectAttempt < mqttConnectInterval) return; // защита от частых попыток
+  mqttLastConnectAttempt = now; // фиксация попытки подключения
 
   if(!mqttClient.connected()){ // если не подключены
-   String clientId = mqttDiscoveryDeviceId(); // уникальный clientId
+    String clientId = "espdash-" + WiFi.macAddress(); // уникальный clientId
 bool connected = mqttClient.connect( // подключение с логином и LWT
       clientId.c_str(),
       mqttUsername.c_str(),
@@ -402,14 +600,30 @@ bool connected = mqttClient.connect( // подключение с логином
     if(connected){ // если подключение успешно
       mqttIsConnected = true; // обновление флага
        publishMqttAvailability("online", true); // публикация доступности
- 
+ #if 0 // MQTT Discovery отключен
       mqttDiscoveryStage = DISCOVERY_NONE; // сброс этапа discovery
       mqttDiscoveryIndex = 0; // сброс индекса
       mqttDiscoveryLastAttempt = 0; // сброс таймера
             mqttDiscoveryPending = true; // публикация MQTT Discovery после первого loop
       publishHomeAssistantDiscovery(); // попытка публикации сразу после подключения
+      #endif
+
       mqttClient.subscribe("home/esp32/tempSet", 0); // подписка на топик
       mqttClient.subscribe("home/esp32/Power_Filtr/set", 0); // команда фильтра
+      mqttClient.subscribe("home/esp32/Filtr_Time1/set", 0); // таймер фильтрации №1
+      mqttClient.subscribe("home/esp32/Filtr_Time2/set", 0); // таймер фильтрации №2
+      mqttClient.subscribe("home/esp32/Filtr_Time3/set", 0); // таймер фильтрации №3
+      mqttClient.subscribe("home/esp32/Power_Clean/set", 0); // промывка фильтра
+      mqttClient.subscribe("home/esp32/Clean_Time1/set", 0); // таймер промывки
+      mqttClient.subscribe("home/esp32/DaysSelect/set", 0); // дни промывки
+      mqttClient.subscribe("home/esp32/FiltrTimer1_ON/set", 0); // время фильтрации №1 ON
+      mqttClient.subscribe("home/esp32/FiltrTimer1_OFF/set", 0); // время фильтрации №1 OFF
+      mqttClient.subscribe("home/esp32/FiltrTimer2_ON/set", 0); // время фильтрации №2 ON
+      mqttClient.subscribe("home/esp32/FiltrTimer2_OFF/set", 0); // время фильтрации №2 OFF
+      mqttClient.subscribe("home/esp32/FiltrTimer3_ON/set", 0); // время фильтрации №3 ON
+      mqttClient.subscribe("home/esp32/FiltrTimer3_OFF/set", 0); // время фильтрации №3 OFF
+      mqttClient.subscribe("home/esp32/CleanTimer1_ON/set", 0); // время промывки ON
+      mqttClient.subscribe("home/esp32/CleanTimer1_OFF/set", 0); // время промывки OFF
       mqttClient.subscribe("home/esp32/Pow_Ul_light/set", 0); // команда освещения
       mqttClient.subscribe("home/esp32/Activation_Heat/set", 0); // команда нагрева
       mqttClient.subscribe("home/esp32/SetLamp/set", 0); // команда режима лампы
@@ -427,9 +641,14 @@ inline void stopMqttService(){ // остановка MQTT
   mqttClient.disconnect(); // отключение от брокера
   mqttIsConnected = false; // сброс флага подключения
   mqttLastPublish = 0; // сброс таймера публикаций
-    mqttDiscoveryPending = false; // сброс discovery
+  mqttLastConnectAttempt = 0; // сброс таймера подключений
+  mqttLastResolveAttempt = 0; // сброс таймера резолва
+
+  #if 0 // MQTT Discovery отключен
+  mqttDiscoveryPending = false; // сброс discovery
   mqttDiscoveryStage = DISCOVERY_NONE; // сброс этапа
   mqttDiscoveryIndex = 0; // сброс индекса
+  #endif
 }
 
 inline void applyMqttState(){ // применение состояния MQTT
@@ -451,7 +670,10 @@ inline void handleMqttLoop(){ // основной цикл MQTT
   }
 
   mqttClient.loop(); // обработка MQTT
+
+  #if 0 // MQTT Discovery отключен
     if(mqttDiscoveryPending) publishHomeAssistantDiscovery(); // публикация после первого loop
+#endif
 
   unsigned long now = millis(); // текущее время
   if(now - mqttLastPublish >= mqttPublishInterval){ // проверка интервала
@@ -475,6 +697,20 @@ inline void handleMqttLoop(){ // основной цикл MQTT
       publishMqttStateBool("home/esp32/Power_Topping_State", Power_Topping_State);
 
       publishMqttStateBool("home/esp32/Power_Filtr", Power_Filtr);
+      publishMqttStateBool("home/esp32/Filtr_Time1", Filtr_Time1);
+      publishMqttStateBool("home/esp32/Filtr_Time2", Filtr_Time2);
+      publishMqttStateBool("home/esp32/Filtr_Time3", Filtr_Time3);
+      publishMqttStateBool("home/esp32/Power_Clean", Power_Clean);
+      publishMqttStateBool("home/esp32/Clean_Time1", Clean_Time1);
+      publishMqttStateString("home/esp32/DaysSelect", DaysSelect);
+      publishMqttStateString("home/esp32/FiltrTimer1_ON", formatMinutesToTime(mqttTimerOnMinutes("FiltrTimer1")));
+      publishMqttStateString("home/esp32/FiltrTimer1_OFF", formatMinutesToTime(mqttTimerOffMinutes("FiltrTimer1")));
+      publishMqttStateString("home/esp32/FiltrTimer2_ON", formatMinutesToTime(mqttTimerOnMinutes("FiltrTimer2")));
+      publishMqttStateString("home/esp32/FiltrTimer2_OFF", formatMinutesToTime(mqttTimerOffMinutes("FiltrTimer2")));
+      publishMqttStateString("home/esp32/FiltrTimer3_ON", formatMinutesToTime(mqttTimerOnMinutes("FiltrTimer3")));
+      publishMqttStateString("home/esp32/FiltrTimer3_OFF", formatMinutesToTime(mqttTimerOffMinutes("FiltrTimer3")));
+      publishMqttStateString("home/esp32/CleanTimer1_ON", formatMinutesToTime(mqttTimerOnMinutes("CleanTimer1")));
+      publishMqttStateString("home/esp32/CleanTimer1_OFF", formatMinutesToTime(mqttTimerOffMinutes("CleanTimer1")));
       publishMqttStateBool("home/esp32/Pow_Ul_light", Pow_Ul_light);
       publishMqttStateBool("home/esp32/Activation_Heat", Activation_Heat);
 

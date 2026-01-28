@@ -17,7 +17,6 @@
 #include "graph.h"               // Пользовательские графики (кастомные)
 #include "fs_utils.h"            // Вспомогательные функции для работы с файловой системой
 #include "wifi_manager.h"                // Логика Wi-Fi и хранение параметров
-#include "settings_MQTT.h"       // Настройки и работа с MQTT
 #include <ArduinoJson.h>
 
 using std::vector;              // Используем vector без указания std:: каждый раз
@@ -380,6 +379,9 @@ private:
 };
 
 inline UIRegistry ui;
+
+#include "settings_MQTT.h"       // Настройки и работа с MQTT (после UIRegistry)
+
 
 inline void noopTimerCallback(uint16_t onMinutes, uint16_t offMinutes){
   (void)onMinutes; // Подавление предупреждения о неиспользуемом параметре
