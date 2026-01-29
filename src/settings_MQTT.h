@@ -548,7 +548,11 @@ inline void configureMqttServer(){ // настройка сервера MQTT
     mqttClient.setServer(mqttHost.c_str(), mqttPort); // установка host и port
   }
   mqttClient.setCallback(handleMqttCommandMessage); // обработчик входящих команд
-mqttClient.setSocketTimeout(2); // быстрый таймаут сетевых операций
+  mqttClient.setBufferSize(1024); // увеличиваем буфер для крупных MQTT Discovery payload
+if(!mqttClient.setBufferSize(512)){ // увеличиваем буфер, но не ломаем MQTT при нехватке памяти
+    mqttClient.setBufferSize(256); // откат к дефолту при ошибке
+  }
+  mqttClient.setSocketTimeout(2); // быстрый таймаут сетевых операций
   mqttClient.setKeepAlive(30); // keep-alive для снижения задержек
 }
 
