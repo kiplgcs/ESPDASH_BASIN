@@ -64,11 +64,31 @@ extern float DS1; // температура воды
 extern float PH; // pH воды
 extern float ppmCl; // уровень хлора
 extern int corrected_ORP_Eh_mV; // ORP, мВ
+extern String OverlayPoolTemp; // температура воды (оверлей)
+extern String OverlayHeaterTemp; // температура после нагревателя (оверлей)
+extern String OverlayLevelUpper; // верхний уровень (оверлей)
+extern String OverlayLevelLower; // нижний уровень (оверлей)
+extern String OverlayPh; // pH (оверлей)
+extern String OverlayChlorine; // хлор (оверлей)
 extern String OverlayFilterState; // состояние фильтрации (строка)
+extern String InfoString2; // строка статуса лампы
+extern String InfoStringDIN; // строка статуса DIN
+extern String ThemeColor; // цвет темы
+extern int MotorSpeedSetting; // скорость мотора
+extern int RangeMin; // минимум диапазона
+extern int RangeMax; // максимум диапазона
+extern int IntInput; // целочисленный ввод
+extern float FloatInput; // ввод float
+extern String Timer1; // время таймера
+extern String Comment; // комментарий
+extern int RandomVal; // случайное значение
+extern int button1; // кнопка 1
+extern int button2; // кнопка 2
 extern bool Power_H2O2; // состояние насоса NaOCl
 extern bool Power_ACO; // состояние насоса ACO
 extern bool Power_Heat; // состояние нагрева
 extern bool Power_Topping_State; // состояние соленоида долива
+extern bool Power_Topping; // ручной долив
 extern bool Power_Filtr; // ручная фильтрация
 extern bool Filtr_Time1; // таймер фильтрации №1
 extern bool Filtr_Time2; // таймер фильтрации №2
@@ -76,13 +96,55 @@ extern bool Filtr_Time3; // таймер фильтрации №3
 extern bool Power_Clean; // промывка фильтра
 extern bool Clean_Time1; // таймер промывки
 extern bool Pow_Ul_light; // ручное освещение
+extern bool Ul_light_Time; // таймер уличного освещения
 extern bool Activation_Heat; // управление нагревом
+extern bool Activation_Water_Level; // контроль уровня воды
+extern bool WaterLevelSensorUpper; // датчик верхнего уровня
+extern bool WaterLevelSensorLower; // датчик нижнего уровня
+extern float PH_setting; // уставка pH
+extern bool PH_Control_ACO; // контроль pH ACO
+extern int ACO_Work; // период дозирования ACO
+extern float PH1; // нижняя граница pH
+extern float PH2; // верхняя граница pH
+extern float PH1_CAL; // калибровка pH1
+extern float PH2_CAL; // калибровка pH2
+extern float Temper_Reference; // температура референса
+extern float Temper_PH; // температура компенсации pH
+extern int analogValuePH_Comp; // значение АЦП PH
+extern bool NaOCl_H2O2_Control; // контроль хлора
+extern int ORP_setting; // уставка ORP
+extern int H2O2_Work; // период дозирования NaOCl
+extern int CalRastvor256mV; // калибровочный раствор
+extern int Calibration_ORP_mV; // калибровочный коэффициент ORP
+extern int Lumen_Ul; // освещенность на улице
+extern bool Pow_WS2815; // RGB лента (ручная)
+extern bool WS2815_Time1; // таймер RGB
+extern String LEDColor; // цвет RGB
+extern String LedColorMode; // режим цвета
+extern int LedBrightness; // яркость
+extern String LedPattern; // режим подсветки
+extern int LedAutoplayDuration; // период автосмены
+extern bool LedAutoplay; // автосмена
+extern String LedColorOrder; // порядок цветов
+extern int LampTimerON; // таймер лампы ON
+extern int LampTimerOFF; // таймер лампы OFF
+extern int RgbTimerON; // таймер RGB ON
+extern int RgbTimerOFF; // таймер RGB OFF
+extern int UlLightTimerON; // таймер уличного освещения ON
+extern int UlLightTimerOFF; // таймер уличного освещения OFF
+extern int Sider_heat; // уставка нагрева
+extern bool RoomTemper; // контроль температуры в помещении
+extern float RoomTempOn; // граница включения отопления
+extern float RoomTempOff; // граница выключения отопления
+extern bool Power_Warm_floor_heating; // обогрев пола
 extern String SetLamp; // режим лампы
 extern String SetRGB; // режим RGB
 extern String DaysSelect; // выбранные дни промывки
 class UIRegistry; // forward declaration
 extern UIRegistry ui; // доступ к UI-реестру таймеров
 void syncCleanDaysFromSelection(); // синхронизация дней промывки
+String uiValueForId(const String &id); // получение значения UI по id
+bool uiApplyValueForId(const String &id, const String &value); // применение значения UI по id
 
 String formatMinutesToTime(uint16_t minutes); // форматирование минут в HH:MM
 bool mqttApplyTimerField(const String &fieldId, const String &value); // применить значение таймера
@@ -107,6 +169,42 @@ inline void mqttApplyDaysSelect(const String &value){
   DaysSelect = value;
   syncCleanDaysFromSelection();
   saveValue<String>("DaysSelect", DaysSelect);
+}
+
+inline bool mqttApplyDualRangeInt(const String &payload, int &minRef, int &maxRef,
+                                  const char* minKey, const char* maxKey){
+  int sep = payload.indexOf('-');
+  if(sep < 0) return false;
+  int nextMin = payload.substring(0, sep).toInt();
+  int nextMax = payload.substring(sep + 1).toInt();
+  if(nextMin > nextMax){
+    int temp = nextMin;
+    nextMin = nextMax;
+    nextMax = temp;
+  }
+  minRef = nextMin;
+  maxRef = nextMax;
+  saveValue<int>(minKey, minRef);
+  saveValue<int>(maxKey, maxRef);
+  return true;
+}
+
+inline bool mqttApplyDualRangeFloat(const String &payload, float &minRef, float &maxRef,
+                                    const char* minKey, const char* maxKey){
+  int sep = payload.indexOf('-');
+  if(sep < 0) return false;
+  float nextMin = payload.substring(0, sep).toFloat();
+  float nextMax = payload.substring(sep + 1).toFloat();
+  if(nextMin > nextMax){
+    float temp = nextMin;
+    nextMin = nextMax;
+    nextMax = temp;
+  }
+  minRef = nextMin;
+  maxRef = nextMax;
+  saveValue<float>(minKey, minRef);
+  saveValue<float>(maxKey, maxRef);
+  return true;
 }
 
 
@@ -186,6 +284,28 @@ inline void handleMqttCommandMessage(char* topic, byte* payload, unsigned int le
     return;
   }
 
+  if(topicStr == "home/esp32/RangeSlider/set"){
+    if(mqttApplyDualRangeInt(message, RangeMin, RangeMax, "RangeMin", "RangeMax")){
+      publishMqttStateString("home/esp32/RangeSlider", String(RangeMin) + "-" + String(RangeMax));
+    }
+    return;
+  }
+
+  if(topicStr == "home/esp32/RoomTempRange/set"){
+    if(mqttApplyDualRangeFloat(message, RoomTempOn, RoomTempOff, "RoomTempOn", "RoomTempOff")){
+      publishMqttStateString("home/esp32/RoomTempRange", String(RoomTempOn, 1) + "-" + String(RoomTempOff, 1));
+    }
+    return;
+  }
+
+  if(topicStr == "home/esp32/Float_PH_Slider/set"){
+    if(mqttApplyDualRangeFloat(message, PH1, PH2, "PH1_MIN", "PH2_MAX")){
+      publishMqttStateString("home/esp32/Float_PH_Slider", String(PH1, 2) + "-" + String(PH2, 2));
+    }
+    return;
+  }
+
+
   if(topicStr == "home/esp32/FiltrTimer1_ON/set"){
     if(mqttApplyTimerField("FiltrTimer1_ON", message)){
       publishMqttStateString("home/esp32/FiltrTimer1_ON", formatMinutesToTime(mqttTimerOnMinutes("FiltrTimer1")));
@@ -242,6 +362,47 @@ inline void handleMqttCommandMessage(char* topic, byte* payload, unsigned int le
     return;
   }
 
+ if(topicStr == "home/esp32/LampTimer_ON/set"){
+    if(mqttApplyTimerField("LampTimer_ON", message)){
+      publishMqttStateString("home/esp32/LampTimer_ON", formatMinutesToTime(mqttTimerOnMinutes("LampTimer")));
+    }
+    return;
+  }
+
+  if(topicStr == "home/esp32/LampTimer_OFF/set"){
+    if(mqttApplyTimerField("LampTimer_OFF", message)){
+      publishMqttStateString("home/esp32/LampTimer_OFF", formatMinutesToTime(mqttTimerOffMinutes("LampTimer")));
+    }
+    return;
+  }
+
+  if(topicStr == "home/esp32/RgbTimer_ON/set"){
+    if(mqttApplyTimerField("RgbTimer_ON", message)){
+      publishMqttStateString("home/esp32/RgbTimer_ON", formatMinutesToTime(mqttTimerOnMinutes("RgbTimer")));
+    }
+    return;
+  }
+
+  if(topicStr == "home/esp32/RgbTimer_OFF/set"){
+    if(mqttApplyTimerField("RgbTimer_OFF", message)){
+      publishMqttStateString("home/esp32/RgbTimer_OFF", formatMinutesToTime(mqttTimerOffMinutes("RgbTimer")));
+    }
+    return;
+  }
+
+  if(topicStr == "home/esp32/UlLightTimer_ON/set"){
+    if(mqttApplyTimerField("UlLightTimer_ON", message)){
+      publishMqttStateString("home/esp32/UlLightTimer_ON", formatMinutesToTime(mqttTimerOnMinutes("UlLightTimer")));
+    }
+    return;
+  }
+
+  if(topicStr == "home/esp32/UlLightTimer_OFF/set"){
+    if(mqttApplyTimerField("UlLightTimer_OFF", message)){
+      publishMqttStateString("home/esp32/UlLightTimer_OFF", formatMinutesToTime(mqttTimerOffMinutes("UlLightTimer")));
+    }
+    return;
+  }
 
   if(topicStr == "home/esp32/Pow_Ul_light/set"){
     Pow_Ul_light = mqttPayloadIsOn(message); // обновление состояния
@@ -277,6 +438,19 @@ inline void handleMqttCommandMessage(char* topic, byte* payload, unsigned int le
 
   if(topicStr == "home/esp32/button/restart/set"){
     ESP.restart(); // перезапуск
+    return;
+  }
+  
+  if(topicStr.startsWith("home/esp32/") && topicStr.endsWith("/set")){
+    const String basePrefix = "home/esp32/";
+    const size_t prefixLen = basePrefix.length();
+    const size_t suffixLen = 4; // "/set"
+    if(topicStr.length() > prefixLen + suffixLen){
+      String id = topicStr.substring(prefixLen, topicStr.length() - suffixLen);
+      if(uiApplyValueForId(id, message)){
+        publishMqttStateString((basePrefix + id).c_str(), uiValueForId(id));
+      }
+    }
     return;
   }
 }
@@ -394,7 +568,7 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
   const String deviceId = mqttDiscoveryDeviceId(); // id устройства
   const String deviceName = mqttDiscoveryDeviceName(); // имя устройства
 
-static const MqttDiscoveryEntity baseEntities[] = {
+  static const MqttDiscoveryEntity baseEntities[] = {
     {"sensor", "status", "ESP32 Uptime", "home/esp32/status", nullptr, "duration", "s", "measurement", "{{ value | replace('ESP32 uptime: ', '') | replace('s','') }}", nullptr, nullptr},
     {"sensor", "test", "ESP32 Test Sensor", "home/esp32/test", nullptr, nullptr, nullptr, "measurement", nullptr, nullptr, nullptr},
     {"sensor", "DS1", "Pool Water Temperature", "home/esp32/DS1", nullptr, "temperature", "°C", "measurement", nullptr, nullptr, nullptr},
@@ -402,20 +576,96 @@ static const MqttDiscoveryEntity baseEntities[] = {
     {"sensor", "PH", "Pool pH", "home/esp32/PH", nullptr, nullptr, "pH", "measurement", nullptr, nullptr, nullptr},
     {"sensor", "corrected_ORP_Eh_mV", "ORP", "home/esp32/corrected_ORP_Eh_mV", nullptr, nullptr, "mV", "measurement", nullptr, nullptr, nullptr},
     {"sensor", "ppmCl", "Free Chlorine", "home/esp32/ppmCl", nullptr, nullptr, "mg/L", "measurement", nullptr, nullptr, nullptr},
+     {"sensor", "OverlayPoolTemp", "Overlay Pool Temp", "home/esp32/OverlayPoolTemp", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"sensor", "OverlayHeaterTemp", "Overlay Heater Temp", "home/esp32/OverlayHeaterTemp", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"sensor", "OverlayLevelUpper", "Overlay Level Upper", "home/esp32/OverlayLevelUpper", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"sensor", "OverlayLevelLower", "Overlay Level Lower", "home/esp32/OverlayLevelLower", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"sensor", "OverlayPh", "Overlay pH", "home/esp32/OverlayPh", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"sensor", "OverlayChlorine", "Overlay Chlorine", "home/esp32/OverlayChlorine", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"sensor", "OverlayFilterState", "Filter State", "home/esp32/OverlayFilterState", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"sensor", "InfoString2", "Lamp Info", "home/esp32/InfoString2", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"sensor", "InfoStringDIN", "DIN State", "home/esp32/InfoStringDIN", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"sensor", "Lumen_Ul", "Outdoor Luminance", "home/esp32/Lumen_Ul", nullptr, nullptr, "%", "measurement", nullptr, nullptr, nullptr},
+    {"sensor", "RandomVal", "Random Number", "home/esp32/RandomVal", nullptr, nullptr, nullptr, "measurement", nullptr, nullptr, nullptr},
+    {"sensor", "analogValuePH", "PH ADC Value", "home/esp32/analogValuePH", nullptr, nullptr, nullptr, "measurement", nullptr, nullptr, nullptr},
     {"binary_sensor", "Power_H2O2", "NaOCl Pump State", "home/esp32/Power_H2O2", nullptr, "power", nullptr, nullptr, nullptr, "1", "0"},
     {"binary_sensor", "Power_ACO", "ACO Pump State", "home/esp32/Power_ACO", nullptr, "power", nullptr, nullptr, nullptr, "1", "0"},
     {"binary_sensor", "Power_Heat", "Heating State", "home/esp32/Power_Heat", nullptr, "power", nullptr, nullptr, nullptr, "1", "0"},
     {"binary_sensor", "Power_Topping_State", "Water Top Up State", "home/esp32/Power_Topping_State", nullptr, "power", nullptr, nullptr, nullptr, "1", "0"},
+    {"binary_sensor", "WaterLevelSensorUpper", "Water Level Upper", "home/esp32/WaterLevelSensorUpper", nullptr, "moisture", nullptr, nullptr, nullptr, "1", "0"},
+    {"binary_sensor", "WaterLevelSensorLower", "Water Level Lower", "home/esp32/WaterLevelSensorLower", nullptr, "moisture", nullptr, nullptr, nullptr, "1", "0"},
+    {"binary_sensor", "Power_Warm_floor_heating", "Floor Heating State", "home/esp32/Power_Warm_floor_heating", nullptr, "heat", nullptr, nullptr, nullptr, "1", "0"},
     {"switch", "Power_Filtr", "Pool Filter (Manual)", "home/esp32/Power_Filtr", "home/esp32/Power_Filtr/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"switch", "Filtr_Time1", "Filter Timer 1", "home/esp32/Filtr_Time1", "home/esp32/Filtr_Time1/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"switch", "Filtr_Time2", "Filter Timer 2", "home/esp32/Filtr_Time2", "home/esp32/Filtr_Time2/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"switch", "Filtr_Time3", "Filter Timer 3", "home/esp32/Filtr_Time3", "home/esp32/Filtr_Time3/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"switch", "Power_Clean", "Filter Backwash", "home/esp32/Power_Clean", "home/esp32/Power_Clean/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"switch", "Clean_Time1", "Backwash Timer", "home/esp32/Clean_Time1", "home/esp32/Clean_Time1/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"switch", "Pow_Ul_light", "Outdoor Light (Manual)", "home/esp32/Pow_Ul_light", "home/esp32/Pow_Ul_light/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"switch", "Ul_light_Time", "Outdoor Light Timer", "home/esp32/Ul_light_Time", "home/esp32/Ul_light_Time/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"switch", "Activation_Heat", "Heating Control", "home/esp32/Activation_Heat", "home/esp32/Activation_Heat/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+     {"switch", "Activation_Water_Level", "Water Level Control", "home/esp32/Activation_Water_Level", "home/esp32/Activation_Water_Level/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"switch", "Power_Topping", "Water Top Up Valve", "home/esp32/Power_Topping", "home/esp32/Power_Topping/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"switch", "WS2815_Time1", "RGB Timer", "home/esp32/WS2815_Time1", "home/esp32/WS2815_Time1/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"switch", "Pow_WS2815", "RGB Strip Power", "home/esp32/Pow_WS2815", "home/esp32/Pow_WS2815/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"switch", "PH_Control_ACO", "pH Control (ACO)", "home/esp32/PH_Control_ACO", "home/esp32/PH_Control_ACO/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"switch", "NaOCl_H2O2_Control", "Chlorine Control (NaOCl)", "home/esp32/NaOCl_H2O2_Control", "home/esp32/NaOCl_H2O2_Control/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"switch", "RoomTemper", "Room Temperature Control", "home/esp32/RoomTemper", "home/esp32/RoomTemper/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"switch", "button1", "UI Button 1", "home/esp32/button1", "home/esp32/button1/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"switch", "button2", "UI Button 2", "home/esp32/button2", "home/esp32/button2/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"switch", "Power_H2O2_Button", "NaOCl Manual Pump", "home/esp32/Power_H2O2_Button", "home/esp32/Power_H2O2_Button/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"switch", "Power_ACO_Button", "ACO Manual Pump", "home/esp32/Power_ACO_Button", "home/esp32/Power_ACO_Button/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"number", "MotorSpeed", "Motor Speed", "home/esp32/MotorSpeed", "home/esp32/MotorSpeed/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"number", "IntInput", "Integer Input", "home/esp32/IntInput", "home/esp32/IntInput/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"number", "FloatInput", "Float Input", "home/esp32/FloatInput", "home/esp32/FloatInput/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"number", "Sider_heat", "Heating Setpoint", "home/esp32/Sider_heat", "home/esp32/Sider_heat/set", nullptr, "°C", nullptr, nullptr, nullptr, nullptr},
+    {"number", "PH_setting", "pH Upper Limit", "home/esp32/PH_setting", "home/esp32/PH_setting/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"number", "ORP_setting", "ORP Lower Limit", "home/esp32/ORP_setting", "home/esp32/ORP_setting/set", nullptr, "mV", nullptr, nullptr, nullptr, nullptr},
+    {"number", "LedBrightness", "LED Brightness", "home/esp32/LedBrightness", "home/esp32/LedBrightness/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"number", "LedAutoplayDuration", "LED Autoplay Duration", "home/esp32/LedAutoplayDuration", "home/esp32/LedAutoplayDuration/set", nullptr, "s", nullptr, nullptr, nullptr, nullptr},
+    {"number", "PH1_CAL", "pH1 ADC", "home/esp32/PH1_CAL", "home/esp32/PH1_CAL/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"number", "PH2_CAL", "pH2 ADC", "home/esp32/PH2_CAL", "home/esp32/PH2_CAL/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"number", "Temper_Reference", "Reference Temperature", "home/esp32/Temper_Reference", "home/esp32/Temper_Reference/set", nullptr, "°C", nullptr, nullptr, nullptr, nullptr},
+    {"number", "Temper_PH", "pH Temperature", "home/esp32/Temper_PH", "home/esp32/Temper_PH/set", nullptr, "°C", nullptr, nullptr, nullptr, nullptr},
+    {"number", "CalRastvor256mV", "ORP Cal Solution", "home/esp32/CalRastvor256mV", "home/esp32/CalRastvor256mV/set", nullptr, "mV", nullptr, nullptr, nullptr, nullptr},
+    {"number", "Calibration_ORP_mV", "ORP Calibration", "home/esp32/Calibration_ORP_mV", "home/esp32/Calibration_ORP_mV/set", nullptr, "mV", nullptr, nullptr, nullptr, nullptr},
+    {"text", "Comment", "Comment", "home/esp32/Comment", "home/esp32/Comment/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"text", "ThemeColor", "Theme Color", "home/esp32/ThemeColor", "home/esp32/ThemeColor/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"text", "LEDColor", "LED Color", "home/esp32/LEDColor", "home/esp32/LEDColor/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"text", "DaysSelect", "Backwash Days", "home/esp32/DaysSelect", "home/esp32/DaysSelect/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"text", "RangeSlider", "Range Min-Max", "home/esp32/RangeSlider", "home/esp32/RangeSlider/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"text", "RoomTempRange", "Room Temp Range", "home/esp32/RoomTempRange", "home/esp32/RoomTempRange/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"text", "Float_PH_Slider", "pH Range", "home/esp32/Float_PH_Slider", "home/esp32/Float_PH_Slider/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"time", "Timer1", "Timer 1", "home/esp32/Timer1", "home/esp32/Timer1/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"time", "FiltrTimer1_ON", "Filter Timer 1 ON", "home/esp32/FiltrTimer1_ON", "home/esp32/FiltrTimer1_ON/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"time", "FiltrTimer1_OFF", "Filter Timer 1 OFF", "home/esp32/FiltrTimer1_OFF", "home/esp32/FiltrTimer1_OFF/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"time", "FiltrTimer2_ON", "Filter Timer 2 ON", "home/esp32/FiltrTimer2_ON", "home/esp32/FiltrTimer2_ON/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"time", "FiltrTimer2_OFF", "Filter Timer 2 OFF", "home/esp32/FiltrTimer2_OFF", "home/esp32/FiltrTimer2_OFF/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"time", "FiltrTimer3_ON", "Filter Timer 3 ON", "home/esp32/FiltrTimer3_ON", "home/esp32/FiltrTimer3_ON/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"time", "FiltrTimer3_OFF", "Filter Timer 3 OFF", "home/esp32/FiltrTimer3_OFF", "home/esp32/FiltrTimer3_OFF/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"time", "CleanTimer1_ON", "Backwash Timer ON", "home/esp32/CleanTimer1_ON", "home/esp32/CleanTimer1_ON/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"time", "CleanTimer1_OFF", "Backwash Timer OFF", "home/esp32/CleanTimer1_OFF", "home/esp32/CleanTimer1_OFF/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"time", "LampTimer_ON", "Lamp Timer ON", "home/esp32/LampTimer_ON", "home/esp32/LampTimer_ON/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"time", "LampTimer_OFF", "Lamp Timer OFF", "home/esp32/LampTimer_OFF", "home/esp32/LampTimer_OFF/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"time", "RgbTimer_ON", "RGB Timer ON", "home/esp32/RgbTimer_ON", "home/esp32/RgbTimer_ON/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"time", "RgbTimer_OFF", "RGB Timer OFF", "home/esp32/RgbTimer_OFF", "home/esp32/RgbTimer_OFF/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"time", "UlLightTimer_ON", "Outdoor Light Timer ON", "home/esp32/UlLightTimer_ON", "home/esp32/UlLightTimer_ON/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"time", "UlLightTimer_OFF", "Outdoor Light Timer OFF", "home/esp32/UlLightTimer_OFF", "home/esp32/UlLightTimer_OFF/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"button", "restart", "ESP32 Restart", nullptr, "home/esp32/button/restart/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr}
   };
 
   static const char* const selectOptions[] = {"off", "on", "auto", "timer"}; // варианты для select
+  static const char* const ledColorModeOptions[] = {"auto", "manual"};
+  static const char* const ledAutoplayOptions[] = {"1", "0"};
+  static const char* const ledPatternOptions[] = {
+    "rainbow", "pulse", "chase", "comet", "color_wipe", "theater_chase", "scanner", "sparkle",
+    "twinkle", "confetti", "waves", "breathe", "firefly", "ripple", "dots", "gradient",
+    "meteor", "juggle", "aurora", "candy", "twirl", "sparkle_trails", "neon_flow", "calm_sea"
+  };
+  static const char* const ledColorOrderOptions[] = {"GRB", "RGB", "GBR", "RBG", "BRG", "BGR"};
+  static const char* const dosingOptions[] = {"1", "2", "3", "4", "5", "6", "8", "9", "10", "11", "12", "13", "7"};
   const size_t baseCount = sizeof(baseEntities) / sizeof(baseEntities[0]); // количество base сущностей
-  const size_t totalCount = baseCount + 2; // +2 select
+  const size_t totalCount = baseCount + 8; // количество select сущностей
 
   if(mqttDiscoveryStage == DISCOVERY_NONE){
     mqttDiscoveryStage = DISCOVERY_TEST_SENSOR; // старт этапа
@@ -441,6 +691,18 @@ if(mqttDiscoveryStage == DISCOVERY_MAIN_ENTITIES){
         published = publishMqttDiscoverySelect("SetLamp", "Lamp Mode", "home/esp32/SetLamp", "home/esp32/SetLamp/set", selectOptions, 4, deviceId, deviceName);
       } else if(mqttDiscoveryIndex == baseCount + 1){
         published = publishMqttDiscoverySelect("SetRGB", "RGB Mode", "home/esp32/SetRGB", "home/esp32/SetRGB/set", selectOptions, 4, deviceId, deviceName);
+        } else if(mqttDiscoveryIndex == baseCount + 2){
+        published = publishMqttDiscoverySelect("LedColorMode", "LED Color Mode", "home/esp32/LedColorMode", "home/esp32/LedColorMode/set", ledColorModeOptions, 2, deviceId, deviceName);
+      } else if(mqttDiscoveryIndex == baseCount + 3){
+        published = publishMqttDiscoverySelect("LedPattern", "LED Pattern", "home/esp32/LedPattern", "home/esp32/LedPattern/set", ledPatternOptions, 24, deviceId, deviceName);
+      } else if(mqttDiscoveryIndex == baseCount + 4){
+        published = publishMqttDiscoverySelect("LedAutoplay", "LED Autoplay", "home/esp32/LedAutoplay", "home/esp32/LedAutoplay/set", ledAutoplayOptions, 2, deviceId, deviceName);
+      } else if(mqttDiscoveryIndex == baseCount + 5){
+        published = publishMqttDiscoverySelect("LedColorOrder", "LED Color Order", "home/esp32/LedColorOrder", "home/esp32/LedColorOrder/set", ledColorOrderOptions, 6, deviceId, deviceName);
+      } else if(mqttDiscoveryIndex == baseCount + 6){
+        published = publishMqttDiscoverySelect("ACO_Work", "ACO Dosing Period", "home/esp32/ACO_Work", "home/esp32/ACO_Work/set", dosingOptions, 13, deviceId, deviceName);
+      } else if(mqttDiscoveryIndex == baseCount + 7){
+        published = publishMqttDiscoverySelect("H2O2_Work", "NaOCl Dosing Period", "home/esp32/H2O2_Work", "home/esp32/H2O2_Work/set", dosingOptions, 13, deviceId, deviceName);
       }
 
       if(!published){
@@ -634,6 +896,7 @@ bool connected = mqttClient.connect( // подключение с логином
       mqttClient.subscribe("home/esp32/SetLamp/set", 0); // команда режима лампы
       mqttClient.subscribe("home/esp32/SetRGB/set", 0); // команда режима RGB
       mqttClient.subscribe("home/esp32/button/restart/set", 0); // команда перезапуска
+      mqttClient.subscribe("home/esp32/+/set", 0); // универсальная подписка на команды
     
     } else { // если не удалось подключиться
       mqttIsConnected = false; // сброс флага
@@ -694,12 +957,27 @@ inline void handleMqttLoop(){ // основной цикл MQTT
       publishMqttStateFloat("home/esp32/PH", PH);
       publishMqttStateInt("home/esp32/corrected_ORP_Eh_mV", corrected_ORP_Eh_mV);
       publishMqttStateFloat("home/esp32/ppmCl", ppmCl);
+      publishMqttStateString("home/esp32/OverlayPoolTemp", OverlayPoolTemp);
+      publishMqttStateString("home/esp32/OverlayHeaterTemp", OverlayHeaterTemp);
+      publishMqttStateString("home/esp32/OverlayLevelUpper", OverlayLevelUpper);
+      publishMqttStateString("home/esp32/OverlayLevelLower", OverlayLevelLower);
+      publishMqttStateString("home/esp32/OverlayPh", OverlayPh);
+      publishMqttStateString("home/esp32/OverlayChlorine", OverlayChlorine);
       publishMqttStateString("home/esp32/OverlayFilterState", OverlayFilterState);
+      publishMqttStateString("home/esp32/InfoString2", InfoString2);
+      publishMqttStateString("home/esp32/InfoStringDIN", InfoStringDIN);
+      publishMqttStateString("home/esp32/ThemeColor", ThemeColor);
+      publishMqttStateInt("home/esp32/Lumen_Ul", Lumen_Ul);
+      publishMqttStateInt("home/esp32/RandomVal", RandomVal);
+      publishMqttStateInt("home/esp32/analogValuePH", analogValuePH_Comp);
 
       publishMqttStateBool("home/esp32/Power_H2O2", Power_H2O2);
       publishMqttStateBool("home/esp32/Power_ACO", Power_ACO);
       publishMqttStateBool("home/esp32/Power_Heat", Power_Heat);
       publishMqttStateBool("home/esp32/Power_Topping_State", Power_Topping_State);
+      publishMqttStateBool("home/esp32/WaterLevelSensorUpper", WaterLevelSensorUpper);
+      publishMqttStateBool("home/esp32/WaterLevelSensorLower", WaterLevelSensorLower);
+      publishMqttStateBool("home/esp32/Power_Warm_floor_heating", Power_Warm_floor_heating);
 
       publishMqttStateBool("home/esp32/Power_Filtr", Power_Filtr);
       publishMqttStateBool("home/esp32/Filtr_Time1", Filtr_Time1);
@@ -707,6 +985,44 @@ inline void handleMqttLoop(){ // основной цикл MQTT
       publishMqttStateBool("home/esp32/Filtr_Time3", Filtr_Time3);
       publishMqttStateBool("home/esp32/Power_Clean", Power_Clean);
       publishMqttStateBool("home/esp32/Clean_Time1", Clean_Time1);
+       publishMqttStateBool("home/esp32/Pow_WS2815", Pow_WS2815);
+      publishMqttStateBool("home/esp32/WS2815_Time1", WS2815_Time1);
+      publishMqttStateBool("home/esp32/Activation_Water_Level", Activation_Water_Level);
+      publishMqttStateBool("home/esp32/Power_Topping", Power_Topping);
+      publishMqttStateBool("home/esp32/PH_Control_ACO", PH_Control_ACO);
+      publishMqttStateBool("home/esp32/NaOCl_H2O2_Control", NaOCl_H2O2_Control);
+      publishMqttStateBool("home/esp32/RoomTemper", RoomTemper);
+      publishMqttStateBool("home/esp32/Ul_light_Time", Ul_light_Time);
+      publishMqttStateInt("home/esp32/button1", button1);
+      publishMqttStateInt("home/esp32/button2", button2);
+      publishMqttStateString("home/esp32/Power_H2O2_Button", uiValueForId("Power_H2O2_Button"));
+      publishMqttStateString("home/esp32/Power_ACO_Button", uiValueForId("Power_ACO_Button"));
+      publishMqttStateInt("home/esp32/MotorSpeed", MotorSpeedSetting);
+      publishMqttStateInt("home/esp32/IntInput", IntInput);
+      publishMqttStateFloat("home/esp32/FloatInput", FloatInput);
+      publishMqttStateString("home/esp32/RangeSlider", String(RangeMin) + "-" + String(RangeMax));
+      publishMqttStateString("home/esp32/RoomTempRange", String(RoomTempOn, 1) + "-" + String(RoomTempOff, 1));
+      publishMqttStateString("home/esp32/Float_PH_Slider", String(PH1, 2) + "-" + String(PH2, 2));
+      publishMqttStateString("home/esp32/Timer1", Timer1);
+      publishMqttStateString("home/esp32/Comment", Comment);
+      publishMqttStateString("home/esp32/LEDColor", LEDColor);
+      publishMqttStateString("home/esp32/LedColorMode", LedColorMode);
+      publishMqttStateInt("home/esp32/LedBrightness", LedBrightness);
+      publishMqttStateString("home/esp32/LedPattern", LedPattern);
+      publishMqttStateInt("home/esp32/LedAutoplayDuration", LedAutoplayDuration);
+      publishMqttStateBool("home/esp32/LedAutoplay", LedAutoplay);
+      publishMqttStateString("home/esp32/LedColorOrder", LedColorOrder);
+      publishMqttStateInt("home/esp32/Sider_heat", Sider_heat);
+      publishMqttStateFloat("home/esp32/PH_setting", PH_setting);
+      publishMqttStateInt("home/esp32/ORP_setting", ORP_setting);
+      publishMqttStateInt("home/esp32/ACO_Work", ACO_Work);
+      publishMqttStateInt("home/esp32/H2O2_Work", H2O2_Work);
+      publishMqttStateFloat("home/esp32/PH1_CAL", PH1_CAL);
+      publishMqttStateFloat("home/esp32/PH2_CAL", PH2_CAL);
+      publishMqttStateFloat("home/esp32/Temper_Reference", Temper_Reference);
+      publishMqttStateFloat("home/esp32/Temper_PH", Temper_PH);
+      publishMqttStateInt("home/esp32/CalRastvor256mV", CalRastvor256mV);
+      publishMqttStateInt("home/esp32/Calibration_ORP_mV", Calibration_ORP_mV);
       publishMqttStateString("home/esp32/DaysSelect", DaysSelect);
       publishMqttStateString("home/esp32/FiltrTimer1_ON", formatMinutesToTime(mqttTimerOnMinutes("FiltrTimer1")));
       publishMqttStateString("home/esp32/FiltrTimer1_OFF", formatMinutesToTime(mqttTimerOffMinutes("FiltrTimer1")));
@@ -716,6 +1032,12 @@ inline void handleMqttLoop(){ // основной цикл MQTT
       publishMqttStateString("home/esp32/FiltrTimer3_OFF", formatMinutesToTime(mqttTimerOffMinutes("FiltrTimer3")));
       publishMqttStateString("home/esp32/CleanTimer1_ON", formatMinutesToTime(mqttTimerOnMinutes("CleanTimer1")));
       publishMqttStateString("home/esp32/CleanTimer1_OFF", formatMinutesToTime(mqttTimerOffMinutes("CleanTimer1")));
+      publishMqttStateString("home/esp32/LampTimer_ON", formatMinutesToTime(mqttTimerOnMinutes("LampTimer")));
+      publishMqttStateString("home/esp32/LampTimer_OFF", formatMinutesToTime(mqttTimerOffMinutes("LampTimer")));
+      publishMqttStateString("home/esp32/RgbTimer_ON", formatMinutesToTime(mqttTimerOnMinutes("RgbTimer")));
+      publishMqttStateString("home/esp32/RgbTimer_OFF", formatMinutesToTime(mqttTimerOffMinutes("RgbTimer")));
+      publishMqttStateString("home/esp32/UlLightTimer_ON", formatMinutesToTime(mqttTimerOnMinutes("UlLightTimer")));
+      publishMqttStateString("home/esp32/UlLightTimer_OFF", formatMinutesToTime(mqttTimerOffMinutes("UlLightTimer")));
       publishMqttStateBool("home/esp32/Pow_Ul_light", Pow_Ul_light);
       publishMqttStateBool("home/esp32/Activation_Heat", Activation_Heat);
 
