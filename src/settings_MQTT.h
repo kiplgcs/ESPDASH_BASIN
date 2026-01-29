@@ -30,6 +30,11 @@ inline bool mqttDiscoveryPending = false; // публикация после п�
 inline unsigned long mqttDiscoveryLastAttempt = 0; // время последней попытки discovery
 inline const unsigned long mqttDiscoveryInterval = 250; // интервал между пакетами discovery
 inline const uint8_t mqttDiscoveryBatchSize = 4; // максимум сущностей за loop
+inline const uint8_t mqttDiscoveryMaxRetries = 3; // максимум попыток публикации на сущность
+inline bool mqttDiscoveryFullDevicePublished = false; // полный device блок опубликован
+inline size_t mqttDiscoveryLastMaxPayload = 0; // максимум payload discovery
+inline size_t mqttDiscoveryRetryIndex = 0; // индекс повторной публикации
+inline uint8_t mqttDiscoveryRetryCount = 0; // число повторов на сущность
 #endif
 
 // inline void publishMqttAvailability(const char* payload, bool retain = true){ // публикация доступности
@@ -481,6 +486,25 @@ inline void publishDiscoveryDeviceBlock(JsonDocument &doc, const String &deviceI
   device["manufacturer"] = "Espressif"; // производитель
 }
 
+inline void publishDiscoveryDeviceBlockMinimal(JsonDocument &doc, const String &deviceId){ // минимальный блок device
+  JsonObject device = doc["device"].to<JsonObject>(); // объект устройства
+  JsonArray identifiers = device["identifiers"].to<JsonArray>(); // идентификаторы
+  identifiers.add(deviceId); // добавление id
+}
+
+struct MqttDiscoveryPublishResult {
+  bool published;
+  size_t payloadLength;
+  String topic;
+};
+
+inline bool mqttDiscoveryPayloadFits(const String &topic, size_t payloadLength){ // проверка размера
+  const size_t bufferSize = mqttClient.getBufferSize();
+  const size_t reserved = 12; // запас на заголовки
+  if(bufferSize <= reserved) return false;
+  return (topic.length() + payloadLength + reserved) <= bufferSize;
+}
+
 struct MqttDiscoveryEntity {
   const char* component;
   const char* id;
@@ -495,9 +519,10 @@ struct MqttDiscoveryEntity {
   const char* payloadOff;
 };
 
-inline bool publishMqttDiscoveryEntity(const MqttDiscoveryEntity &entity,
+inline MqttDiscoveryPublishResult publishMqttDiscoveryEntity(const MqttDiscoveryEntity &entity,
                                        const String &deviceId,
-                                       const String &deviceName){ // публикация сущности
+                                       const String &deviceName,
+                                       bool minimalDevice){ // публикация сущности
   JsonDocument doc; // JSON-документ
   const String uniqueId = deviceId + "_" + entity.id; // уникальный id
   const String topic = String(mqttDiscoveryPrefix) + "/" + entity.component + "/" + uniqueId + "/config"; // топик config
@@ -516,21 +541,32 @@ inline bool publishMqttDiscoveryEntity(const MqttDiscoveryEntity &entity,
   if(entity.payloadOn) doc["payload_on"] = entity.payloadOn; // payload_on
   if(entity.payloadOff) doc["payload_off"] = entity.payloadOff; // payload_off
 
-  publishDiscoveryDeviceBlock(doc, deviceId, deviceName); // блок device
+  if(minimalDevice){
+    publishDiscoveryDeviceBlockMinimal(doc, deviceId); // минимальный блок device
+  } else {
+  if(minimalDevice){
+    publishDiscoveryDeviceBlockMinimal(doc, deviceId); // минимальный блок device
+  } else {
+    publishDiscoveryDeviceBlock(doc, deviceId, deviceName); // блок device
+  }
+  }
 
   String payload; // строка JSON
   serializeJson(doc, payload); // сериализация JSON
-  return mqttClient.publish(topic.c_str(), payload.c_str(), true); // публикация config с retain
+  bool published = mqttClient.publish(topic.c_str(), payload.c_str(), true); // публикация config с retain
+  return {published, payload.length(), topic};
 }
 
-inline bool publishMqttDiscoverySelect(const char* id,
+inline MqttDiscoveryPublishResult publishMqttDiscoverySelect(const char* id,
                                        const char* name,
                                        const char* stateTopic,
                                        const char* commandTopic,
                                        const char* const* options,
                                        size_t optionsCount,
                                        const String &deviceId,
-                                       const String &deviceName){ // публикация select
+                                       const String &deviceName,
+                                       bool minimalDevice,
+                                       bool includeOptions){ // публикация select
   JsonDocument doc; // JSON-документ
   const String uniqueId = deviceId + "_" + id; // уникальный id
   const String topic = String(mqttDiscoveryPrefix) + "/select/" + uniqueId + "/config"; // топик config
@@ -542,16 +578,19 @@ inline bool publishMqttDiscoverySelect(const char* id,
   doc["payload_not_available"] = "offline"; // payload not available
   doc["state_topic"] = stateTopic; // state_topic
   doc["command_topic"] = commandTopic; // command_topic
-  JsonArray optionsArray = doc["options"].to<JsonArray>(); // options
-  for(size_t i = 0; i < optionsCount; ++i){
-    optionsArray.add(options[i]);
+  if(includeOptions){
+    JsonArray optionsArray = doc["options"].to<JsonArray>(); // options
+    for(size_t i = 0; i < optionsCount; ++i){
+      optionsArray.add(options[i]);
+    }
   }
 
   publishDiscoveryDeviceBlock(doc, deviceId, deviceName); // блок device
 
   String payload; // строка JSON
   serializeJson(doc, payload); // сериализация JSON
-  return mqttClient.publish(topic.c_str(), payload.c_str(), true); // публикация config с retain
+  bool published = mqttClient.publish(topic.c_str(), payload.c_str(), true); // публикация config с retain
+  return {published, payload.length(), topic};
 }
 
 inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discovery
@@ -673,10 +712,15 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
 
 if(mqttDiscoveryStage == DISCOVERY_TEST_SENSOR){
     const MqttDiscoveryEntity testSensor = {"sensor", "alive", "ESP32 Alive", "home/esp32/alive", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
-    if(publishMqttDiscoveryEntity(testSensor, deviceId, deviceName)){
+    MqttDiscoveryPublishResult result = publishMqttDiscoveryEntity(testSensor, deviceId, deviceName, !mqttDiscoveryFullDevicePublished);
+    if(result.published){
+      mqttDiscoveryFullDevicePublished = true;
+      mqttDiscoveryLastMaxPayload = max(mqttDiscoveryLastMaxPayload, result.payloadLength);
       mqttClient.publish("home/esp32/alive", "1", true); // якорный сенсор
       mqttDiscoveryStage = DISCOVERY_MAIN_ENTITIES; // переход к основным сущностям
       mqttDiscoveryIndex = 0; // сброс индекса
+      mqttDiscoveryRetryIndex = 0;
+      mqttDiscoveryRetryCount = 0;
     }
     return;
   }
@@ -685,30 +729,103 @@ if(mqttDiscoveryStage == DISCOVERY_MAIN_ENTITIES){
     uint8_t publishedCount = 0; // опубликовано в этом loop
     while(publishedCount < mqttDiscoveryBatchSize && mqttDiscoveryIndex < totalCount){
       bool published = false;
+      MqttDiscoveryPublishResult result = {false, 0, ""};
       if(mqttDiscoveryIndex < baseCount){
-        published = publishMqttDiscoveryEntity(baseEntities[mqttDiscoveryIndex], deviceId, deviceName);
+        result = publishMqttDiscoveryEntity(baseEntities[mqttDiscoveryIndex], deviceId, deviceName, true);
       } else if(mqttDiscoveryIndex == baseCount){
-        published = publishMqttDiscoverySelect("SetLamp", "Lamp Mode", "home/esp32/SetLamp", "home/esp32/SetLamp/set", selectOptions, 4, deviceId, deviceName);
+        result = publishMqttDiscoverySelect("SetLamp", "Lamp Mode", "home/esp32/SetLamp", "home/esp32/SetLamp/set", selectOptions, 4, deviceId, deviceName, true, true);
       } else if(mqttDiscoveryIndex == baseCount + 1){
-        published = publishMqttDiscoverySelect("SetRGB", "RGB Mode", "home/esp32/SetRGB", "home/esp32/SetRGB/set", selectOptions, 4, deviceId, deviceName);
+        result = publishMqttDiscoverySelect("SetRGB", "RGB Mode", "home/esp32/SetRGB", "home/esp32/SetRGB/set", selectOptions, 4, deviceId, deviceName, true, true);
         } else if(mqttDiscoveryIndex == baseCount + 2){
-        published = publishMqttDiscoverySelect("LedColorMode", "LED Color Mode", "home/esp32/LedColorMode", "home/esp32/LedColorMode/set", ledColorModeOptions, 2, deviceId, deviceName);
+        result = publishMqttDiscoverySelect("LedColorMode", "LED Color Mode", "home/esp32/LedColorMode", "home/esp32/LedColorMode/set", ledColorModeOptions, 2, deviceId, deviceName, true, true);
       } else if(mqttDiscoveryIndex == baseCount + 3){
-        published = publishMqttDiscoverySelect("LedPattern", "LED Pattern", "home/esp32/LedPattern", "home/esp32/LedPattern/set", ledPatternOptions, 24, deviceId, deviceName);
+        result = publishMqttDiscoverySelect("LedPattern", "LED Pattern", "home/esp32/LedPattern", "home/esp32/LedPattern/set", ledPatternOptions, 24, deviceId, deviceName, true, true);
       } else if(mqttDiscoveryIndex == baseCount + 4){
-        published = publishMqttDiscoverySelect("LedAutoplay", "LED Autoplay", "home/esp32/LedAutoplay", "home/esp32/LedAutoplay/set", ledAutoplayOptions, 2, deviceId, deviceName);
+        result = publishMqttDiscoverySelect("LedAutoplay", "LED Autoplay", "home/esp32/LedAutoplay", "home/esp32/LedAutoplay/set", ledAutoplayOptions, 2, deviceId, deviceName, true, true);
       } else if(mqttDiscoveryIndex == baseCount + 5){
-        published = publishMqttDiscoverySelect("LedColorOrder", "LED Color Order", "home/esp32/LedColorOrder", "home/esp32/LedColorOrder/set", ledColorOrderOptions, 6, deviceId, deviceName);
+        result = publishMqttDiscoverySelect("LedColorOrder", "LED Color Order", "home/esp32/LedColorOrder", "home/esp32/LedColorOrder/set", ledColorOrderOptions, 6, deviceId, deviceName, true, true);
       } else if(mqttDiscoveryIndex == baseCount + 6){
-        published = publishMqttDiscoverySelect("ACO_Work", "ACO Dosing Period", "home/esp32/ACO_Work", "home/esp32/ACO_Work/set", dosingOptions, 13, deviceId, deviceName);
+        result = publishMqttDiscoverySelect("ACO_Work", "ACO Dosing Period", "home/esp32/ACO_Work", "home/esp32/ACO_Work/set", dosingOptions, 13, deviceId, deviceName, true, true);
       } else if(mqttDiscoveryIndex == baseCount + 7){
-        published = publishMqttDiscoverySelect("H2O2_Work", "NaOCl Dosing Period", "home/esp32/H2O2_Work", "home/esp32/H2O2_Work/set", dosingOptions, 13, deviceId, deviceName);
+        result = publishMqttDiscoverySelect("H2O2_Work", "NaOCl Dosing Period", "home/esp32/H2O2_Work", "home/esp32/H2O2_Work/set", dosingOptions, 13, deviceId, deviceName, true, true);
       }
 
-      if(!published){
-        break; // повторим в следующем loop
+ if(!result.published){
+        if(mqttDiscoveryRetryIndex != mqttDiscoveryIndex){
+          mqttDiscoveryRetryIndex = mqttDiscoveryIndex;
+          mqttDiscoveryRetryCount = 0;
+        }
+        mqttDiscoveryRetryCount++;
+        Serial.printf("[MQTT] Discovery publish failed idx=%u retries=%u topic=%s payload=%u buffer=%u\n",
+                      static_cast<unsigned int>(mqttDiscoveryIndex),
+                      mqttDiscoveryRetryCount,
+                      result.topic.c_str(),
+                      static_cast<unsigned int>(result.payloadLength),
+                      static_cast<unsigned int>(mqttClient.getBufferSize()));
+        if(!mqttDiscoveryPayloadFits(result.topic, result.payloadLength)){
+          Serial.printf("[MQTT] Discovery payload oversized idx=%u topic=%s payload=%u buffer=%u\n",
+                        static_cast<unsigned int>(mqttDiscoveryIndex),
+                        result.topic.c_str(),
+                        static_cast<unsigned int>(result.payloadLength),
+                        static_cast<unsigned int>(mqttClient.getBufferSize()));
+        }
+
+        if(mqttDiscoveryRetryCount <= mqttDiscoveryMaxRetries){
+          if(mqttDiscoveryIndex >= baseCount){
+            const size_t selectIndex = mqttDiscoveryIndex - baseCount;
+            if(selectIndex <= 7){
+              const char* id = nullptr;
+              const char* name = nullptr;
+              const char* stateTopic = nullptr;
+              const char* commandTopic = nullptr;
+              const char* const* options = nullptr;
+              size_t optionsCount = 0;
+              if(selectIndex == 0){
+                id = "SetLamp"; name = "Lamp Mode"; stateTopic = "home/esp32/SetLamp"; commandTopic = "home/esp32/SetLamp/set"; options = selectOptions; optionsCount = 4;
+              } else if(selectIndex == 1){
+                id = "SetRGB"; name = "RGB Mode"; stateTopic = "home/esp32/SetRGB"; commandTopic = "home/esp32/SetRGB/set"; options = selectOptions; optionsCount = 4;
+              } else if(selectIndex == 2){
+                id = "LedColorMode"; name = "LED Color Mode"; stateTopic = "home/esp32/LedColorMode"; commandTopic = "home/esp32/LedColorMode/set"; options = ledColorModeOptions; optionsCount = 2;
+              } else if(selectIndex == 3){
+                id = "LedPattern"; name = "LED Pattern"; stateTopic = "home/esp32/LedPattern"; commandTopic = "home/esp32/LedPattern/set"; options = ledPatternOptions; optionsCount = 24;
+              } else if(selectIndex == 4){
+                id = "LedAutoplay"; name = "LED Autoplay"; stateTopic = "home/esp32/LedAutoplay"; commandTopic = "home/esp32/LedAutoplay/set"; options = ledAutoplayOptions; optionsCount = 2;
+              } else if(selectIndex == 5){
+                id = "LedColorOrder"; name = "LED Color Order"; stateTopic = "home/esp32/LedColorOrder"; commandTopic = "home/esp32/LedColorOrder/set"; options = ledColorOrderOptions; optionsCount = 6;
+              } else if(selectIndex == 6){
+                id = "ACO_Work"; name = "ACO Dosing Period"; stateTopic = "home/esp32/ACO_Work"; commandTopic = "home/esp32/ACO_Work/set"; options = dosingOptions; optionsCount = 13;
+              } else if(selectIndex == 7){
+                id = "H2O2_Work"; name = "NaOCl Dosing Period"; stateTopic = "home/esp32/H2O2_Work"; commandTopic = "home/esp32/H2O2_Work/set"; options = dosingOptions; optionsCount = 13;
+              }
+              if(id){
+                MqttDiscoveryPublishResult fallbackResult = publishMqttDiscoverySelect(id, name, stateTopic, commandTopic, options, optionsCount, deviceId, deviceName, true, false);
+                if(fallbackResult.published){
+                  Serial.printf("[MQTT] Discovery select fallback (no options) idx=%u topic=%s payload=%u\n",
+                                static_cast<unsigned int>(mqttDiscoveryIndex),
+                                fallbackResult.topic.c_str(),
+                                static_cast<unsigned int>(fallbackResult.payloadLength));
+                  mqttDiscoveryLastMaxPayload = max(mqttDiscoveryLastMaxPayload, fallbackResult.payloadLength);
+                  mqttDiscoveryRetryCount = 0;
+                  mqttDiscoveryIndex++;
+                  publishedCount++;
+                  continue;
+                }
+              }
+            }
+          }
+          break; // повторим в следующем loop
+        }
+        Serial.printf("[MQTT] Discovery skip idx=%u topic=%s payload=%u\n",
+                      static_cast<unsigned int>(mqttDiscoveryIndex),
+                      result.topic.c_str(),
+                      static_cast<unsigned int>(result.payloadLength));
+        mqttDiscoveryRetryCount = 0;
+        mqttDiscoveryIndex++;
+        publishedCount++;
+        continue;
       }
 
+      mqttDiscoveryLastMaxPayload = max(mqttDiscoveryLastMaxPayload, result.payloadLength);
       mqttDiscoveryIndex++;
       publishedCount++;
     }
@@ -716,6 +833,9 @@ if(mqttDiscoveryStage == DISCOVERY_MAIN_ENTITIES){
     if(mqttDiscoveryIndex >= totalCount){
       mqttDiscoveryStage = DISCOVERY_DONE; // завершено
       mqttDiscoveryPending = false; // сброс ожидания
+            Serial.printf("[MQTT] Discovery done. Max payload=%u buffer=%u\n",
+                    static_cast<unsigned int>(mqttDiscoveryLastMaxPayload),
+                    static_cast<unsigned int>(mqttClient.getBufferSize()));
     }
   }
 }
@@ -810,9 +930,8 @@ inline void configureMqttServer(){ // настройка сервера MQTT
     mqttClient.setServer(mqttHost.c_str(), mqttPort); // установка host и port
   }
   mqttClient.setCallback(handleMqttCommandMessage); // обработчик входящих команд
-  mqttClient.setBufferSize(1024); // увеличиваем буфер для крупных MQTT Discovery payload
-if(!mqttClient.setBufferSize(512)){ // увеличиваем буфер, но не ломаем MQTT при нехватке памяти
-    mqttClient.setBufferSize(256); // откат к дефолту при ошибке
+  if(!mqttClient.setBufferSize(4096)){ // увеличиваем буфер для крупных MQTT Discovery payload
+    mqttClient.setBufferSize(2048); // fallback, не ниже 2048
   }
   mqttClient.setSocketTimeout(2); // быстрый таймаут сетевых операций
   mqttClient.setKeepAlive(30); // keep-alive для снижения задержек
@@ -871,7 +990,11 @@ bool connected = mqttClient.connect( // подключение с логином
       mqttDiscoveryStage = DISCOVERY_NONE; // сброс этапа discovery
       mqttDiscoveryIndex = 0; // сброс индекса
       mqttDiscoveryLastAttempt = 0; // сброс таймера
-            mqttDiscoveryPending = true; // публикация MQTT Discovery после первого loop
+      mqttDiscoveryPending = true; // публикация MQTT Discovery после первого loop
+      mqttDiscoveryFullDevicePublished = false;
+      mqttDiscoveryLastMaxPayload = 0;
+      mqttDiscoveryRetryIndex = 0;
+      mqttDiscoveryRetryCount = 0;
       publishHomeAssistantDiscovery(); // попытка публикации сразу после подключения
       #endif
 
