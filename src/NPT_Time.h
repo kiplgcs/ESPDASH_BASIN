@@ -44,6 +44,13 @@ inline unsigned long baseEpochMillis = 0;       // millis() в момент ус
 inline bool baseEpochReady = false;             // Флаг, что базовое время валидно
 inline time_t lastSavedEpoch = 0;               // Последний epoch, сохраненный в NVS
 
+inline int normalizeGmtOffset(int offset) {
+  if (offset < -12) return -12;
+  if (offset > 14) return 14;
+  return offset;
+}
+
+
 bool isValidDateTime(int year, int month, int day, int hour, int minute, int second) {
   if (year < 2024 || year > 2040) return false;
   if (month < 1 || month > 12) return false;
@@ -294,10 +301,12 @@ if (checkInternetAvailability()) { //Если Интерент доступен
 
     int gmtOffsetNextion = myNex.readNumber("pageRTC.n5.val"); delay(50);
     if (gmtOffsetNextion != kNextionInvalidValue) {
-      Saved_gmtOffset_correct = gmtOffset_correct = gmtOffsetNextion;
+      gmtOffset_correct = normalizeGmtOffset(gmtOffsetNextion);
+      Saved_gmtOffset_correct = gmtOffset_correct;
+      saveValue<int>("gmtOffset", gmtOffset_correct);
     }
 
-    if(gmtOffset_correct <= 1 || gmtOffset_correct >= 10){gmtOffset_correct=3;}
+    gmtOffset_correct = normalizeGmtOffset(gmtOffset_correct);
 
     // NTPClient timeClient(ntpUDP, ntpServer, 3600*gmtOffset_correct, daylightOffset); //Для корректировки часового пояса, если вдруг другой часовой установлен
     NTPClient timeClient1(ntpUDP, ntpServer1, 3600 * gmtOffset_correct, daylightOffset);

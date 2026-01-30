@@ -17,6 +17,7 @@
 #include "graph.h"               // Пользовательские графики (кастомные)
 #include "fs_utils.h"            // Вспомогательные функции для работы с файловой системой
 #include "wifi_manager.h"                // Логика Wi-Fi и хранение параметров
+#include "NPT_Time.h"            // Настройка времени и часового пояса
 #include <ArduinoJson.h>
 
 using std::vector;              // Используем vector без указания std:: каждый раз
@@ -698,6 +699,15 @@ private:
       ".card:has(#RandomVal) label,.card:has(#DaysSelect) label{" // Заголовки карточек значений и дней
       "font-size:0.72em;letter-spacing:0.08em;text-transform:uppercase;color:#94b4d6;" // Стиль заголовков карточек
       "} "
+        ".time-settings-card{display:flex;flex-direction:column;gap:12px;align-items:stretch;} " // Карточка настройки времени
+      ".time-settings-card .stat-group{gap:12px;} " // Отступы в группе времени
+      ".time-settings-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;width:100%;align-items:end;} " // Сетка полей времени
+      ".time-settings-grid label{margin-bottom:6px;font-size:0.78em;letter-spacing:0.08em;text-transform:uppercase;color:#c1d0e2;} " // Подписи полей времени
+      ".time-settings-field{display:flex;flex-direction:column;gap:6px;} " // Поле времени
+      ".time-settings-field input,.time-settings-field select{width:100%;min-width:0;} " // Поля на всю ширину
+      ".time-settings-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:flex-start;} " // Панель действий
+      ".time-settings-status{font-size:0.85em;color:#9fb4c8;} " // Статус настройки времени
+      "@media (max-width:680px){.time-settings-grid{grid-template-columns:1fr;}} " // Адаптация сетки времени
       ".card:has(#ModeSelect) select,.card:has(#LEDColor) input," // Поля выбора режима и цвета LED
       ".card:has(#Timer1) input,.card:has(#FloatInput) input,.card:has(#IntInput) input{" // Поля таймера и числового ввода
       "background:#06070c;border:1px solid rgba(255,255,255,0.12);border-radius:10px;" // Фон и рамка полей
@@ -1452,6 +1462,18 @@ private:
               "<li><span>NVS (раздел настроек) — постоянные настройки и конфигурации устройства</span><strong id='stat-nvs'>--</strong></li>"
               "<li><span>SPIFFS Used / Free (использовано / свободно в SPIFFS) — файлы интерфейса, логи или другие пользовательские данные</span><strong id='stat-spiffs'>--</strong></li>"
               "</ul></div>"
+              "</div>"
+              "<div class='card compact stats-card time-settings-card'>"
+              "<div class='stat-group'><div class='stat-heading'>Настройка времени</div>"
+              "<div class='time-settings-grid'>"
+              "<div class='time-settings-field'><label for='gmtOffset'>Часовой пояс</label><select id='gmtOffset'></select></div>"
+              "<div class='time-settings-field'><label for='manual-date'>Дата</label><input id='manual-date' type='date'></div>"
+              "<div class='time-settings-field'><label for='manual-time'>Время</label><input id='manual-time' type='time' step='1' data-skip-save='1'></div>"
+              "</div>"
+              "<div class='time-settings-actions'>"
+              "<button class='btn-primary' id='manual-time-btn' onclick='applyManualTime()'>Установить время</button>"
+              "<div class='time-settings-status' id='manual-time-status'></div>"
+              "</div></div>"
               "</div></div>";
 
       // ====== MQTT страница ======
@@ -1819,6 +1841,120 @@ function saveProfileSettings(){
       });
   }
 
+    function ensureTimeZoneOptions(){
+    const select = document.getElementById('gmtOffset');
+    if(!select || select.options.length) return;
+    for(let offset = -12; offset <= 14; offset++){
+      const opt = document.createElement('option');
+      const sign = offset >= 0 ? '+' : '';
+      opt.value = String(offset);
+      opt.textContent = `GMT${sign}${offset}`;
+      select.appendChild(opt);
+    }
+  }
+
+  function syncManualTimeInputs(value){
+    const dateInput = document.getElementById('manual-date');
+    const timeInput = document.getElementById('manual-time');
+    if(!dateInput || !timeInput) return;
+    if(dateInput.dataset.manual === '1' || timeInput.dataset.manual === '1') return;
+    const parsed = parseDeviceDateTime(value || '');
+    if(!parsed) return;
+    const pad = (num)=>String(num).padStart(2, '0');
+    const dateStr = `${parsed.getFullYear()}-${pad(parsed.getMonth()+1)}-${pad(parsed.getDate())}`;
+    const timeStr = `${pad(parsed.getHours())}:${pad(parsed.getMinutes())}:${pad(parsed.getSeconds())}`;
+    if(dateInput.value !== dateStr) dateInput.value = dateStr;
+    if(timeInput.value !== timeStr) timeInput.value = timeStr;
+  }
+
+  function applyManualTime(){
+    const statusEl = document.getElementById('manual-time-status');
+    const dateInput = document.getElementById('manual-date');
+    const timeInput = document.getElementById('manual-time');
+    const tzSelect = document.getElementById('gmtOffset');
+    if(!dateInput || !timeInput) return;
+    const dateVal = dateInput.value || '';
+    const timeVal = timeInput.value || '';
+    if(!dateVal || !timeVal){
+      if(statusEl) statusEl.innerText = 'Укажите дату и время.';
+      return;
+    }
+    if(statusEl) statusEl.innerText = 'Установка...';
+    const payload = new URLSearchParams({date: dateVal, time: timeVal});
+    if(tzSelect && tzSelect.value !== ''){
+      payload.append('gmtOffset', tzSelect.value);
+    }
+    fetch('/time/set', {method:'POST', body: payload})
+      .then(async r=>{
+        let data = null;
+        try{
+          data = await r.json();
+        } catch(err){
+          data = null;
+        }
+        if(!r.ok){
+          const message = data && data.error ? data.error : 'Ошибка установки.';
+          throw new Error(message);
+        }
+        return data;
+      })
+      .then(data=>{
+        if(data && data.status === 'ok'){
+          if(statusEl) statusEl.innerText = 'Время установлено.';
+          if(data.current){
+            updatePageDateTime(data.current);
+            syncManualTimeInputs(data.current);
+          } else {
+            const parsed = parseManualDateTime(dateVal, timeVal);
+            if(parsed){
+              updatePageDateTime(formatDateTime(parsed));
+              syncManualTimeInputs(formatDateTime(parsed));
+            }
+          }
+        } else if(statusEl) {
+          statusEl.innerText = data && data.error ? data.error : 'Ошибка установки.';
+        }
+      })
+      .catch(err=>{ if(statusEl) statusEl.innerText = err.message || 'Ошибка установки.'; })
+      .finally(()=>{ setTimeout(()=>{ if(statusEl) statusEl.innerText = ''; }, 2500); });
+  }
+
+  function parseManualDateTime(dateVal, timeVal){
+    if(!dateVal || !timeVal) return null;
+    const dateParts = dateVal.includes('.') ? dateVal.split('.') : dateVal.split('-');
+    if(dateParts.length !== 3) return null;
+    let year = 0;
+    let month = 0;
+    let day = 0;
+    if(dateVal.includes('.')){
+      day = Number(dateParts[0]);
+      month = Number(dateParts[1]);
+      year = Number(dateParts[2]);
+    } else {
+      year = Number(dateParts[0]);
+      month = Number(dateParts[1]);
+      day = Number(dateParts[2]);
+    }
+    const timeParts = timeVal.split(':').map(Number);
+    const hour = timeParts[0] || 0;
+    const minute = timeParts[1] || 0;
+    const second = timeParts[2] || 0;
+    if(!year || !month || !day) return null;
+    return new Date(year, month - 1, day, hour, minute, second);
+  }
+
+  function initTimeSettings(){
+    ensureTimeZoneOptions();
+    const dateInput = document.getElementById('manual-date');
+    const timeInput = document.getElementById('manual-time');
+    const tzSelect = document.getElementById('gmtOffset');
+    [dateInput, timeInput, tzSelect].forEach(el=>{
+      if(!el) return;
+      listenToManual(el);
+    });
+  }
+
+
   const updateWifiStatus = (data)=>{
     updateStat('wifi-status', data.wifiStatus || 'N/A');
     updateStat('wifi-mode', data.wifiMode || 'N/A');
@@ -2044,6 +2180,11 @@ const listenToManual = el=>{
   el.addEventListener('blur', ()=> clearManualFlag(el));
 };
 
+if(document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', initTimeSettings);
+} else {
+  initTimeSettings();
+}
 
 const themeInput = document.getElementById('ThemeColor');
 if(themeInput){
@@ -2060,6 +2201,10 @@ if(themeInput){
 
 document.querySelectorAll('input[type=text],input[type=number],input[type=time],input[type=color],select').forEach(el=>{
   if(el.id=='ThemeColor') return;
+    if(el.dataset.skipSave === '1'){
+    listenToManual(el);
+    return;
+  }
   el.addEventListener('change', ()=>{
     markManualChange(el);
     if(el.id==='LEDColor') refreshLedColorUI(el.value);
@@ -2427,6 +2572,9 @@ window.addEventListener('resize', ()=>{
     function fetchLive(){
     fetch('/live').then(r=>r.json()).then(j=>{
         if(typeof j.CurrentTime !== 'undefined') updatePageDateTime(j.CurrentTime);
+            if(typeof j.CurrentTime !== 'undefined') updatePageDateTime(j.CurrentTime);
+        if(typeof j.CurrentTime !== 'undefined') syncManualTimeInputs(j.CurrentTime);
+        if(typeof j.gmtOffset !== 'undefined') updateSelectValue('gmtOffset', j.gmtOffset);
     if(document.getElementById('RandomVal')) document.getElementById('RandomVal').innerText=j.RandomVal;
     if(document.getElementById('InfoString')) document.getElementById('InfoString').innerText=j.InfoString;
     if(document.getElementById('InfoString1')) document.getElementById('InfoString1').innerText=j.InfoString1;
@@ -2565,7 +2713,12 @@ function setImg(x){
         }
 
            if(key=="ThemeColor") { ThemeColor = valStr; saveValue<String>(key.c_str(), valStr); }
-
+          else if(key=="gmtOffset") {
+          int offset = normalizeGmtOffset(valStr.toInt());
+          gmtOffset_correct = offset;
+          Saved_gmtOffset_correct = offset;
+          saveValue<int>("gmtOffset", offset);
+        }
                 else if(key=="graphMainMaxPoints") {
           int valInt = valStr.toInt();
           if(valInt < minGraphPoints) valInt = minGraphPoints;
@@ -2623,6 +2776,67 @@ function setImg(x){
       }
       r->send(200,"text/plain","OK");
     });
+
+    server.on("/time/set", HTTP_POST, [](AsyncWebServerRequest *r){
+      if(!ensureAuthorized(r)) return;
+      auto paramOr = [&](const char* name)->String{
+        if(r->hasParam(name, true)) return r->getParam(name, true)->value();
+        if(r->hasParam(name)) return r->getParam(name)->value();
+        return String();
+      };
+      String dateStr = paramOr("date");
+      String timeStr = paramOr("time");
+      String offsetStr = paramOr("gmtOffset");
+      if(offsetStr.length()){
+        int offset = normalizeGmtOffset(offsetStr.toInt());
+        gmtOffset_correct = offset;
+        Saved_gmtOffset_correct = offset;
+        saveValue<int>("gmtOffset", offset);
+      }
+      if(dateStr.length() < 8 || timeStr.length() < 4){
+        r->send(400, "application/json", "{\\\"status\\\":\\\"error\\\",\\\"error\\\":\\\"Некорректная дата/время\\\"}");
+        return;
+      }
+      int year = 0;
+      int month = 0;
+      int day = 0;
+      if(dateStr.indexOf('.') > 0){
+        day = dateStr.substring(0, 2).toInt();
+        month = dateStr.substring(3, 5).toInt();
+        year = dateStr.substring(6).toInt();
+      } else {
+        year = dateStr.substring(0, 4).toInt();
+        month = dateStr.substring(5, 7).toInt();
+        day = dateStr.substring(8).toInt();
+      }
+      int hour = 0;
+      int minute = 0;
+      int second = 0;
+      int firstColon = timeStr.indexOf(':');
+      int lastColon = timeStr.lastIndexOf(':');
+      if(firstColon > 0){
+        hour = timeStr.substring(0, firstColon).toInt();
+        if(lastColon > firstColon){
+          minute = timeStr.substring(firstColon + 1, lastColon).toInt();
+          second = timeStr.substring(lastColon + 1).toInt();
+        } else {
+          minute = timeStr.substring(firstColon + 1).toInt();
+        }
+      }
+      if(!isValidDateTime(year, month, day, hour, minute, second)){
+        r->send(400, "application/json", "{\\\"status\\\":\\\"error\\\",\\\"error\\\":\\\"Некорректная дата/время\\\"}");
+        return;
+      }
+      time_t epoch = buildEpoch(year, month, day, hour, minute, second);
+      if(epoch <= 0){
+        r->send(400, "application/json", "{\\\"status\\\":\\\"error\\\",\\\"error\\\":\\\"Не удалось вычислить время\\\"}");
+        return;
+      }
+      setBaseEpoch(epoch);
+      String payloadJson = "{\\\"status\\\":\\\"ok\\\",\\\"current\\\":\\\"" + jsonEscape(getCurrentDateTime()) + "\\\"}";
+      r->send(200, "application/json", payloadJson);
+    });
+
 
     server.on("/mqtt/config", HTTP_GET, [](AsyncWebServerRequest *r){
       if(!ensureAuthorized(r)) return;
@@ -2707,6 +2921,7 @@ function setImg(x){
       // StaticJsonDocument<6144> doc;
             StaticJsonDocument<12288> doc;
       doc["CurrentTime"] = CurrentTime; // Временная метка для синхронизации времени страницы
+      doc["gmtOffset"] = gmtOffset_correct; // Часовой пояс (GMT offset)
       doc["FilterImageState"] = jpg; // Выбор картинки бассейна (анимация/статик)
       doc["button_Lamp"] = Lamp ? 1 : 0; // Отображение состояния кнопки лампы, которая не объявлена через UI
       for (const auto &timer : ui.allTimers()) {

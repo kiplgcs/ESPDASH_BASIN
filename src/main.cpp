@@ -97,6 +97,10 @@ void setup() {
     Serial.println("[BOOT] Loading persisted time...");
   loadBaseEpochFromStorage();
 
+  gmtOffset_correct = loadValue<int>("gmtOffset", 3);
+  gmtOffset_correct = normalizeGmtOffset(gmtOffset_correct);
+  Saved_gmtOffset_correct = gmtOffset_correct;
+
   // Загрузка и применение MQTT параметров
   Serial.println("[BOOT] Loading MQTT settings...");
   loadMqttSettings();
