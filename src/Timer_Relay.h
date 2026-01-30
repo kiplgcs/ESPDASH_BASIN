@@ -175,6 +175,161 @@ inline void updateManualPumpPulses(){
     ManualPulse_H2O2_Active = false;
   }
 }
+
+
+inline void beginCleanStep(CleanSequenceStep nextStep, unsigned long nowMillis){ // Начало нового шага промывки
+  CleanStepState = nextStep; // Фиксируем новый шаг
+  CleanStepStartedAt = nowMillis; // Запоминаем момент старта шага
+} // Завершение функции смены шага
+
+inline bool cleanStepElapsed(unsigned long nowMillis, unsigned long durationMs){ // Проверка длительности шага
+  return durationMs == 0 || (nowMillis - CleanStepStartedAt >= durationMs); // Возвращаем true при окончании ожидания
+} // Конец функции проверки таймера
+
+inline void startCleanSequence(bool resumeFiltration){ // Запуск последовательности промывки
+  const unsigned long nowMillis = millis(); // Получаем текущие миллисекунды
+  CleanSequenceActive = true; // Отмечаем активную последовательность
+  CleanResumeFiltration = resumeFiltration; // Сохраняем флаг восстановления фильтрации
+  AirPumpAuto = false; // Сбрасываем авто-компрессор
+  SolSandDumpAuto = false; // Сбрасываем авто-сброс песка
+  ValveBackwashAuto = false; // Сбрасываем авто-клапаны
+  Power_Clean = true; // Включаем логический флаг промывки
+  beginCleanStep(CleanStepStopPump, nowMillis); // Стартуем с остановки насоса
+} // Конец запуска последовательности
+
+inline void updateCleanSequence(){ // Основная логика последовательности промывки
+  static bool lastManualButton = false; // Предыдущее состояние ручной кнопки
+  const unsigned long nowMillis = millis(); // Текущее время в миллисекундах
+  const bool manualButton = Power_Clean; // Считываем состояние ручной кнопки
+
+  if (!CleanSequenceActive && manualButton && !lastManualButton) { // Фронт ручного запуска
+    CleanManualRequested = true; // Помечаем запрос ручного запуска
+  } // Конец проверки ручного фронта
+  lastManualButton = manualButton; // Запоминаем текущее состояние кнопки
+
+  if (!CleanSequenceActive && (CleanManualRequested || CleanScheduleRequested)) { // Если есть запрос запуска
+    CleanManualRequested = false; // Сбрасываем ручной запрос
+    CleanScheduleRequested = false; // Сбрасываем запрос расписания
+    startCleanSequence(FiltrationTimerActive); // Запускаем последовательность
+  } // Конец запуска по запросу
+
+  if (!CleanSequenceActive) { // Если последовательность не активна
+    Power_Clean = false; // Гасим флаг промывки
+    AirPumpAuto = false; // Выключаем авто-компрессор
+    SolSandDumpAuto = false; // Выключаем авто-сброс песка
+    ValveBackwashAuto = false; // Выключаем авто-клапаны
+    CleanStepState = CleanStepIdle; // Возвращаемся в состояние простоя
+    return; // Выходим из функции
+  } // Конец проверки активности
+
+  const unsigned long airPumpDuration = static_cast<unsigned long>(TimerAirSetting) * 1000UL; // Длительность накачки воздуха
+  const unsigned long valveSwitchDuration = static_cast<unsigned long>(TimerValveSetting) * 1000UL; // Длительность переключения клапанов
+  const unsigned long backwashDuration = static_cast<unsigned long>(TimerBackwashSetting) * 1000UL; // Длительность обратной промывки
+  const unsigned long sandDumpDuration = 10000UL; // Длительность сброса песка
+
+  switch (CleanStepState) { // Обрабатываем текущий шаг
+    case CleanStepStopPump: // Шаг остановки насоса
+      Power_Filtr = false; // Останавливаем насос
+      AirPumpAuto = false; // Компрессор выключен
+      ValveBackwashAuto = false; // Клапаны не в режиме промывки
+      SolSandDumpAuto = false; // Сброс песка выключен
+      if (cleanStepElapsed(nowMillis, 0)) { // Проверяем окончание шага
+        beginCleanStep(CleanStepAirPump, nowMillis); // Переходим к накачке воздуха
+      } // Конец перехода шага
+      break; // Выходим из case
+    case CleanStepAirPump: // Шаг накачки воздуха
+      Power_Filtr = false; // Насос выключен
+      AirPumpAuto = true; // Компрессор включен
+      ValveBackwashAuto = false; // Клапаны еще не переключены
+      SolSandDumpAuto = false; // Сброс песка выключен
+      if (cleanStepElapsed(nowMillis, airPumpDuration)) { // Проверяем таймер накачки
+        beginCleanStep(CleanStepValveToBackwash, nowMillis); // Переходим к переключению клапанов
+      } // Конец перехода
+      break; // Выходим из case
+    case CleanStepValveToBackwash: // Шаг переключения клапанов в BACKWASH
+      Power_Filtr = false; // Насос выключен
+      AirPumpAuto = true; // Компрессор включен
+      ValveBackwashAuto = true; // Клапаны в режиме BACKWASH
+      SolSandDumpAuto = false; // Сброс песка выключен
+      if (cleanStepElapsed(nowMillis, valveSwitchDuration)) { // Проверяем таймер переключения клапанов
+        beginCleanStep(CleanStepBackwash, nowMillis); // Переходим к обратной промывке
+      } // Конец перехода
+      break; // Выходим из case
+    case CleanStepBackwash: // Шаг обратной промывки
+      Power_Filtr = true; // Насос включен
+      AirPumpAuto = true; // Компрессор включен
+      ValveBackwashAuto = true; // Клапаны в режиме BACKWASH
+      SolSandDumpAuto = false; // Сброс песка выключен
+      if (cleanStepElapsed(nowMillis, backwashDuration)) { // Проверяем окончание обратной промывки
+        beginCleanStep(CleanStepStopPumpAfter, nowMillis); // Переходим к остановке насоса
+      } // Конец перехода
+      break; // Выходим из case
+    case CleanStepStopPumpAfter: // Шаг остановки насоса после промывки
+      Power_Filtr = false; // Насос выключен
+      AirPumpAuto = true; // Компрессор продолжает работать
+      ValveBackwashAuto = true; // Клапаны еще в BACKWASH
+      SolSandDumpAuto = false; // Сброс песка выключен
+      if (cleanStepElapsed(nowMillis, valveSwitchDuration)) { // Ожидаем паузу для переключения
+        beginCleanStep(CleanStepValveToFiltration, nowMillis); // Переходим к возврату клапанов
+      } // Конец перехода
+      break; // Выходим из case
+    case CleanStepValveToFiltration: // Шаг возврата клапанов в FILTRATION
+      Power_Filtr = false; // Насос выключен
+      AirPumpAuto = false; // Компрессор выключаем
+      ValveBackwashAuto = false; // Клапаны возвращаем в фильтрацию
+      SolSandDumpAuto = false; // Сброс песка выключен
+      if (cleanStepElapsed(nowMillis, valveSwitchDuration)) { // Проверяем окончание переключения
+        beginCleanStep(CleanStepStartPumpAfter, nowMillis); // Переходим к запуску насоса
+      } // Конец перехода
+      break; // Выходим из case
+    case CleanStepStartPumpAfter: // Шаг запуска насоса после возврата клапанов
+      Power_Filtr = true; // Насос включен
+      AirPumpAuto = false; // Компрессор выключен
+      ValveBackwashAuto = false; // Клапаны в фильтрации
+      SolSandDumpAuto = false; // Сброс песка выключен
+      if (cleanStepElapsed(nowMillis, 0)) { // Переходим сразу
+        beginCleanStep(CleanStepSandDumpOn, nowMillis); // Переходим к сбросу песка
+      } // Конец перехода
+      break; // Выходим из case
+    case CleanStepSandDumpOn: // Шаг включения сброса песка
+      Power_Filtr = true; // Насос включен
+      AirPumpAuto = false; // Компрессор выключен
+      ValveBackwashAuto = false; // Клапаны в фильтрации
+      SolSandDumpAuto = true; // Включаем сброс песка
+      if (cleanStepElapsed(nowMillis, sandDumpDuration)) { // Ждем окончание сброса
+        beginCleanStep(CleanStepSandDumpOff, nowMillis); // Переходим к отключению сброса
+      } // Конец перехода
+      break; // Выходим из case
+    case CleanStepSandDumpOff: // Шаг отключения сброса песка
+      Power_Filtr = true; // Насос включен
+      AirPumpAuto = false; // Компрессор выключен
+      ValveBackwashAuto = false; // Клапаны в фильтрации
+      SolSandDumpAuto = false; // Отключаем сброс песка
+      if (cleanStepElapsed(nowMillis, 0)) { // Переходим сразу
+        beginCleanStep(CleanStepComplete, nowMillis); // Переходим к завершению
+      } // Конец перехода
+      break; // Выходим из case
+    case CleanStepComplete: // Шаг завершения последовательности
+      CleanSequenceActive = false; // Снимаем флаг активности
+      Power_Clean = false; // Отключаем флаг промывки
+      AirPumpAuto = false; // Выключаем авто-компрессор
+      ValveBackwashAuto = false; // Выключаем авто-клапаны
+      SolSandDumpAuto = false; // Выключаем авто-сброс песка
+      Power_Filtr = CleanResumeFiltration; // Восстанавливаем фильтрацию при необходимости
+      CleanResumeFiltration = false; // Сбрасываем флаг восстановления
+      CleanStepState = CleanStepIdle; // Возвращаемся в состояние простоя
+      break; // Выходим из case
+    case CleanStepIdle: // Состояние простоя
+    default: // Защита от неизвестного состояния
+      CleanSequenceActive = false; // Снимаем флаг активности
+      Power_Clean = false; // Отключаем флаг промывки
+      AirPumpAuto = false; // Выключаем авто-компрессор
+      ValveBackwashAuto = false; // Выключаем авто-клапаны
+      SolSandDumpAuto = false; // Выключаем авто-сброс песка
+      CleanStepState = CleanStepIdle; // Фиксируем простой
+      break; // Выходим из case
+  } // Конец switch
+} 
 /**************************************************************************************/
 /**************************************************************************************/
 /**************************************************************************************/
@@ -255,9 +410,12 @@ void TimerControlRelay(int interval) {
                     || (Filtr_Time3 && checkTimeInInterval(currentHour, currentMinute, filtrTimer3.on, filtrTimer3.off));
 //     //текущий день недели "DayOfWeek" - будет указывать в массиве "chk_Array[DayOfWeek - 1]"" на "chk1...chk7" который имее значение "true" или "false"
 //     bool chk_Array[] = {chk1, chk2, chk3, chk4, chk5, chk6, chk7}; 
-    if (anyFiltrTimer) {
-      Power_Filtr = filtrActive;
-    }
+
+    FiltrationTimerActive = anyFiltrTimer && filtrActive; // Флаг активности фильтрации по таймерам
+    if (anyFiltrTimer && !CleanSequenceActive) { // Если фильтрация по таймерам активна и нет промывки
+      Power_Filtr = filtrActive; // Устанавливаем состояние насоса фильтрации
+    } // Конец условия фильтрации
+
 //     if (checkTimeInInterval(hours, minutes, Clean_timeON1, Clean_timeOFF1) && Clean_Time1 == true && chk_Array[DayOfWeek - 1]) {
 //         Power_Clean = true; // Включаем промывку
 //     } else if (Clean_Time1 == true) {
@@ -265,13 +423,17 @@ void TimerControlRelay(int interval) {
 //     }
     bool chk_Array[] = {chk1, chk2, chk3, chk4, chk5, chk6, chk7};
     bool cleanDayEnabled = (DayOfWeek >= 1 && DayOfWeek <= 7) ? chk_Array[DayOfWeek - 1] : false;
-    if (Clean_Time1) {
-      Power_Clean = cleanDayEnabled && checkTimeInInterval(currentHour, currentMinute, cleanTimer.on, cleanTimer.off);
-    }
+    
+ static bool lastCleanScheduleActive = false; // Предыдущее состояние окна расписания промывки
+    bool cleanScheduleActive = false; // Текущее состояние окна расписания
+    if (Clean_Time1) { // Если расписание промывки включено
+      cleanScheduleActive = cleanDayEnabled && checkTimeInInterval(currentHour, currentMinute, cleanTimer.on, cleanTimer.off); // Проверяем попадание во временное окно
+    } // Конец проверки расписания
+    if (cleanScheduleActive && !lastCleanScheduleActive) { // Отслеживаем фронт окна расписания
+      CleanScheduleRequested = true; // Запрашиваем запуск промывки
+    } // Конец обработки фронта
+    lastCleanScheduleActive = cleanScheduleActive; // Сохраняем текущее состояние окна
 
-    if (Power_Clean) {
-      Power_Filtr = false;
-    }
 
 
 
@@ -493,7 +655,14 @@ if (AktualReadInput) {
   err = RS485.addRequest(40001, 1, 0x05, 14, Power_Warm_floor_heating ? devices[0].value : devices[1].value); // реле№15 теплый пол
   err = RS485.addRequest(40001, 1, 0x05, 15, Pow_Ul_light ? devices[0].value : devices[1].value); //Уличное освещение на столбе
   err = RS485.addRequest(40001, 1, 0x05, 10, Power_Topping ? devices[0].value : devices[1].value); // реле№11 соленоид долива воды
-//   Error err = RS485.addRequest(40001,1,0x05,5, Power_H2O2 ? devices[0].value : devices[1].value); //реле№6 для Power_H2O2
+
+  const bool airPumpActive = AirPump || AirPumpAuto; // Активность компрессора с учетом ручного и авто режима
+  const bool sandDumpActive = SolSandDump || SolSandDumpAuto; // Активность сброса песка с учетом ручного и авто режима
+  err = RS485.addRequest(40001, 1, 0x05, 9, airPumpActive ? devices[0].value : devices[1].value); // реле№10 компрессор воздуха
+  err = RS485.addRequest(40001, 1, 0x05, 11, ValveBackwashAuto ? devices[0].value : devices[1].value); // реле№12 соленоид переключения клапанов
+  err = RS485.addRequest(40001, 1, 0x05, 12, sandDumpActive ? devices[0].value : devices[1].value); // реле№13 соленоид сброса песка
+
+  //   Error err = RS485.addRequest(40001,1,0x05,5, Power_H2O2 ? devices[0].value : devices[1].value); //реле№6 для Power_H2O2
   // err = RS485.addRequest(40001, 1, 0x05, 5, Power_H2O2 ? devices[0].value : devices[1].value); //реле№6 для Power_H2O2
   // err = RS485.addRequest(40001, 1, 0x05, 6, Power_ACO ? devices[0].value : devices[1].value); //реле№7 для Power_ACO
   const bool powerH2O2Active = Power_H2O2 || ManualPulse_H2O2_Active; //Переменная powerH2O2Active будет равна true, если хотя бы одно из условий -  true

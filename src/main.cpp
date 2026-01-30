@@ -194,10 +194,11 @@ void loop() {
   CurrentTime = getCurrentDateTime();   // Получение текущего времени
 
 TimerControlRelay(10000);  // TimerControlRelay(600); //Контроль включения реле по таймерам
+updateCleanSequence(); // Обновление последовательности промывки
 updateManualPumpPulses(); // Для прверки перельстатических насосов - счет таймера - 1 сек
-ControlModbusRelay(1000);
-loop_PH(2000);
-loop_CL2(2100);
+ControlModbusRelay(1000); // Отправка команд на Modbus-реле
+loop_PH(2000); // Обработка логики PH
+loop_CL2(2100); // Обработка логики хлора
 
 /**************************** *********************************************************************/
   Nextion_Transmit(500); // Отправка в Nextion по очереди
