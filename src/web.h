@@ -220,6 +220,12 @@ bool Power_Clean, Power_Clean1; // Промывка фильтра
 bool Clean_Time1, Saved_Clean_Time1; // Разрешения работы включения по времени
 uint16_t Saved_Clean_timeON1, Saved_Clean_timeOFF1;
 
+bool AirPump, SolSandDump; // Тестовые реле компрессора воздуха и соленоида сброса песка
+int TimerAirSetting = 0; // Время накачки воздуха компрессором (сек)
+int TimerValveSetting = 0; // Время на переключение трехходовых клапанов (сек)
+int TimerBackwashSetting = 0; // Время обратной промывки (сек)
+
+
 bool chk1, chk2, chk3, chk4, chk5, chk6, chk7; //Дни недели ПН, ВТ, СР, ЧТ, ПТ, СБ, ВС - для включения таймера в нужные дни
 bool Saved_chk1, Saved_chk2, Saved_chk3, Saved_chk4, Saved_chk5, Saved_chk6, Saved_chk7;
 
@@ -2846,7 +2852,7 @@ function setImg(x){
         if(count >= 3) second = parts[2];
       };
       parseTime(timeStr);
-      
+
       if(!isValidDateTime(year, month, day, hour, minute, second)){
         r->send(400, "application/json", "{\\\"status\\\":\\\"error\\\",\\\"error\\\":\\\"Некорректная дата/время\\\"}");
         return;
