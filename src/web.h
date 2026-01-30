@@ -2799,43 +2799,54 @@ function setImg(x){
       int year = 0;
       int month = 0;
       int day = 0;
-auto parseDate = [&](const String &value){
-        int firstSep = value.indexOf('.');
-        char sep = '.';
-        if(firstSep < 0){
-          firstSep = value.indexOf('-');
-          sep = '-';
+      auto parseNumberParts = [&](const String &value, int *parts, int maxParts){
+        int count = 0;
+        String current;
+        for(size_t i = 0; i < value.length(); ++i){
+          char c = value.charAt(i);
+          if(c >= '0' && c <= '9'){
+            current += c;
+          } else if(current.length()){
+            parts[count++] = current.toInt();
+            current = "";
+            if(count >= maxParts) break;
+          }
         }
-        if(firstSep <= 0) return;
-        int secondSep = value.indexOf(sep, firstSep + 1);
-        if(secondSep <= firstSep) return;
-        String part1 = value.substring(0, firstSep);
-        String part2 = value.substring(firstSep + 1, secondSep);
-        String part3 = value.substring(secondSep + 1);
-        if(part1.length() == 4){
-          year = part1.toInt();
-          month = part2.toInt();
-          day = part3.toInt();
-        } else if(part3.length() == 4){
-          day = part1.toInt();
-          month = part2.toInt();
-          year = part3.toInt();
+        if(current.length() && count < maxParts){
+          parts[count++] = current.toInt();
+        }
+        return count;
+      };
+      auto parseDate = [&](const String &value){
+        int parts[3] = {0, 0, 0};
+        int count = parseNumberParts(value, parts, 3);
+        if(count != 3) return;
+        if(parts[0] >= 1000){
+          year = parts[0];
+          month = parts[1];
+          day = parts[2];
+        } else if(parts[2] >= 1000){
+          day = parts[0];
+          month = parts[1];
+          year = parts[2];
         }
       };
       parseDate(dateStr);
+
       int hour = 0;
       int minute = 0;
       int second = 0;
-      int firstColon = timeStr.indexOf(':');
-      if(firstColon > 0){
-      int secondColon = timeStr.indexOf(':', firstColon + 1);
-        String hourStr = timeStr.substring(0, firstColon);
-        String minuteStr = secondColon > firstColon ? timeStr.substring(firstColon + 1, secondColon) : timeStr.substring(firstColon + 1);
-        String secondStr = secondColon > firstColon ? timeStr.substring(secondColon + 1) : String();
-        hour = hourStr.toInt();
-        minute = minuteStr.toInt();
-        if(secondStr.length()) second = secondStr.toInt();
-      }
+
+      auto parseTime = [&](const String &value){
+        int parts[3] = {0, 0, 0};
+        int count = parseNumberParts(value, parts, 3);
+        if(count < 2) return;
+        hour = parts[0];
+        minute = parts[1];
+        if(count >= 3) second = parts[2];
+      };
+      parseTime(timeStr);
+      
       if(!isValidDateTime(year, month, day, hour, minute, second)){
         r->send(400, "application/json", "{\\\"status\\\":\\\"error\\\",\\\"error\\\":\\\"Некорректная дата/время\\\"}");
         return;
