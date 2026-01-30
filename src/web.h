@@ -873,8 +873,7 @@ private:
       html += "<button onclick=\"showPage('mqtt',this)\">Настройка MQTT</button>"; // Кнопка настроек MQTT
       html += "</div>"; // Конец боковой панели
 
-      html += "<button id='toggleBtn' onclick='toggleSidebar()'>?</button>"; // Кнопка сворачивания сайдбара
-
+      html += "<button id='toggleBtn' onclick='toggleSidebar()'></button>"; // Кнопка сворачивания сайдбара - кнопка боковой панели
       // Основной контент
       html += "<div id='main'>"; // Начало основной области
 
@@ -2800,28 +2799,42 @@ function setImg(x){
       int year = 0;
       int month = 0;
       int day = 0;
-      if(dateStr.indexOf('.') > 0){
-        day = dateStr.substring(0, 2).toInt();
-        month = dateStr.substring(3, 5).toInt();
-        year = dateStr.substring(6).toInt();
-      } else {
-        year = dateStr.substring(0, 4).toInt();
-        month = dateStr.substring(5, 7).toInt();
-        day = dateStr.substring(8).toInt();
-      }
+auto parseDate = [&](const String &value){
+        int firstSep = value.indexOf('.');
+        char sep = '.';
+        if(firstSep < 0){
+          firstSep = value.indexOf('-');
+          sep = '-';
+        }
+        if(firstSep <= 0) return;
+        int secondSep = value.indexOf(sep, firstSep + 1);
+        if(secondSep <= firstSep) return;
+        String part1 = value.substring(0, firstSep);
+        String part2 = value.substring(firstSep + 1, secondSep);
+        String part3 = value.substring(secondSep + 1);
+        if(part1.length() == 4){
+          year = part1.toInt();
+          month = part2.toInt();
+          day = part3.toInt();
+        } else if(part3.length() == 4){
+          day = part1.toInt();
+          month = part2.toInt();
+          year = part3.toInt();
+        }
+      };
+      parseDate(dateStr);
       int hour = 0;
       int minute = 0;
       int second = 0;
       int firstColon = timeStr.indexOf(':');
-      int lastColon = timeStr.lastIndexOf(':');
       if(firstColon > 0){
-        hour = timeStr.substring(0, firstColon).toInt();
-        if(lastColon > firstColon){
-          minute = timeStr.substring(firstColon + 1, lastColon).toInt();
-          second = timeStr.substring(lastColon + 1).toInt();
-        } else {
-          minute = timeStr.substring(firstColon + 1).toInt();
-        }
+      int secondColon = timeStr.indexOf(':', firstColon + 1);
+        String hourStr = timeStr.substring(0, firstColon);
+        String minuteStr = secondColon > firstColon ? timeStr.substring(firstColon + 1, secondColon) : timeStr.substring(firstColon + 1);
+        String secondStr = secondColon > firstColon ? timeStr.substring(secondColon + 1) : String();
+        hour = hourStr.toInt();
+        minute = minuteStr.toInt();
+        if(secondStr.length()) second = secondStr.toInt();
       }
       if(!isValidDateTime(year, month, day, hour, minute, second)){
         r->send(400, "application/json", "{\\\"status\\\":\\\"error\\\",\\\"error\\\":\\\"Некорректная дата/время\\\"}");
