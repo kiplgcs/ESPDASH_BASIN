@@ -227,7 +227,7 @@ inline void updateCleanSequence(){ // Основная логика послед
   const unsigned long airPumpDuration = static_cast<unsigned long>(TimerAirSetting) * 1000UL; // Длительность накачки воздуха
   const unsigned long valveSwitchDuration = static_cast<unsigned long>(TimerValveSetting) * 1000UL; // Длительность переключения клапанов
   const unsigned long backwashDuration = static_cast<unsigned long>(TimerBackwashSetting) * 1000UL; // Длительность обратной промывки
-  const unsigned long sandDumpDuration = 10000UL; // Длительность сброса песка
+  const unsigned long sandDumpDuration = static_cast<unsigned long>(TimerSolSandDump) * 1000UL; // Длительность сброса песка
   
   auto updateComment = [&](const String &stage, unsigned long durationMs){ // Обновляет текст этапа промывки
     unsigned long elapsed = nowMillis - CleanStepStartedAt; // Сколько времени прошло с начала шага
