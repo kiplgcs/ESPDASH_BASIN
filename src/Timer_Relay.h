@@ -186,6 +186,16 @@ inline bool cleanStepElapsed(unsigned long nowMillis, unsigned long durationMs){
   return durationMs == 0 || (nowMillis - CleanStepStartedAt >= durationMs); // Возвращаем true при окончании ожидания
 } // Конец функции проверки таймера
 
+inline String formatCleanRemaining(unsigned long remainingMs){ // Форматирует оставшееся время шага промывки
+  unsigned long totalSeconds = remainingMs / 1000UL; // Переводим миллисекунды в секунды
+  unsigned long minutes = totalSeconds / 60UL; // Минуты
+  unsigned long seconds = totalSeconds % 60UL; // Секунды
+  char buffer[12]; // Буфер для строки времени
+  snprintf(buffer, sizeof(buffer), "%lu:%02lu", minutes, seconds); // Формируем строку MM:SS
+  return String(buffer); // Возвращаем строку
+}
+
+
 inline void startCleanSequence(bool resumeFiltration){ // Запуск последовательности промывки
   const unsigned long nowMillis = millis(); // Получаем текущие миллисекунды
   CleanSequenceActive = true; // Отмечаем активную последовательность
@@ -198,17 +208,8 @@ inline void startCleanSequence(bool resumeFiltration){ // Запуск посл�
 } // Конец запуска последовательности
 
 inline void updateCleanSequence(){ // Основная логика последовательности промывки
-  static bool lastManualButton = false; // Предыдущее состояние ручной кнопки
   const unsigned long nowMillis = millis(); // Текущее время в миллисекундах
-  const bool manualButton = Power_Clean; // Считываем состояние ручной кнопки
-
-  if (!CleanSequenceActive && manualButton && !lastManualButton) { // Фронт ручного запуска
-    CleanManualRequested = true; // Помечаем запрос ручного запуска
-  } // Конец проверки ручного фронта
-  lastManualButton = manualButton; // Запоминаем текущее состояние кнопки
-
-  if (!CleanSequenceActive && (CleanManualRequested || CleanScheduleRequested)) { // Если есть запрос запуска
-    CleanManualRequested = false; // Сбрасываем ручной запрос
+    if (!CleanSequenceActive && CleanScheduleRequested) { // Если есть запрос запуска
     CleanScheduleRequested = false; // Сбрасываем запрос расписания
     startCleanSequence(FiltrationTimerActive); // Запускаем последовательность
   } // Конец запуска по запросу
@@ -219,6 +220,7 @@ inline void updateCleanSequence(){ // Основная логика послед
     SolSandDumpAuto = false; // Выключаем авто-сброс песка
     ValveBackwashAuto = false; // Выключаем авто-клапаны
     CleanStepState = CleanStepIdle; // Возвращаемся в состояние простоя
+    CommentClean = "Ожидание расписания ⏳ 0:00"; // Обновляем статус промывки
     return; // Выходим из функции
   } // Конец проверки активности
 
@@ -226,6 +228,12 @@ inline void updateCleanSequence(){ // Основная логика послед
   const unsigned long valveSwitchDuration = static_cast<unsigned long>(TimerValveSetting) * 1000UL; // Длительность переключения клапанов
   const unsigned long backwashDuration = static_cast<unsigned long>(TimerBackwashSetting) * 1000UL; // Длительность обратной промывки
   const unsigned long sandDumpDuration = 10000UL; // Длительность сброса песка
+  
+  auto updateComment = [&](const String &stage, unsigned long durationMs){ // Обновляет текст этапа промывки
+    unsigned long elapsed = nowMillis - CleanStepStartedAt; // Сколько времени прошло с начала шага
+    unsigned long remainingMs = durationMs > elapsed ? (durationMs - elapsed) : 0UL; // Сколько осталось
+    CommentClean = stage + " ⏳ " + formatCleanRemaining(remainingMs); // Формируем строку статуса
+  };
 
   switch (CleanStepState) { // Обрабатываем текущий шаг
     case CleanStepStopPump: // Шаг остановки насоса
@@ -233,6 +241,8 @@ inline void updateCleanSequence(){ // Основная логика послед
       AirPumpAuto = false; // Компрессор выключен
       ValveBackwashAuto = false; // Клапаны не в режиме промывки
       SolSandDumpAuto = false; // Сброс песка выключен
+
+      updateComment("Остановка насоса", 0); // Обновляем комментарий
       if (cleanStepElapsed(nowMillis, 0)) { // Проверяем окончание шага
         beginCleanStep(CleanStepAirPump, nowMillis); // Переходим к накачке воздуха
       } // Конец перехода шага
@@ -242,6 +252,7 @@ inline void updateCleanSequence(){ // Основная логика послед
       AirPumpAuto = true; // Компрессор включен
       ValveBackwashAuto = false; // Клапаны еще не переключены
       SolSandDumpAuto = false; // Сброс песка выключен
+      updateComment("Накачка воздуха", airPumpDuration); // Обновляем комментарий
       if (cleanStepElapsed(nowMillis, airPumpDuration)) { // Проверяем таймер накачки
         beginCleanStep(CleanStepValveToBackwash, nowMillis); // Переходим к переключению клапанов
       } // Конец перехода
@@ -251,6 +262,7 @@ inline void updateCleanSequence(){ // Основная логика послед
       AirPumpAuto = true; // Компрессор включен
       ValveBackwashAuto = true; // Клапаны в режиме BACKWASH
       SolSandDumpAuto = false; // Сброс песка выключен
+      updateComment("Клапаны BACKWASH", valveSwitchDuration); // Обновляем комментарий
       if (cleanStepElapsed(nowMillis, valveSwitchDuration)) { // Проверяем таймер переключения клапанов
         beginCleanStep(CleanStepBackwash, nowMillis); // Переходим к обратной промывке
       } // Конец перехода
@@ -260,6 +272,7 @@ inline void updateCleanSequence(){ // Основная логика послед
       AirPumpAuto = true; // Компрессор включен
       ValveBackwashAuto = true; // Клапаны в режиме BACKWASH
       SolSandDumpAuto = false; // Сброс песка выключен
+      updateComment("Обратная промывка", backwashDuration); // Обновляем комментарий
       if (cleanStepElapsed(nowMillis, backwashDuration)) { // Проверяем окончание обратной промывки
         beginCleanStep(CleanStepStopPumpAfter, nowMillis); // Переходим к остановке насоса
       } // Конец перехода
@@ -269,6 +282,7 @@ inline void updateCleanSequence(){ // Основная логика послед
       AirPumpAuto = true; // Компрессор продолжает работать
       ValveBackwashAuto = true; // Клапаны еще в BACKWASH
       SolSandDumpAuto = false; // Сброс песка выключен
+            updateComment("Остановка насоса", valveSwitchDuration); // Обновляем комментарий
       if (cleanStepElapsed(nowMillis, valveSwitchDuration)) { // Ожидаем паузу для переключения
         beginCleanStep(CleanStepValveToFiltration, nowMillis); // Переходим к возврату клапанов
       } // Конец перехода
@@ -278,6 +292,7 @@ inline void updateCleanSequence(){ // Основная логика послед
       AirPumpAuto = false; // Компрессор выключаем
       ValveBackwashAuto = false; // Клапаны возвращаем в фильтрацию
       SolSandDumpAuto = false; // Сброс песка выключен
+            updateComment("Клапаны FILTRATION", valveSwitchDuration); // Обновляем комментарий
       if (cleanStepElapsed(nowMillis, valveSwitchDuration)) { // Проверяем окончание переключения
         beginCleanStep(CleanStepStartPumpAfter, nowMillis); // Переходим к запуску насоса
       } // Конец перехода
@@ -287,6 +302,7 @@ inline void updateCleanSequence(){ // Основная логика послед
       AirPumpAuto = false; // Компрессор выключен
       ValveBackwashAuto = false; // Клапаны в фильтрации
       SolSandDumpAuto = false; // Сброс песка выключен
+          updateComment("Запуск насоса", 0); // Обновляем комментарий
       if (cleanStepElapsed(nowMillis, 0)) { // Переходим сразу
         beginCleanStep(CleanStepSandDumpOn, nowMillis); // Переходим к сбросу песка
       } // Конец перехода
@@ -296,6 +312,7 @@ inline void updateCleanSequence(){ // Основная логика послед
       AirPumpAuto = false; // Компрессор выключен
       ValveBackwashAuto = false; // Клапаны в фильтрации
       SolSandDumpAuto = true; // Включаем сброс песка
+            updateComment("Сброс песка", sandDumpDuration); // Обновляем комментарий
       if (cleanStepElapsed(nowMillis, sandDumpDuration)) { // Ждем окончание сброса
         beginCleanStep(CleanStepSandDumpOff, nowMillis); // Переходим к отключению сброса
       } // Конец перехода
@@ -305,6 +322,7 @@ inline void updateCleanSequence(){ // Основная логика послед
       AirPumpAuto = false; // Компрессор выключен
       ValveBackwashAuto = false; // Клапаны в фильтрации
       SolSandDumpAuto = false; // Отключаем сброс песка
+      updateComment("Отключение сброса песка", 0); // Обновляем комментарий
       if (cleanStepElapsed(nowMillis, 0)) { // Переходим сразу
         beginCleanStep(CleanStepComplete, nowMillis); // Переходим к завершению
       } // Конец перехода
@@ -318,6 +336,7 @@ inline void updateCleanSequence(){ // Основная логика послед
       Power_Filtr = CleanResumeFiltration; // Восстанавливаем фильтрацию при необходимости
       CleanResumeFiltration = false; // Сбрасываем флаг восстановления
       CleanStepState = CleanStepIdle; // Возвращаемся в состояние простоя
+      CommentClean = "Промывка завершена ⏳ 0:00"; // Обновляем комментарий
       break; // Выходим из case
     case CleanStepIdle: // Состояние простоя
     default: // Защита от неизвестного состояния
@@ -327,6 +346,7 @@ inline void updateCleanSequence(){ // Основная логика послед
       ValveBackwashAuto = false; // Выключаем авто-клапаны
       SolSandDumpAuto = false; // Выключаем авто-сброс песка
       CleanStepState = CleanStepIdle; // Фиксируем простой
+      CommentClean = "Ожидание расписания ⏳ 0:00"; // Обновляем комментарий
       break; // Выходим из case
   } // Конец switch
 } 
@@ -366,7 +386,6 @@ void TimerControlRelay(int interval) {
                 UITimerEntry &filtrTimer1 = ui.timer("FiltrTimer1");
                 UITimerEntry &filtrTimer2 = ui.timer("FiltrTimer2");
                 UITimerEntry &filtrTimer3 = ui.timer("FiltrTimer3");
-                UITimerEntry &cleanTimer = ui.timer("CleanTimer1");
                 UITimerEntry &ulLightTimer = ui.timer("UlLightTimer");
 
                  if (SetLamp == "off") {
@@ -423,16 +442,15 @@ void TimerControlRelay(int interval) {
 //     }
     bool chk_Array[] = {chk1, chk2, chk3, chk4, chk5, chk6, chk7};
     bool cleanDayEnabled = (DayOfWeek >= 1 && DayOfWeek <= 7) ? chk_Array[DayOfWeek - 1] : false;
-    
- static bool lastCleanScheduleActive = false; // Предыдущее состояние окна расписания промывки
-    bool cleanScheduleActive = false; // Текущее состояние окна расписания
-    if (Clean_Time1) { // Если расписание промывки включено
-      cleanScheduleActive = cleanDayEnabled && checkTimeInInterval(currentHour, currentMinute, cleanTimer.on, cleanTimer.off); // Проверяем попадание во временное окно
-    } // Конец проверки расписания
-    if (cleanScheduleActive && !lastCleanScheduleActive) { // Отслеживаем фронт окна расписания
+    uint16_t scheduleMinutes = parseTimeToMinutes(Timer1); // Время запуска промывки
+    uint16_t currentMinutes = static_cast<uint16_t>(currentHour * 60 + currentMinute); // Текущее время в минутах
+    bool cleanScheduleMatch = Clean_Time1 && cleanDayEnabled && (currentMinutes == scheduleMinutes); // Сравнение с расписанием
+
+    static bool lastCleanScheduleMatch = false; // Предыдущее совпадение расписания
+    if (cleanScheduleMatch && !lastCleanScheduleMatch) { // Отслеживаем момент начала
       CleanScheduleRequested = true; // Запрашиваем запуск промывки
     } // Конец обработки фронта
-    lastCleanScheduleActive = cleanScheduleActive; // Сохраняем текущее состояние окна
+     lastCleanScheduleMatch = cleanScheduleMatch; // Сохраняем текущее состояние
 
 
 

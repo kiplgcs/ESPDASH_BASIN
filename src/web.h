@@ -51,6 +51,7 @@ inline float Speed;              // Скорость (например, датч
 inline float Temperatura;        // Температура
 inline String Timer1 = "12:00"; // Таймер 1
 inline String Comment = "Hello!"; // Текстовый комментарий
+inline String CommentClean; // Этап промывки и оставшееся время
 inline String CurrentTime;       // Текущее время
 inline int RandomVal;            // Случайное значение (например, для демонстрации)
 inline String InfoString;        // Информационная строка
