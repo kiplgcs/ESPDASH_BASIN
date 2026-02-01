@@ -262,7 +262,7 @@ inline void updateCleanSequence(){ // Основная логика послед
       AirPumpAuto = true; // Компрессор включен
       ValveBackwashAuto = true; // Клапаны в режиме BACKWASH
       SolSandDumpAuto = false; // Сброс песка выключен
-      updateComment("Клапаны BACKWASH", valveSwitchDuration); // Обновляем комментарий
+      updateComment("Переключение клапанов в положение Промывка - BACKWASH", valveSwitchDuration); // Обновляем комментарий
       if (cleanStepElapsed(nowMillis, valveSwitchDuration)) { // Проверяем таймер переключения клапанов
         beginCleanStep(CleanStepBackwash, nowMillis); // Переходим к обратной промывке
       } // Конец перехода
@@ -272,7 +272,7 @@ inline void updateCleanSequence(){ // Основная логика послед
       AirPumpAuto = true; // Компрессор включен
       ValveBackwashAuto = true; // Клапаны в режиме BACKWASH
       SolSandDumpAuto = false; // Сброс песка выключен
-      updateComment("Обратная промывка", backwashDuration); // Обновляем комментарий
+      updateComment("Обратная промывка / Насос воды включен / Компрессор включен", backwashDuration); // Обновляем комментарий
       if (cleanStepElapsed(nowMillis, backwashDuration)) { // Проверяем окончание обратной промывки
         beginCleanStep(CleanStepStopPumpAfter, nowMillis); // Переходим к остановке насоса
       } // Конец перехода
@@ -292,7 +292,7 @@ inline void updateCleanSequence(){ // Основная логика послед
       AirPumpAuto = false; // Компрессор выключаем
       ValveBackwashAuto = false; // Клапаны возвращаем в фильтрацию
       SolSandDumpAuto = false; // Сброс песка выключен
-            updateComment("Клапаны FILTRATION", valveSwitchDuration); // Обновляем комментарий
+            updateComment("Переключение клапанов в положение Фильтрация - FILTRATION", valveSwitchDuration); // Обновляем комментарий
       if (cleanStepElapsed(nowMillis, valveSwitchDuration)) { // Проверяем окончание переключения
         beginCleanStep(CleanStepStartPumpAfter, nowMillis); // Переходим к запуску насоса
       } // Конец перехода
@@ -312,7 +312,7 @@ inline void updateCleanSequence(){ // Основная логика послед
       AirPumpAuto = false; // Компрессор выключен
       ValveBackwashAuto = false; // Клапаны в фильтрации
       SolSandDumpAuto = true; // Включаем сброс песка
-            updateComment("Сброс песка", sandDumpDuration); // Обновляем комментарий
+            updateComment("Сброс песка после фильтрации", sandDumpDuration); // Обновляем комментарий
       if (cleanStepElapsed(nowMillis, sandDumpDuration)) { // Ждем окончание сброса
         beginCleanStep(CleanStepSandDumpOff, nowMillis); // Переходим к отключению сброса
       } // Конец перехода
