@@ -2990,7 +2990,9 @@ function setImg(x){
       // Увеличенный буфер, чтобы сериализация не обрезалась на длинных строках
       // StaticJsonDocument<4096> doc;
       // StaticJsonDocument<6144> doc;
-            StaticJsonDocument<12288> doc;
+            //StaticJsonDocument<12288> doc;
+            StaticJsonDocument<20480> doc;
+
       doc["CurrentTime"] = CurrentTime; // Временная метка для синхронизации времени страницы
       doc["gmtOffset"] = gmtOffset_correct; // Часовой пояс (GMT offset)
       doc["FilterImageState"] = jpg; // Выбор картинки бассейна (анимация/статик)
