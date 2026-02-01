@@ -225,6 +225,7 @@ bool AirPump, SolValveFilBack, SolSandDump; // Тестовые реле ком�
 int TimerAirSetting = 60; // Время накачки воздуха компрессором (сек)
 int TimerValveSetting = 30; // Время на переключение трехходовых клапанов (сек)
 int TimerBackwashSetting = 120; // Время обратной промывки (сек)
+int TimerSolSandDump = 30; // Время сброса песка (сек)
 
 bool AirPumpAuto; // Автоматическое включение компрессора воздуха в режиме промывки
 bool SolSandDumpAuto; // Автоматическое включение соленоида сброса песка после промывки
@@ -582,6 +583,9 @@ private:
       return (Power_H2O2 || ManualPulse_H2O2_Active) ? String("1") : String("0");
     });
 
+        registerUiValueProvider("AirPump", [](){ return AirPump ? String("1") : String("0"); }); // реальное состояние компрессора воздуха
+    registerUiValueProvider("SolValveFilBack", [](){ return SolValveFilBack ? String("1") : String("0"); }); // состояние соленоида трехходовых клапанов
+    registerUiValueProvider("SolSandDump", [](){ return SolSandDump ? String("1") : String("0"); }); // состояние соленоида сброса песка
 
     server.on("/", HTTP_GET, [self](AsyncWebServerRequest *r){
       if(!ensureAuthorized(r)) return;
@@ -643,6 +647,8 @@ private:
       ".dash-btn{display:inline-block;margin-top:6px;padding:8px 16px;border-radius:10px;border:1px solid rgba(255,255,255,0.18);background:#222;color:#ddd;font-weight:600;cursor:pointer;box-shadow:0 4px 10px rgba(0,0,0,0.35);transition:transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease, color 0.15s ease;letter-spacing:0.03em;text-transform:uppercase;font-size:0.78rem;} " // Универсальная кнопка дашборда
       ".dash-btn.on{background:linear-gradient(135deg,#3a7bd5,#00d2ff);color:#fff;} " // Активное состояние кнопки
       ".dash-btn.off{background:#222;color:#ddd;opacity:0.9;} " // Неактивное состояние кнопки
+            "#AirPump.on,#SolValveFilBack.on,#SolSandDump.on{background:#2e7d32;border-color:#2e7d32;color:#fff;} " // Активные реле промывки
+      "#AirPump.off,#SolValveFilBack.off,#SolSandDump.off{background:#3a3a3a;border-color:#3a3a3a;color:#fff;} " // Неактивные реле промывки
       ".dash-btn:hover{transform:translateY(-1px);box-shadow:0 6px 14px rgba(0,0,0,0.45);} " // Эффект наведения на кнопку
                 ".page{display:none;position:relative;grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap:15px;} " // Страница интерфейса
       ".page.active{display:block;} " // Отображение активной страницы
@@ -2633,6 +2639,9 @@ window.addEventListener('resize', ()=>{
     syncDashButton('Power_H2O2_Button', j.Power_H2O2_Button);
     syncDashButton('Power_ACO_Button', j.Power_ACO_Button);
     syncDashButton('Power_Topping', j.Power_Topping);
+        syncDashButton('AirPump', j.AirPump);
+    syncDashButton('SolValveFilBack', j.SolValveFilBack);
+    syncDashButton('SolSandDump', j.SolSandDump);
     if(typeof j.MotorSpeed !== 'undefined') updateSliderDisplay('MotorSpeed', j.MotorSpeed);
     if(typeof j.RangeMin !== 'undefined' && typeof j.RangeMax !== 'undefined') setRangeSliderUI('RangeSlider', j.RangeMin, j.RangeMax);
     if(typeof j.LEDColor !== 'undefined') updateInputValue('LEDColor', j.LEDColor);
