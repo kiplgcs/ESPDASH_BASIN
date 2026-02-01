@@ -675,9 +675,10 @@ if (AktualReadInput) {
   err = RS485.addRequest(40001, 1, 0x05, 10, Power_Topping ? devices[0].value : devices[1].value); // реле№11 соленоид долива воды
 
   const bool airPumpActive = AirPump || AirPumpAuto; // Активность компрессора с учетом ручного и авто режима
+  const bool valveBackwashActive = SolValveFilBack || ValveBackwashAuto; // Активность соленоида клапанов с учетом ручного и авто режима
   const bool sandDumpActive = SolSandDump || SolSandDumpAuto; // Активность сброса песка с учетом ручного и авто режима
   err = RS485.addRequest(40001, 1, 0x05, 9, airPumpActive ? devices[0].value : devices[1].value); // реле№10 компрессор воздуха
-  err = RS485.addRequest(40001, 1, 0x05, 11, ValveBackwashAuto ? devices[0].value : devices[1].value); // реле№12 соленоид переключения клапанов
+  err = RS485.addRequest(40001, 1, 0x05, 11, valveBackwashActive ? devices[0].value : devices[1].value); // реле№12 соленоид переключения клапанов
   err = RS485.addRequest(40001, 1, 0x05, 12, sandDumpActive ? devices[0].value : devices[1].value); // реле№13 соленоид сброса песка
 
   //   Error err = RS485.addRequest(40001,1,0x05,5, Power_H2O2 ? devices[0].value : devices[1].value); //реле№6 для Power_H2O2

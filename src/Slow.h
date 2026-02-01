@@ -203,7 +203,9 @@ Power_Heat   = ReadRelayArray[4];
 Power_H2O2   = ReadRelayArray[5];
 Power_ACO    = ReadRelayArray[6];
 Power_Topping= ReadRelayArray[10];
-
+AirPump = ReadRelayArray[9];
+SolValveFilBack = ReadRelayArray[11];
+SolSandDump = ReadRelayArray[12];
 
 switch (sync_step) {
   case 0:

@@ -221,10 +221,10 @@ bool Power_Clean, Power_Clean1; // Промывка фильтра
 bool Clean_Time1, Saved_Clean_Time1; // Разрешения работы включения по времени
 uint16_t Saved_Clean_timeON1, Saved_Clean_timeOFF1;
 
-bool AirPump, SolSandDump; // Тестовые реле компрессора воздуха и соленоида сброса песка
-int TimerAirSetting = 0; // Время накачки воздуха компрессором (сек)
-int TimerValveSetting = 0; // Время на переключение трехходовых клапанов (сек)
-int TimerBackwashSetting = 0; // Время обратной промывки (сек)
+bool AirPump, SolValveFilBack, SolSandDump; // Тестовые реле компрессора воздуха, соленоида клапанов и сброса песка
+int TimerAirSetting = 60; // Время накачки воздуха компрессором (сек)
+int TimerValveSetting = 30; // Время на переключение трехходовых клапанов (сек)
+int TimerBackwashSetting = 120; // Время обратной промывки (сек)
 
 bool AirPumpAuto; // Автоматическое включение компрессора воздуха в режиме промывки
 bool SolSandDumpAuto; // Автоматическое включение соленоида сброса песка после промывки
@@ -716,7 +716,7 @@ private:
       ".graph-tooltip.hidden{display:none;}"  // Скрытое состояние tooltip
       ".card:has(#ModeSelect),.card:has(#LEDColor),.card:has(#Timer1),"  // Специальные карточки UI
       ".card:has(#FloatInput),.card:has(#IntInput),"
-      ".card:has(#RandomVal),.card:has(#DaysSelect){"
+      ".card:has(#RandomVal),.card:has(#DaysSelect),.card:has(#CommentClean){"
       "background:linear-gradient(145deg,#111,#080b13);border:1px solid rgba(159,180,255,0.25);" // Фон и рамка специальных карточек
       "box-shadow:0 18px 34px rgba(0,0,0,0.65);border-radius:18px;padding:14px 16px;" // Тени и скругления
       "transition:transform 0.18s ease,box-shadow 0.18s ease;" // Анимации карточек
@@ -725,11 +725,11 @@ private:
 
       ".card:has(#ModeSelect):hover,.card:has(#LEDColor):hover,.card:has(#Timer1):hover," // Hover-эффект для ключевых карточек
         ".card:has(#FloatInput) label,.card:has(#IntInput) label," // Акцент на label в карточках ввода
-      ".card:has(#RandomVal):hover,.card:has(#DaysSelect):hover{" // Hover для случайного значения и дней
+      ".card:has(#RandomVal):hover,.card:has(#DaysSelect):hover,.card:has(#CommentClean):hover{" // Hover для случайного значения и дней
       "transform:translateY(-2px);box-shadow:0 22px 40px rgba(0,0,0,0.7);}" // Подъём карточки и усиленная тень
       ".card:has(#ModeSelect) label,.card:has(#LEDColor) label,.card:has(#Timer1) label," // Заголовки карточек
       ".card:has(#FloatInput) label,.card:has(#IntInput) label,.card:has(#CurrentTime) label," // Заголовки карточек ввода и времени
-      ".card:has(#RandomVal) label,.card:has(#DaysSelect) label{" // Заголовки карточек значений и дней
+      ".card:has(#RandomVal) label,.card:has(#DaysSelect) label,.card:has(#CommentClean) label{" // Заголовки карточек значений и дней
       "font-size:0.72em;letter-spacing:0.08em;text-transform:uppercase;color:#94b4d6;" // Стиль заголовков карточек
       "} "
         ".time-settings-card{display:flex;flex-direction:column;gap:12px;align-items:stretch;} " // Карточка настройки времени
@@ -830,7 +830,12 @@ private:
        ".card:has(#RandomVal) #RandomVal{" // Отображение случайного значения
       "font-size:1.5em;font-weight:700;color:#ffffff;text-shadow:0 4px 12px rgba(0,0,0,0.45);margin-top:6px;" // Акцентированное значение
       "} "
-            ".card:has(#DaysSelect) .select-days{--day-accent:#4cc3ff;}" // Цвет акцента для выбора дней
+       ".card:has(#DaysSelect) .select-days{--day-accent:#4cc3ff;}" // Цвет акцента для выбора дней
+      ".card:has(#CommentClean){--comment-accent:#4cc3ff;}" // Цвет акцента для этапа промывки
+      ".card:has(#CommentClean) #CommentClean{" // Выделение этапа промывки
+      "font-size:2em;font-weight:700;color:#e8f6ff;background:linear-gradient(145deg,rgba(12,30,52,0.9),rgba(8,14,24,0.9));"
+      "border:1px solid rgba(76,195,255,0.45);box-shadow:0 0 0 1px rgba(255,255,255,0.04),0 10px 24px rgba(0,0,0,0.45),0 0 18px rgba(76,195,255,0.35);"
+      "padding:10px 12px;border-radius:12px;}"
       ".stats-card{display:flex;flex-direction:column;gap:14px;} " // Карточка статистики
       ".stat-group{display:flex;flex-direction:column;gap:8px;} " // Группа статистики
       ".stat-heading{font-size:0.82em;color:#9fb4c8;letter-spacing:0.05em;text-transform:uppercase;padding-left:2px;} " // Заголовок группы статистики
