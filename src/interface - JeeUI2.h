@@ -24,16 +24,16 @@ inline void interface(){ // Декларатиынве функции интер
   
     // Общая информация по бассейну
     UI_PAGE();
-    UI_IMAGE("Image1", "/Basin.jpg", "width:150%;height:550; x:-30%;y:95%;");
-    UI_IMAGE("FilterImage", "/anim1.gif", "width:200;height:200; x:23%;y:823%;");
-    UI_TEXT("OverlayPoolTemp", OverlayPoolTemp, "x:55%;y:150;fontSize:14;color:#00ff00");
-    UI_TEXT("OverlayHeaterTemp", OverlayHeaterTemp, "x:70%;y:150;fontSize:14;color:#00ff00");
-    UI_TEXT("OverlayLevelUpper", OverlayLevelUpper, "x:36%;y:130;fontSize:13;color:#00ff00");
-    UI_TEXT("OverlayLevelLower", OverlayLevelLower, "x:36%;y:170;fontSize:13;color:#00ff00");
+    UI_IMAGE("Image1", "/Basin.jpg", "width:250%;height:800; x:-80%;y:100%;");
+    
+    UI_TEXT("OverlayPoolTemp", OverlayPoolTemp, "x:55%;y:300;fontSize:14;color:#00ff00");
+    UI_TEXT("OverlayHeaterTemp", OverlayHeaterTemp, "x:67%;y:350;fontSize:14;color:#00ff00");
+    UI_TEXT("OverlayLevelUpper", OverlayLevelUpper, "x:36%;y:230;fontSize:13;color:#00ff00");
+    UI_TEXT("OverlayLevelLower", OverlayLevelLower, "x:36%;y:300;fontSize:13;color:#00ff00");
    
-    UI_TEXT("OverlayPh", OverlayPh, "x:680;y:250;fontSize:13;color:#00ff00");
-    UI_TEXT("OverlayChlorine", OverlayChlorine, "x:780;y:250;fontSize:13;color:#00ff00");
-    UI_TEXT("OverlayFilterState", OverlayFilterState, "x:300;y:400;fontSize:12;color:#00ff00");
+    UI_TEXT("OverlayPh", OverlayPh, "x:780;y:400;fontSize:13;color:#00ff00");
+    UI_TEXT("OverlayChlorine", OverlayChlorine, "x:920;y:400;fontSize:13;color:#00ff00");
+    UI_TEXT("OverlayFilterState", OverlayFilterState, "x:350;y:500;fontSize:12;color:#00ff00");
 
     
     // Controls tab
@@ -83,6 +83,8 @@ inline void interface(){ // Декларатиынве функции интер
 
     // Настройка фильтрации
     UI_PAGE();
+    //UI_IMAGE("FilterImage", "/anim1.gif", "width:100;height:100; x:10%;y:0%;"); // Временно убрал данную картину за ненадобностью
+
         UI_BUTTON("Power_Filtr", Power_Filtr, "gray", "🧽 Фильтрация (вручную)");
     // UI_CHECKBOX("Power_Filtr", Power_Filtr, "Фильтрация (вручную)");
     UI_CHECKBOX("Filtr_Time1", Filtr_Time1, "⏱️ Таймер фильтрации №1");
@@ -189,8 +191,8 @@ UI_COLOR("LEDColor", LEDColor, "🎨 Цвет подсветки");
     UI_RANGE("LedAutoplayDuration", LedAutoplayDuration, 5, 180, 5, "⏳ Смена режима (сек)");
     UI_SELECT("LedAutoplay", LedAutoplay, (std::initializer_list<UIOption>{{"1", "Автомат"},
                                            {"0", "Вручную"}}), "🔁 Автосмена");
-    UI_SELECT("LedColorOrder", LedColorOrder, (std::initializer_list<UIOption>{{"GRB", "WS2815 / WS2812 (GRB)"},
-                                               {"RGB", "WS2811 (RGB)"},
+    UI_SELECT("LedColorOrder", LedColorOrder, (std::initializer_list<UIOption>{{"GRB", "WS2811 (RGB)"},
+                                               {"RGB", "WS2815 / WS2812 (GRB)"},
                                                {"GBR", "GBR"},
                                                {"RBG", "RBG"},
                                                {"BRG", "BRG"},
@@ -218,10 +220,7 @@ UI_COLOR("LEDColor", LEDColor, "🎨 Цвет подсветки");
     UI_CHECKBOX("Activation_Heat", Activation_Heat, "🔥 Контроль нагрева");
     UI_DISPLAY_BOOL("Power_Heat", Power_Heat, "♨️ Состояние нагрева", "🔥 Нагрев", "⏹️ Откл.");
     
-    // UI_GRAPH_SOURCE("PoolTempTrend", "📈 Температура бассейна",
-    // "value:Temperatura;updatePeriod_of_Time:60;updateStep:5;maxPoints:40;width:100%;height:240;"
-    // "xLabel:Time;yLabel:Temperature;pointColor:#6b66ff;lineColor:#ff5e5e;"
-    // "lineWidth:1;pointRadius:3;smooth:false", DS1);
+
 
     UI_GRAPH_SOURCE("FloatTrend3", "📈 Температура бассейна",
     "value:Temperatura;updatePeriod_of_Time:60;updateStep:5;maxPoints:40;width:100%;height:240;"
@@ -241,10 +240,6 @@ UI_COLOR("LEDColor", LEDColor, "🎨 Цвет подсветки");
  
 
     UI_DISPLAY_FLOAT("PH", PH, "🧪 pH (текущее)");
-
-
-
-
     UI_DISPLAY_BOOL("Power_ACO", Power_ACO, "🧴 Дозатор ACO", "✅ Работа", "⏹️ Откл.");
     UI_CHECKBOX("PH_Control_ACO", PH_Control_ACO, "🧪 Контроль pH (ACO)");
     UI_NUMBER("PH_setting", PH_setting, "⬆️ Верхний предел pH", true);
@@ -336,7 +331,7 @@ UI_COLOR("LEDColor", LEDColor, "🎨 Цвет подсветки");
     UI_PAGE();
     UI_DISPLAY_FLOAT("RoomTemp", DS1, "🌡 Температура в помещении, °C");
     UI_DUAL_RANGE_KEYS("RoomTempRange", RoomTempOn, RoomTempOff, "RoomTempOn", "RoomTempOff", 1.0, 30.0, 0.5, "🎚️ Включение/выключение обогрева, °C");
-    UI_CHECKBOX("RoomTemper", RoomTemper, "✅ Контроль температуры в помещении");
+    UI_CHECKBOX("RoomTemper", RoomTemper, "Контроль температуры в помещении");
     UI_DISPLAY_BOOL("Power_Warm_floor_heating", Power_Warm_floor_heating, "♨️ Обогрев пола", "🔥 Включен", "⏹️ Откл.");
 
     // Уличное освещение

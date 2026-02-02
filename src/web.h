@@ -150,11 +150,11 @@ unsigned long ManualPulse_ACO_StartedAt = 0;
 
 
 bool PH_Control_ACO, Saved_PHControlACO; // Флаг для отслеживания предыдущего состояния PH_Control_ACO
-int ACO_Work = 11, Saved_ACO_Work;
+int ACO_Work = 6, Saved_ACO_Work;
 
 
 bool NaOCl_H2O2_Control, Saved_NaOCl_H2O2_Control;
-int H2O2_Work = 11, Saved_H2O2_Work;
+int H2O2_Work = 6, Saved_H2O2_Work;
 
 int corr_ORP_temper_mV; 		// ОРП с учетом калибровки по температуре
 int CalRastvor256mV	= 256;	//Калибровочный раствор
@@ -570,14 +570,14 @@ private:
     registerUiValueProvider("RoomTemp", [](){ return formatTemperatureString(DS1, DS1Available); }); // дублирует формат DS1 для помещения
     registerUiValueProvider("Power_ACO", [](){ // подставляем статус работы дозатора ACO
       const bool active = Power_ACO || ManualPulse_ACO_Active;
-      return active ? String("? Работа") : String("?? Откл.");
+            return active ? String("Работа") : String("Откл.");
     });
     registerUiValueProvider("Power_ACO_Button", [](){ // кнопка также светится при ручном импульсе
-      return (Power_ACO || ManualPulse_ACO_Active) ? String("1") : String("0");
+        return (Power_ACO || ManualPulse_ACO_Active) ? String("1") : String("0");
     });
     registerUiValueProvider("Power_H2O2", [](){ // статус дозатора H2O2
       const bool active = Power_H2O2 || ManualPulse_H2O2_Active;
-      return active ? String("? Работа") : String("?? Откл.");
+        return active ? String("Работа") : String("Откл.");
     });
     registerUiValueProvider("Power_H2O2_Button", [](){ // кнопка H2O2 реагирует на импульсы
       return (Power_H2O2 || ManualPulse_H2O2_Active) ? String("1") : String("0");
