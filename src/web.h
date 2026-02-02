@@ -676,32 +676,6 @@ private:
       "label:has(input[type=checkbox]){display:flex;flex-direction:column;align-items:flex-start;gap:6px;width:fit-content;} " // Контейнер чекбокса с подписью
       "label:has(input[type=checkbox]) input[type=checkbox]{margin-bottom:0;transform:scale(1.4);transform-origin:left center;} " // Увеличенный чекбокс
       "input[type=range]{width:100%;} " // Ползунок на всю ширину
-   ".select-days{--day-accent:#4cc3ff;display:flex;flex-wrap:nowrap;gap:8px;" // Контейнер выбора дней
-      "justify-content:center;align-items:center;padding:8px;" // Выравнивание элементов дней
-      "background:linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02));" // Фон панели дней
-      "border-radius:14px;border:1px solid rgba(255,255,255,0.12);" // Скругление и рамка
-      "box-shadow:inset 0 1px 0 rgba(255,255,255,0.08),0 10px 24px rgba(0,0,0,0.45);" // Тени панели
-      "overflow-x:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.2) transparent;} " // Горизонтальный скролл
-      ".select-days::-webkit-scrollbar{height:6px;} " // Высота скроллбара
-      ".select-days::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.2);border-radius:999px;} " // Ползунок скроллбара
-      ".select-days .day-pill{position:relative;display:inline-flex;align-items:center;justify-content:center;" // Кнопка дня
-      "min-width:42px;height:32px;padding:0 12px;border-radius:999px;" // Размеры и форма кнопки
-      "font-size:0.78em;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;" // Шрифт кнопки дня
-      "color:#b7c0ce;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);" // Цвет и рамка
-      "box-shadow:inset 0 1px 0 rgba(255,255,255,0.08),0 6px 14px rgba(0,0,0,0.4);" // Тени кнопки
-      "cursor:pointer;transition:transform 0.18s ease,box-shadow 0.18s ease,background 0.18s ease,color 0.18s ease;} " // Анимации кнопки
-      ".select-days .day-pill input{position:absolute;opacity:0;pointer-events:none;} " // Скрытый input
-      ".select-days .day-pill:hover{transform:translateY(-1px) scale(1.05);" // Hover-эффект кнопки
-      "box-shadow:0 10px 18px rgba(0,0,0,0.45);} " // Усиленная тень при наведении
-      ".select-days .day-pill:active{transform:translateY(0) scale(0.98);} " // Эффект нажатия
-      ".select-days .day-pill:has(input:checked){color:#fff;" // Стиль выбранного дня
-      "background:linear-gradient(135deg,rgba(76,195,255,0.3),rgba(76,195,255,0.12));" // Фон выбранного дня
-      "border-color:rgba(76,195,255,0.6);" // Рамка выбранного дня
-      "box-shadow:0 0 0 1px rgba(76,195,255,0.35),0 12px 26px rgba(76,195,255,0.35);} " // Подсветка выбранного дня
-      ".select-days .day-pill:has(input:checked)::after{content:'';position:absolute;inset:-6px;" // Свечение выбранного дня
-      "border-radius:inherit;background:radial-gradient(circle,rgba(76,195,255,0.35),transparent 65%);" // Градиент свечения
-      "opacity:0.75;filter:blur(6px);z-index:0;} " // Размытие свечения
-      ".select-days .day-pill span{position:relative;z-index:1;} " // Текст поверх эффектов
       "table{width:100%;border-collapse:collapse;margin-top:10px;} th,td{border:1px solid #444;padding:6px;text-align:center;} " // Таблицы
       "th{background:#333;} " // Заголовки таблиц
       ".card.pro-card{background:linear-gradient(135deg,#0f0f12,#151a2d);border:1px solid rgba(129,193,255,0.4);} " // Pro-карточка
@@ -2990,8 +2964,8 @@ function setImg(x){
       // Увеличенный буфер, чтобы сериализация не обрезалась на длинных строках
       // StaticJsonDocument<4096> doc;
       // StaticJsonDocument<6144> doc;
-            //StaticJsonDocument<12288> doc;
-            StaticJsonDocument<20480> doc;
+      // StaticJsonDocument<12288> doc;
+      DynamicJsonDocument doc(65536);
 
       doc["CurrentTime"] = CurrentTime; // Временная метка для синхронизации времени страницы
       doc["gmtOffset"] = gmtOffset_correct; // Часовой пояс (GMT offset)
@@ -3002,9 +2976,12 @@ function setImg(x){
         doc[String(timer.id + "_OFF")] = formatMinutesToTime(timer.off);
       }
             appendUiRegistryValues(doc);
-      String s;
-      serializeJson(doc, s);
-      r->send(200, "application/json", s);
+      // String s;
+      // serializeJson(doc, s);
+      // r->send(200, "application/json", s);
+      AsyncResponseStream *response = r->beginResponseStream("application/json");
+      serializeJson(doc, *response);
+      r->send(response);
     });
 
     server.on("/stats", HTTP_GET, [](AsyncWebServerRequest *r){
