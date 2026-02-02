@@ -27,13 +27,13 @@ inline void interface(){ // Декларатиынве функции интер
     UI_IMAGE("Image1", "/Basin.jpg", "width:250%;height:800; x:-80%;y:100%;");
     
     UI_TEXT("OverlayPoolTemp", OverlayPoolTemp, "x:55%;y:300;fontSize:14;color:#00ff00");
-    UI_TEXT("OverlayHeaterTemp", OverlayHeaterTemp, "x:67%;y:350;fontSize:14;color:#00ff00");
-    UI_TEXT("OverlayLevelUpper", OverlayLevelUpper, "x:36%;y:230;fontSize:13;color:#00ff00");
-    UI_TEXT("OverlayLevelLower", OverlayLevelLower, "x:36%;y:300;fontSize:13;color:#00ff00");
+    UI_TEXT("OverlayHeaterTemp", OverlayHeaterTemp, "x:69%;y:350;fontSize:14;color:#00ff00");
+    UI_TEXT("OverlayLevelUpper", OverlayLevelUpper, "x:36%;y:240;fontSize:13;color:#00ff00");
+    UI_TEXT("OverlayLevelLower", OverlayLevelLower, "x:36%;y:290;fontSize:13;color:#00ff00");
    
     UI_TEXT("OverlayPh", OverlayPh, "x:780;y:400;fontSize:13;color:#00ff00");
     UI_TEXT("OverlayChlorine", OverlayChlorine, "x:920;y:400;fontSize:13;color:#00ff00");
-    UI_TEXT("OverlayFilterState", OverlayFilterState, "x:350;y:500;fontSize:12;color:#00ff00");
+    UI_TEXT("OverlayFilterState", OverlayFilterState, "x:380;y:450;fontSize:12;color:#00ff00");
 
     
     // Controls tab
