@@ -33,7 +33,7 @@ inline void interface(){ // Декларатиынве функции интер
    
     UI_TEXT("OverlayPh", OverlayPh, "x:780;y:400;fontSize:13;color:#00ff00");
     UI_TEXT("OverlayChlorine", OverlayChlorine, "x:920;y:400;fontSize:13;color:#00ff00");
-    UI_TEXT("OverlayFilterState", OverlayFilterState, "x:380;y:450;fontSize:12;color:#00ff00");
+    UI_TEXT("OverlayFilterState", OverlayFilterState, "x:395;y:470;fontSize:12;color:#00ff00");
 
     
     // Controls tab

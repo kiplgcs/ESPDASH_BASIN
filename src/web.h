@@ -2732,6 +2732,22 @@ function setImg(x){
           return;
         }
 
+      //Вывод информации из EEPROM  на WEB страницу
+        if(key=="ACO_Work"){
+          ACO_Work = valStr.toInt();
+          if(ACO_Work < 1) ACO_Work = 1;
+          saveValue<int>("ACO_Work", ACO_Work);
+          r->send(200,"text/plain","OK");
+          return;
+        }
+        if(key=="H2O2_Work"){
+          H2O2_Work = valStr.toInt();
+          if(H2O2_Work < 1) H2O2_Work = 1;
+          saveValue<int>("H2O2_Work", H2O2_Work);
+          r->send(200,"text/plain","OK");
+          return;
+        }
+
            if(key=="ThemeColor") { ThemeColor = valStr; saveValue<String>(key.c_str(), valStr); }
           else if(key=="gmtOffset") {
           int offset = normalizeGmtOffset(valStr.toInt());
@@ -2975,6 +2991,10 @@ function setImg(x){
         doc[String(timer.id + "_ON")] = formatMinutesToTime(timer.on);
         doc[String(timer.id + "_OFF")] = formatMinutesToTime(timer.off);
       }
+
+      doc["ACO_Work"] = ACO_Work;
+      doc["H2O2_Work"] = H2O2_Work;
+
             appendUiRegistryValues(doc);
       // String s;
       // serializeJson(doc, s);

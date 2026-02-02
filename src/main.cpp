@@ -101,6 +101,15 @@ void setup() {
   gmtOffset_correct = normalizeGmtOffset(gmtOffset_correct);
   Saved_gmtOffset_correct = gmtOffset_correct;
 
+ // Загрузка параметров из EEPROM после перезагрузки
+  auto sanitizeDosingPeriod = [](int value) -> int {
+    if(value < 1) return 1;
+    if(value > 13) return 13;
+    return value;
+  };
+  ACO_Work = sanitizeDosingPeriod(loadValue<int>("ACO_Work", ACO_Work));
+  H2O2_Work = sanitizeDosingPeriod(loadValue<int>("H2O2_Work", H2O2_Work));
+
   // Загрузка и применение MQTT параметров
   Serial.println("[BOOT] Loading MQTT settings...");
   loadMqttSettings();
@@ -282,8 +291,24 @@ loop_CL2(2100); // Обработка логики хлора
   OverlayLevelLower = String("🛟 Нижний уровень: ") + (WaterLevelSensorLower ? "Активен" : "Нет уровня");
   OverlayPh = "🧪 pH: " + String(PH, 2);
   OverlayChlorine = "🧴 Cl: " + String(ppmCl, 3) + " ppm";
-  OverlayFilterState = String("🧽 Фильтр: ") + (Power_Clean ? "Промывка" : (Power_Filtr ? "Фильтрация" : "Остановлен"));
-  
+  // OverlayFilterState = String("🧽 Фильтр: ") + (Power_Clean ? "Промывка" : (Power_Filtr ? "Фильтрация" : "Остановлен"));
+  String filterStateDetails;
+  if (Power_Clean || CleanSequenceActive) {
+    String cleanStage = CommentClean;
+    if (cleanStage.length() == 0) {
+      cleanStage = "Промывка активна";
+    }
+    filterStateDetails = "Промывка / " + cleanStage;
+  } else if (Power_Filtr) {
+    filterStateDetails = FiltrationTimerActive ? "Фильтрация (по таймеру)" : "Фильтрация (ручной режим)";
+  } else {
+    filterStateDetails = "Остановлен";
+  }
+  OverlayFilterState = String("🧽 Фильтр: ") + filterStateDetails;
+
+
+
+
   if (Power_Clean) {
     jpg = 2;
   } else if (Power_Filtr) {

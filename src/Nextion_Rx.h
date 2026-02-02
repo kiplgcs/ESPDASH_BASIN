@@ -609,10 +609,15 @@ void trigger22(){read_Dispensers_sw0_sw1();}
 //  Saved_ACO_Work = ACO_Work = myNex.readNumber("Dispensers.cb0.val") +1;  //Отложенное повторное выполнение через 1 секунду
 //  jee.var("ACO_Work", String(ACO_Work));
 // } 
-void read_Dispensers_cb0(){
-    Saved_ACO_Work = ACO_Work = myNex.readNumber("Dispensers.cb0.val") + 1;
-    if(ACO_Work < 1) ACO_Work = 1;
-    saveValue<int>("ACO_Work", ACO_Work);
+
+void read_Dispensers_cb0(){ // Колбэк-функция обработки значения cb0
+    uint32_t rawValue = myNex.readNumber("Dispensers.cb0.val"); // Повторно читаем исходное значение без смещения
+    if(rawValue == 777777) return; // Выход из функции при получении служебного/ошибочного значения - чтобы не помещало правильной работе логики
+    int nextValue = static_cast<int>(rawValue) + 1; // Преобразуем в int и увеличиваем на 1
+    if(nextValue < 1) nextValue = 1; // Ограничение минимального значения
+    if(nextValue > 13) nextValue = 13; // Ограничение максимального значения
+    Saved_ACO_Work = ACO_Work = nextValue; // Сохраняем итоговое корректное значение
+    saveValue<int>("ACO_Work", ACO_Work); // Записываем значение в энергонезависимую память
 }
 void trigger23(){read_Dispensers_cb0();}
 // // printh 23 02 54 18 - Dispensers  свчитываем состояние n4 / n5
@@ -642,11 +647,17 @@ void trigger24(){read_Dispensers_sw2_sw3();}
 // jee.var("H2O2_Work", String(H2O2_Work));
 
 // } 
-void read_Dispensers_cb1(){
-    Saved_H2O2_Work = H2O2_Work = myNex.readNumber("Dispensers.cb1.val") + 1;
-    if(H2O2_Work < 1) H2O2_Work = 1;
-    saveValue<int>("H2O2_Work", H2O2_Work);
+
+void read_Dispensers_cb1(){ // Колбэк-функция обработки значения cb1
+    uint32_t rawValue = myNex.readNumber("Dispensers.cb1.val"); // Читаем значение cb1 из Nextion
+    if(rawValue == 777777) return; // Выходим из функции при служебном/ошибочном значении
+    int nextValue = static_cast<int>(rawValue) + 1; // Преобразуем значение в int и увеличиваем на 1
+    if(nextValue < 1) nextValue = 1; // Ограничиваем минимальное допустимое значение
+    if(nextValue > 13) nextValue = 13; // Ограничиваем максимальное допустимое значение
+    Saved_H2O2_Work = H2O2_Work = nextValue; // Сохраняем скорректированное значение в рабочие переменные
+    saveValue<int>("H2O2_Work", H2O2_Work); // Записываем значение в энергонезависимую память
 }
+
 void trigger25(){read_Dispensers_cb1();}
 // // printh 23 02 54 1A -
 // void trigger26(){
