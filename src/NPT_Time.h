@@ -6,6 +6,7 @@
 #include "EasyNextionLibrary.h"
 #include <Wire.h>
 #include <time.h>
+#include <stdlib.h>
 #include "wifi_manager.h"
 //#include <RTClib.h>
 //#include <TimeLib.h>
@@ -17,7 +18,8 @@ const char *ntpServer2 = "time.google.com";
 //int gmtOffset_correct = 3; //GMT+3:00, Москва/Краснодар
 const int daylightOffset = 0; // Смещение летнего времени (0 - отключено)
 
-inline int period_get_NPT_Time = 5000; // 10сек./3мин - время через которое будет обновлятся время из интерента
+inline int period_get_NPT_Time = 600000; // Период NTP-синхронизации (мс), при ошибках временно уменьшается
+inline int period_get_Nextion_Time = 1000; // Период опроса RTC Nextion для динамической синхронизации
 
 // Внешние зависимости из других модулей
 extern WiFiUDP ntpUDP;
@@ -205,6 +207,34 @@ bool isSameTimeDate(int hourA, int minuteA, int secondA, int dayA, int monthA, i
          dayA == dayB && monthA == monthB && yearA == yearB;
 }
 
+long epochDeltaSeconds(time_t a, time_t b) {
+  long long diff = static_cast<long long>(a) - static_cast<long long>(b);
+  return static_cast<long>(llabs(diff));
+}
+
+void syncNextionRtcFromEpoch(time_t epoch) {
+  if (epoch <= 0) return;
+  struct tm *timeInfo = localtime(&epoch);
+  if (!timeInfo) return;
+
+  int yearValue = timeInfo->tm_year + 1900;
+  int monthValue = timeInfo->tm_mon + 1;
+  int dayValue = timeInfo->tm_mday;
+  int hourValue = timeInfo->tm_hour;
+  int minuteValue = timeInfo->tm_min;
+  int secondValue = timeInfo->tm_sec;
+  int dayOfWeekValue = (timeInfo->tm_wday + 6) % 7 + 1;
+
+  myNex.writeStr("rtc5=" + String(secondValue));
+  myNex.writeStr("rtc4=" + String(minuteValue));
+  myNex.writeStr("rtc3=" + String(hourValue));
+  myNex.writeStr("rtc2=" + String(dayValue));
+  myNex.writeStr("rtc1=" + String(monthValue));
+  myNex.writeStr("rtc0=" + String(yearValue));
+  myNex.writeStr("rtc6=" + String(dayOfWeekValue == 7 ? 0 : dayOfWeekValue));
+}
+
+
 int iii=1; //переменная для счета до отправки на Web -Обновляенм время на первой странице
 void getTimeFromRTC(int interval_TimeFromRTC) {
   static unsigned long timer;
@@ -274,12 +304,16 @@ bool checkInternetAvailability() {
 // 2) Если есть Интернет — запрашиваем NTP и обновляем базу (и при необходимости Nextion).
 // 3) Если Интернета нет и Nextion недоступен — поднимаем время из NVS.
 void NPT_Time(int interval_NPT_Time){ // переодически синхронизируем время из Интеренета
-static unsigned long timer;
-if (interval_NPT_Time + timer > millis()) return; 
-timer = millis();
-//---------------------------------------------------------------------------------
-//---------------------------------------------------------------------------------
-//---------------------------------------------------------------------------------
+static unsigned long timerNtp;
+static unsigned long timerNextion;
+
+const unsigned long nowMs = millis();
+bool nextionAvailable = false;
+time_t nextionEpoch = 0;
+
+if (nowMs - timerNextion >= static_cast<unsigned long>(period_get_Nextion_Time)) {
+  timerNextion = nowMs;
+
   int nextionSeconds = 0;
   int nextionMinutes = 0;
   int nextionHours = 0;
@@ -287,14 +321,24 @@ timer = millis();
   int nextionMonth = 0;
   int nextionYear = 0;
   int nextionDayOfWeek = 0;
-    // 1) Пытаемся читать время из Nextion (RTC) — это приоритетный локальный источник
-  bool nextionAvailable = fetchNextionTime(nextionSeconds, nextionMinutes, nextionHours, nextionDay, nextionMonth, nextionYear, nextionDayOfWeek);
+
+  nextionAvailable = fetchNextionTime(nextionSeconds, nextionMinutes, nextionHours, nextionDay, nextionMonth, nextionYear, nextionDayOfWeek);
   if (nextionAvailable) {
-    time_t nextionEpoch = buildEpoch(nextionYear, nextionMonth, nextionDay, nextionHours, nextionMinutes, nextionSeconds);
+    nextionEpoch = buildEpoch(nextionYear, nextionMonth, nextionDay, nextionHours, nextionMinutes, nextionSeconds);
     if (nextionEpoch > 0) {
-      setBaseEpoch(nextionEpoch);
+      time_t currentEpoch = getCurrentEpoch();
+      if (!baseEpochReady || epochDeltaSeconds(nextionEpoch, currentEpoch) >= 1) {
+        setBaseEpoch(nextionEpoch);
+      }
     }
+      } else if (!baseEpochReady) {
+    loadBaseEpochFromStorage();
   }
+}
+
+if (interval_NPT_Time + timerNtp > nowMs) return;
+timerNtp = nowMs;
+//---------------------------------------------------------------------------------
 
 // 2) Если Интернет доступен — берём NTP и синхронизируем всё
 if (checkInternetAvailability()) { //Если Интерент доступен
@@ -341,31 +385,37 @@ if (checkInternetAvailability()) { //Если Интерент доступен
       }
     }
 
-if(isValidDateTime(npt_Year, npt_Month, npt_Day, npt_hours, npt_minutes, npt_seconds)) { period_get_NPT_Time = 60000; //Большой таймер повторных запросов - если время считали правильно
+if(isValidDateTime(npt_Year, npt_Month, npt_Day, npt_hours, npt_minutes, npt_seconds)) { period_get_NPT_Time = 600000; // редкая синхронизация Nextion/ESP от Интернета
       setBaseEpoch(epochTime);
-     // Если Nextion доступен и его время отличается — обновляем RTC на дисплее
-      bool shouldUpdateNextion = nextionAvailable && !isSameTimeDate(
-        npt_hours, npt_minutes, npt_seconds, npt_Day, npt_Month, npt_Year,
-        nextionHours, nextionMinutes, nextionSeconds, nextionDay, nextionMonth, nextionYear
-      );
+
+      if (!nextionAvailable) {
+        int rtcSeconds = 0;
+        int rtcMinutes = 0;
+        int rtcHours = 0;
+        int rtcDay = 0;
+        int rtcMonth = 0;
+        int rtcYear = 0;
+        int rtcDayOfWeek = 0;
+        nextionAvailable = fetchNextionTime(rtcSeconds, rtcMinutes, rtcHours, rtcDay, rtcMonth, rtcYear, rtcDayOfWeek);
+        if (nextionAvailable) {
+          nextionEpoch = buildEpoch(rtcYear, rtcMonth, rtcDay, rtcHours, rtcMinutes, rtcSeconds);
+        }
+      }
+
+      bool shouldUpdateNextion = !nextionAvailable || epochDeltaSeconds(epochTime, nextionEpoch) > 3;
 
       DayOfWeek = npt_DayOfWeek; //Записываем корректный день недели
       
       if (shouldUpdateNextion) {
-        myNex.writeStr("rtc5=" + String(npt_seconds));
-        myNex.writeStr("rtc4=" + String(npt_minutes));
-        myNex.writeStr("rtc3=" + String(npt_hours));
-        myNex.writeStr("rtc2=" + String(npt_Day));
-        myNex.writeStr("rtc1=" + String(npt_Month));
-        myNex.writeStr("rtc0=" + String(npt_Year));
-        myNex.writeStr("rtc6=" + String(npt_DayOfWeek == 7 ? 0 : npt_DayOfWeek));
+        syncNextionRtcFromEpoch(epochTime);
       }
     } else {
-      period_get_NPT_Time = 5000; //Короткий таймер повторных запросов - если время считали не правильно или нет интернета
+      period_get_NPT_Time = 15000; //Короткий таймер повторных запросов - если время считали не правильно
     }
   } else {
-        // 3) Интернета нет: если Nextion не ответил и базового времени еще нет — берём из NVS
-    if (!nextionAvailable && !baseEpochReady) {
+        // 3) Интернета нет: если Nextion недоступен и базового времени еще нет — берём из NVS
+    period_get_NPT_Time = 15000;
+    if (!baseEpochReady) {
       loadBaseEpochFromStorage();
     }
   }

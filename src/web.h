@@ -2781,6 +2781,7 @@ function setImg(x){
           gmtOffset_correct = offset;
           Saved_gmtOffset_correct = offset;
           saveValue<int>("gmtOffset", offset);
+          myNex.writeNum("pageRTC.n5.val", offset);
         }
                 else if(key=="graphMainMaxPoints") {
           int valInt = valStr.toInt();
@@ -2855,6 +2856,7 @@ function setImg(x){
         gmtOffset_correct = offset;
         Saved_gmtOffset_correct = offset;
         saveValue<int>("gmtOffset", offset);
+        myNex.writeNum("pageRTC.n5.val", offset);
       }
       if(dateStr.length() < 8 || timeStr.length() < 4){
         r->send(400, "application/json", "{\"status\":\"error\",\"error\":\"Некорректная дата/время\"}");
@@ -2921,6 +2923,7 @@ function setImg(x){
         return;
       }
       setBaseEpoch(epoch);
+      syncNextionRtcFromEpoch(epoch);
       String payloadJson = "{\"status\":\"ok\",\"current\":\"" + jsonEscape(getCurrentDateTime()) + "\"}";
       r->send(200, "application/json", payloadJson);
     });

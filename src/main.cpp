@@ -129,6 +129,8 @@ void setup() {
 
   setup_Nextion(); //Настраиваем Nextion монитор
 
+  readNextionTime(); // При старте сразу пробуем взять время с RTC Nextion
+
   setup_ds18();
 
   interface(); // Для загрузки и выгрузки из памяти EEPOM сохраненных данных
