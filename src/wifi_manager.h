@@ -94,6 +94,13 @@ inline void beginMdns() {
   }
 }
 
+inline void stopMdns() {
+  if (!mdnsStarted)
+    return;
+  MDNS.end();
+  mdnsStarted = false;
+}
+
 inline void startHiddenApForSta() {
   WiFi.softAP(apSsid.c_str(), apPass.c_str(), 1, true); // Поднимаем скрытый AP, чтобы устройство оставалось доступным
 }
@@ -204,6 +211,7 @@ inline void initWiFiModule() {
                 
   WiFi.persistent(false);        // Не сохраняем настройки Wi-Fi во флэш автоматически
   WiFi.mode(WIFI_STA);           // Первичный режим — STA
+  stopMdns();                    // Гарантируем чистый запуск mDNS
   WiFi.setHostname(hostName.c_str());
   startStaAttempt();             // Запускаем первую попытку подключения
 }
@@ -212,12 +220,13 @@ inline void wifiModuleLoop() { wifi_internal::ensureConnection(); }
 
 inline WifiStatusInfo getWifiStatus() {
   WifiStatusInfo info{};
+  wifi_mode_t mode = WiFi.getMode();
   info.modeText = wifi_internal::buildModeText(); // STA / AP / STA+AP
   info.statusText = wifi_internal::buildStatusText(); // Connected / Connecting / AP Only / Disconnected
   info.ssid = WiFi.SSID();
-  info.ip = WiFi.localIP().toString();
+  info.ip = (mode == WIFI_MODE_AP) ? WiFi.softAPIP().toString() : WiFi.localIP().toString();
   info.rssi = WiFi.isConnected() ? WiFi.RSSI() : 0;
-  info.apActive = WiFi.getMode() == WIFI_MODE_AP || WiFi.getMode() == WIFI_MODE_APSTA;
+  info.apActive = mode == WIFI_MODE_AP || mode == WIFI_MODE_APSTA;
   return info;
 }
 
@@ -316,6 +325,7 @@ inline bool saveWifiConfig(const String &ssid, const String &pass, const String 
   saveValue<String>("hostname", hostName);
 
   WiFi.disconnect(true);
+  stopMdns();
   fallbackApActive = false;
   staAttemptInProgress = false;
   attemptCount = 0;                            // Сбрасываем счетчик — новые попытки возможны после изменения настроек
