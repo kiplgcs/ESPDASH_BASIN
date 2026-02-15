@@ -2857,7 +2857,7 @@ function setImg(x){
         saveValue<int>("gmtOffset", offset);
       }
       if(dateStr.length() < 8 || timeStr.length() < 4){
-        r->send(400, "application/json", "{\\\"status\\\":\\\"error\\\",\\\"error\\\":\\\"Некорректная дата/время\\\"}");
+        r->send(400, "application/json", "{\"status\":\"error\",\"error\":\"Некорректная дата/время\"}");
         return;
       }
       int year = 0;
@@ -2912,16 +2912,16 @@ function setImg(x){
       parseTime(timeStr);
 
       if(!isValidDateTime(year, month, day, hour, minute, second)){
-        r->send(400, "application/json", "{\\\"status\\\":\\\"error\\\",\\\"error\\\":\\\"Некорректная дата/время\\\"}");
+        r->send(400, "application/json", "{\"status\":\"error\",\"error\":\"Некорректная дата/время\"}");
         return;
       }
       time_t epoch = buildEpoch(year, month, day, hour, minute, second);
       if(epoch <= 0){
-        r->send(400, "application/json", "{\\\"status\\\":\\\"error\\\",\\\"error\\\":\\\"Не удалось вычислить время\\\"}");
+        r->send(400, "application/json", "{\"status\":\"error\",\"error\":\"Не удалось вычислить время\"}");
         return;
       }
       setBaseEpoch(epoch);
-      String payloadJson = "{\\\"status\\\":\\\"ok\\\",\\\"current\\\":\\\"" + jsonEscape(getCurrentDateTime()) + "\\\"}";
+      String payloadJson = "{\"status\":\"ok\",\"current\":\"" + jsonEscape(getCurrentDateTime()) + "\"}";
       r->send(200, "application/json", payloadJson);
     });
 
