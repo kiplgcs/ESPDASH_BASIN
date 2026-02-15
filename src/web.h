@@ -873,6 +873,33 @@ private:
       ".btn-mqtt.btn-activate-off{background:linear-gradient(135deg,#1b2b52,#23406f);border-color:rgba(64,139,255,0.55);color:#e5efff;} " // MQTT кнопка выключенного состояния
       ".btn-mqtt.btn-activate-on{background:linear-gradient(135deg,#0f3b1f,#13532a);border-color:rgba(76,175,80,0.6);color:#d8ffe4;} " // MQTT кнопка включённого состояния
    
+      "@media (max-width:1024px){" // Адаптация под ноутбуки/планшеты
+      "#sidebar{width:200px;} " // Узкая боковая панель
+      "#main{margin-left:200px;padding:16px;} " // Уменьшенные отступы контента
+      "#toggleBtn{left:200px;} " // Смещение кнопки меню
+      "} "
+      "@media (max-width:860px){" // Адаптация под мобильные/узкие экраны
+      "#sidebar{width:240px;transform:translateX(0);z-index:1100;} " // Сайдбар поверх контента
+      "body.sidebar-hidden #sidebar{transform:translateX(-100%);} " // Скрытие сайдбара сдвигом
+      "body.sidebar-hidden #main{margin-left:0;} " // Контент без отступа
+      "#main{margin-left:0;padding:14px;} " // Контент во всю ширину
+      "#toggleBtn{left:14px;border-radius:8px;} " // Кнопка меню ближе к краю
+      ".page{grid-template-columns:repeat(auto-fill,minmax(220px,1fr));} " // Более компактная сетка карточек
+      "} "
+      "@media (max-width:640px){" // Мобильные телефоны
+      "#main{padding:12px;height:auto;min-height:100vh;} " // Меньше отступов и авто-высота
+      ".page{grid-template-columns:1fr;gap:12px;} " // Карточки в один столбец
+      ".page-header{flex-direction:column;align-items:flex-start;} " // Вертикальный заголовок
+      ".page-datetime{margin-left:0;width:100%;justify-content:flex-start;} " // Дата/время на всю ширину
+      ".graph-controls{flex-wrap:wrap;gap:12px;} " // Панель графика в несколько строк
+      ".graph-controls .control-group{min-width:0;flex:1 1 180px;} " // Сжатие групп контролов
+      "input[type=time]{width:100%;} " // Поля времени на всю ширину
+      "label:has(input[type=checkbox]){width:100%;} " // Чекбокс на всю ширину
+      ".time-settings-actions,.mqtt-actions{flex-direction:column;align-items:flex-start;} " // Кнопки действий столбиком
+      ".wifi-modal{padding:20px 12px;} " // Меньше отступов модалки Wi-Fi
+      ".dash-modal{padding:40px 12px;} " // Модалки ближе к краям
+      ".dash-modal-body{max-height:calc(100vh - 160px);} " // Корректировка высоты модалки
+      "} "
       "</style></head><body>"; // Завершение стилей и начало body
 
     // Sidebar
