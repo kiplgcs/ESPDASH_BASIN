@@ -343,5 +343,7 @@ UI_BUTTON("Pow_Ul_light", Pow_Ul_light, "gray", "🚏 Включить/Откл�
 
     // Настройка времени
     UI_PAGE();
+    
+    UI_SELECT_CLOCK("ClockSelect", gmtOffset_correct, "⏰ Настройка времени");
         
     }

@@ -1195,6 +1195,18 @@ private:
               else if(e.type=="int") html += "<label>"+e.label+"</label><input id='"+e.id+"' type='number' value='"+val+"'>"; // Целочисленный ввод
               else if(e.type=="float") html += "<label>"+e.label+"</label><input id='"+e.id+"' type='number' step='0.1' value='"+val+"'>"; // Вещественное число
               else if(e.type=="time") html += "<label>"+e.label+"</label><input id='"+e.id+"' type='time' value='"+val+"'>"; // Ввод времени
+              else if(e.type=="clockselect"){ // Панель настройки времени
+                html += "<div class='stat-group'><div class='stat-heading'>"+e.label+"</div>"
+                          "<div class='time-settings-grid'>"
+                          "<div class='time-settings-field'><label for='gmtOffset'>Часовой пояс</label><select id='gmtOffset'></select></div>"
+                          "<div class='time-settings-field'><label for='manual-date'>Дата</label><input id='manual-date' type='date'></div>"
+                          "<div class='time-settings-field'><label for='manual-time'>Время</label><input id='manual-time' type='time' step='1' data-skip-save='1'></div>"
+                          "</div>"
+                          "<div class='time-settings-actions'>"
+                          "<button class='btn-primary' id='manual-time-btn' onclick='applyManualTime()'>Установить время</button>"
+                          "<div class='time-settings-status' id='manual-time-status'></div>"
+                          "</div></div>";
+              }
               else if(e.type=="color") html += "<label>"+e.label+"</label><input id='"+e.id+"' type='color' value='"+val+"'>"; // Выбор цвета
               else if(e.type=="checkbox"){ // Чекбокс
                 String checked = (val == "1" || val.equalsIgnoreCase("true")) ? " checked" : ""; // Определение состояния
@@ -1506,18 +1518,6 @@ private:
               "<li><span>NVS (раздел настроек) — постоянные настройки и конфигурации устройства</span><strong id='stat-nvs'>--</strong></li>"
               "<li><span>SPIFFS Used / Free (использовано / свободно в SPIFFS) — файлы интерфейса, логи или другие пользовательские данные</span><strong id='stat-spiffs'>--</strong></li>"
               "</ul></div>"
-              "</div>"
-              "<div class='card compact stats-card time-settings-card'>"
-              "<div class='stat-group'><div class='stat-heading'>Настройка времени</div>"
-              "<div class='time-settings-grid'>"
-              "<div class='time-settings-field'><label for='gmtOffset'>Часовой пояс</label><select id='gmtOffset'></select></div>"
-              "<div class='time-settings-field'><label for='manual-date'>Дата</label><input id='manual-date' type='date'></div>"
-              "<div class='time-settings-field'><label for='manual-time'>Время</label><input id='manual-time' type='time' step='1' data-skip-save='1'></div>"
-              "</div>"
-              "<div class='time-settings-actions'>"
-              "<button class='btn-primary' id='manual-time-btn' onclick='applyManualTime()'>Установить время</button>"
-              "<div class='time-settings-status' id='manual-time-status'></div>"
-              "</div></div>"
               "</div></div>";
 
       // ====== MQTT страница ======

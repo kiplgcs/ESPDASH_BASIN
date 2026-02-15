@@ -143,7 +143,7 @@ public:
     }
 
     void selectDays(const String &id, const String &label){ addElement("selectdays", id, label, ""); } // добавляет специализированный выбор дней недели
-
+    void selectClock(const String &id, const String &label){ addElement("clockselect", id, label, ""); } // добавляет панель настройки времени
     void option(const String &value, const String &label){ // добавляет один вариант в список опций select
         if(optionBuffer.length()) optionBuffer += '\n'; // добавляет перевод строки между вариантами
         optionBuffer += value + '=' + label; // сохраняет пару value=label во временном буфере
@@ -858,6 +858,22 @@ private:
     String &storage; // строка, кодирующая выбранные дни недели
 };
 
+class UISelectClockElement : public UIDeclarativeElement { // специализированный UI-элемент панели настройки времени
+public:
+    UISelectClockElement(const String &elementId, int &storageRef, const String &elementLabel)
+        : UIDeclarativeElement(elementId, elementLabel), storage(storageRef) {}
+
+    void build(OABuilder &builder) override{ builder.selectClock(id, label); } // добавляет панель настройки времени
+    void load() override{ storage = loadValue<int>("gmtOffset", storage); } // загружает сохранённый часовой пояс
+    void save() const override{ saveValue<int>("gmtOffset", storage); } // сохраняет часовой пояс
+    String valueString() const override{ return String(storage); } // текущее значение GMT offset
+    void setFromString(const String &value) override{ storage = value.toInt(); } // обновляет часовой пояс
+
+private:
+    int &storage; // ссылка на переменную часового пояса
+};
+
+
 class UIColorElement : public UIDeclarativeElement { // UI-элемент выбора цвета
 public:
     UIColorElement(const String &elementId, String &storageRef, const String &elementLabel)
@@ -1104,6 +1120,10 @@ inline bool uiApplyValueForId(const String &id, const String &value){ // при�
 // Сохраняет дни как строку вида "Mon,Tue" в переменной состояния; используйте syncCleanDaysFromSelection/syncDaysSelectionFromClean для согласованности
 #define UI_SELECT_DAYS(id, state, label) \
     do { static UISelectDaysElement UI_UNIQUE_NAME(ui_select_days_)(id, state, label); UI_REGISTER_ELEMENT(UI_UNIQUE_NAME(ui_select_days_)); } while(false)
+
+    // специализированная панель настройки времени (часовой пояс, дата, время)
+#define UI_SELECT_CLOCK(id, state, label) \
+    do { static UISelectClockElement UI_UNIQUE_NAME(ui_select_clock_)(id, state, label); UI_REGISTER_ELEMENT(UI_UNIQUE_NAME(ui_select_clock_)); } while(false)
 
 // color picker для выбора цвета
 #define UI_COLOR(id, state, label) \
