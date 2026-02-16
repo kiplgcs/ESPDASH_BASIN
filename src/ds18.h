@@ -1,209 +1,427 @@
-#pragma once
 
 #include <Arduino.h>
 #include <math.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
 
-DeviceAddress sensor0 = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}; // Температура бассейна.
-DeviceAddress sensor1 = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}; // Температура после нагревателя.
-
-constexpr size_t kMaxDs18Sensors = 16; // Служебная строка логики DS18B20.
-inline DeviceAddress ds18Found[kMaxDs18Sensors]; // Служебная строка логики DS18B20.
-inline int ds18FoundCount = 0; // Служебная строка логики DS18B20.
+DeviceAddress sensor0 = {0x28, 0xff, 0x64, 0x1e, 0x83, 0x7a, 0x05, 0x83}; // Указываем адрес датчика 28-ff-64-1e-83-7a-05-83
+DeviceAddress sensor1= {0x28, 0xff, 0x64, 0x1e, 0x83, 0x61, 0xbe, 0x5e}; // Указываем адрес датчика 28-ff-64-1e-83-61-be-5e
 
 
-#define ONE_WIRE_BUS 14
+#define ONE_WIRE_BUS 14  // перенесено с GPIO4, т.к. GPIO4 занят под RS485 RX; альтернативные: 13,32,33
+// #define LOW_ALARM 30               // Задаем нижний порог температурной тревоги
+// #define HIGH_ALARM 40              // Задаем верхний порог температурной тревоги
 
-OneWire oneWire(ONE_WIRE_BUS); // Служебная строка логики DS18B20.
-DallasTemperature sensors(&oneWire); // Служебная строка логики DS18B20.
+OneWire oneWire(ONE_WIRE_BUS);      // Инициализируем объект OneWire
+DallasTemperature sensors(&oneWire); // Инициализируем объект DallasTemperature
 
-constexpr const char *kDs18Sensor0StorageKey = "ds18_s0_addr"; // Служебная строка логики DS18B20.
-constexpr const char *kDs18Sensor1StorageKey = "ds18_s1_addr"; // Служебная строка логики DS18B20.
-constexpr const char *kDs18Sensor0IndexStorageKey = "ds18_s0_idx"; // Служебная строка логики DS18B20.
-constexpr const char *kDs18Sensor1IndexStorageKey = "ds18_s1_idx"; // Служебная строка логики DS18B20.
 
-float DS1 = 0, Saved_DS1; // Служебная строка логики DS18B20.
-float DS2 = 0, Saved_DS2; // Служебная строка логики DS18B20.
-inline bool DS1Available = false; // Служебная строка логики DS18B20.
-inline bool DS2Available = false; // Служебная строка логики DS18B20.
-inline bool DS1Assigned = false; // Служебная строка логики DS18B20.
-inline bool DS2Assigned = false; // Служебная строка логики DS18B20.
+// float DS1, Saved_DS1, DS2, Saved_DS2; 
+//String DS11, DS22;   // Строковая переменная для хранения температуры
 
-inline String formatTemperatureString(float value, bool available) { // Начало inline-функции для работы с адресами/состоянием DS18B20.
-  return available ? (String(value, 1) + " \u00B0C") : "n/a"; // Возвращаем рассчитанный результат вызывающему коду.
+float DS1 = 0, Saved_DS1;
+float DS2 = 0, Saved_DS2;
+inline bool DS1Available = false;
+inline bool DS2Available = false;
+
+inline String formatTemperatureString(float value, bool available) {
+  return available ? (String(value, 1) + " \u00B0C") : "n/a";
 }
 
-inline String formatDeviceAddress(const DeviceAddress &addr) { // Начало inline-функции для работы с адресами/состоянием DS18B20.
-  String result; // Служебная строка логики DS18B20.
-  for (int i = 0; i < 8; i++) { // Последовательно обрабатываем элементы адреса или список датчиков.
-    if (addr[i] < 16) result += "0"; // Проверяем условие корректности данных/состояния.
-    result += String(addr[i], HEX); // Служебная строка логики DS18B20.
-    if (i < 7) result += "-"; // Проверяем условие корректности данных/состояния.
-  }
-  result.toUpperCase(); // Служебная строка логики DS18B20.
-  return result; // Возвращаем рассчитанный результат вызывающему коду.
-}
 
-inline bool deviceAddressIsZero(const DeviceAddress &addr) { // Начало inline-функции для работы с адресами/состоянием DS18B20.
-  for (uint8_t i = 0; i < sizeof(DeviceAddress); i++) { // Последовательно обрабатываем элементы адреса или список датчиков.
-    if (addr[i] != 0x00) return false; // Проверяем условие корректности данных/состояния.
-  }
-  return true; // Возвращаем рассчитанный результат вызывающему коду.
-}
-inline bool parseDeviceAddressString(const String &input, DeviceAddress &out) { // Начало inline-функции для работы с адресами/состоянием DS18B20.
-  int byteIndex = 0; // Служебная строка логики DS18B20.
-  int nibbleCount = 0; // Служебная строка логики DS18B20.
-  uint8_t current = 0; // Служебная строка логики DS18B20.
-  for (size_t i = 0; i < input.length() && byteIndex < 8; i++) { // Последовательно обрабатываем элементы адреса или список датчиков.
-    char c = input[i]; // Служебная строка логики DS18B20.
-    int value = -1; // Служебная строка логики DS18B20.
-    if (c >= '0' && c <= '9') value = c - '0'; // Проверяем условие корректности данных/состояния.
-    else if (c >= 'a' && c <= 'f') value = 10 + (c - 'a'); // Служебная строка логики DS18B20.
-    else if (c >= 'A' && c <= 'F') value = 10 + (c - 'A'); // Служебная строка логики DS18B20.
-    if (value < 0) continue; // Проверяем условие корректности данных/состояния.
-    current = static_cast<uint8_t>((current << 4) | value); // Служебная строка логики DS18B20.
-    nibbleCount++; // Служебная строка логики DS18B20.
-    if (nibbleCount == 2) { // Проверяем условие корректности данных/состояния.
-      out[byteIndex++] = current; // Служебная строка логики DS18B20.
-      current = 0; // Служебная строка логики DS18B20.
-      nibbleCount = 0; // Служебная строка логики DS18B20.
+// bool ds_setup = false; // Флаг настройки датчиков
+// unsigned long ds_timer = 0; // Переменная для отслеживания времени
+// float t = 0; // Переменная для хранения температуры
+
+// float ds(int interval) {
+//   if (!ds_setup || (millis() - ds_timer >= interval)) {
+//     ds_timer = millis();
+//     sensors.begin(); // Инициализация библиотеки для работы с датчиками
+//     int qty = sensors.getDeviceCount(); // Получаем количество датчиков на шине
+//     Serial.print("Поиск датчиков DALLAS: ");
+//     Serial.print(qty);
+//     Serial.println(" устройств");
+
+//     for (int i = 0; i < qty; i++) {
+//       DeviceAddress addr;
+//       if (sensors.getAddress(addr, i)) {
+//         Serial.print("Адрес устройства ");
+//         for (int j = 0; j < 8; j++) {
+//           if (addr[j] < 16) Serial.print("0");
+//           Serial.print(addr[j], HEX); // Вывод адреса датчика в шестнадцатеричном формате
+//           if (j < 7) Serial.print("-");
+//         }
+//         Serial.println();
+//       }
+//     }
+//     ds_setup = true;
+//   }
+
+//   sensors.requestTemperatures(); // Запрос температур с датчиков
+//   t = sensors.getTempCByIndex(0); // Получаем температуру с первого датчика (при необходимости измените индекс)
+
+//   // Ваш дальнейший код для обработки температуры
+
+//   return t; // Возвращаем значение температуры
+// }
+
+
+// Функция формирования строки с количеством и адресами всех датчиков
+String getDallasSensorsInfo() {
+  String result = "";
+  int qty = sensors.getDeviceCount();
+
+  result += "Найдено устройств: " + String(qty) + "\n";
+
+  for (int i = 0; i < qty; i++) {
+    DeviceAddress addr;
+    if (sensors.getAddress(addr, i)) {
+      result += "Адрес " + String(i) + ": ";
+      for (int j = 0; j < 8; j++) {
+        if (addr[j] < 16) result += "0";
+        result += String(addr[j], HEX);
+        if (j < 7) result += "-";
+      }
+      result += "\n";
+    } else {
+      result += "Ошибка получения адреса устройства " + String(i) + "\n";
     }
   }
 
-  return byteIndex == 8; // Возвращаем рассчитанный результат вызывающему коду.
+  return result;
 }
 
-inline void loadSavedDs18Address(const char *key, DeviceAddress &target, String &label) { // Начало inline-функции для работы с адресами/состоянием DS18B20.
-  String defaultAddress = formatDeviceAddress(target); // Служебная строка логики DS18B20.
-  String stored = loadValue<String>(key, defaultAddress); // Служебная строка логики DS18B20.
-  DeviceAddress parsed; // Служебная строка логики DS18B20.
-  if (parseDeviceAddressString(stored, parsed)) { // Проверяем условие корректности данных/состояния.
-    memcpy(target, parsed, sizeof(DeviceAddress)); // Копируем выбранный 8-байтовый адрес датчика в целевую переменную.
-  }
-  label = deviceAddressIsZero(target) ? "не назначен" : formatDeviceAddress(target); // Служебная строка логики DS18B20.
+
+
+
+
+/************************* Инициализируем работу с датчиков температуры DS18B20 *********************************/
+void setup_ds18 (void){
+
+  sensors.begin();
+
+  // //Принудительный вызов и вывод адресов при старте
+  // Serial.println(getDallasSensorsInfo());
+
+  sensors.setResolution(sensor1, 12);// устанавливаем разрешение датчика от 9 до 12 бит
+
+  sensors.setWaitForConversion(false);
+  sensors.requestTemperaturesByAddress(sensor1);
+
 }
 
-inline String scanDs18Sensors() { // Начало inline-функции для работы с адресами/состоянием DS18B20.
-  String result; // Служебная строка логики DS18B20.
-  sensors.begin(); // Выполняем действие библиотеки DallasTemperature для DS18B20.
-  int qty = sensors.getDeviceCount(); // Служебная строка логики DS18B20.
-  ds18FoundCount = 0; // Служебная строка логики DS18B20.
 
-  result += "Найдено устройств: " + String(qty) + "\n"; // Служебная строка логики DS18B20.
 
-  for (int i = 0; i < qty && ds18FoundCount < static_cast<int>(kMaxDs18Sensors); i++) { // Последовательно обрабатываем элементы адреса или список датчиков.
-    DeviceAddress addr; // Служебная строка логики DS18B20.
-    if (sensors.getAddress(addr, i)) { // Проверяем условие корректности данных/состояния.
-      memcpy(ds18Found[ds18FoundCount], addr, sizeof(DeviceAddress)); // Копируем выбранный 8-байтовый адрес датчика в целевую переменную.
-      result += "Индекс " + String(ds18FoundCount) + ": " + formatDeviceAddress(addr) + "\n"; // Служебная строка логики DS18B20.
-      ds18FoundCount++; // Служебная строка логики DS18B20.
-    }
-  }
 
-  if (qty > static_cast<int>(kMaxDs18Sensors)) { // Проверяем условие корректности данных/состояния.
-    result += "Показаны только первые " + String(kMaxDs18Sensors) + " датчиков.\n"; // Служебная строка логики DS18B20.
-  }
 
-  if (ds18FoundCount == 0) { // Проверяем условие корректности данных/состояния.
-    result += "Датчики DS18B20 не обнаружены."; // Служебная строка логики DS18B20.
-  }
 
-  return result; // Возвращаем рассчитанный результат вызывающему коду.
-}
+// void Temp_DS18B20(int interval_Temp_DS18B20){ //Считываем датчики по заданному таймеру
+//   static unsigned long timer;  
+//   if (interval_Temp_DS18B20 + timer > millis()) return;
+//   timer = millis();
 
-inline bool assignDs18SensorFromIndex(DeviceAddress &target, int index, String &label, const char *storageKey, String &info) { // Начало inline-функции для работы с адресами/состоянием DS18B20.
-  if (index == -1) { // Проверяем условие корректности данных/состояния.
-    DeviceAddress emptyAddress = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}; // Служебная строка логики DS18B20.
-    memcpy(target, emptyAddress, sizeof(DeviceAddress)); // Копируем выбранный 8-байтовый адрес датчика в целевую переменную.
-    label = "не назначен"; // Служебная строка логики DS18B20.
-    saveValue<String>(storageKey, formatDeviceAddress(emptyAddress)); // Сохраняем значение в энергонезависимую память ESP32 (NVS).
-    if (&target == &sensor0) { // Проверяем условие корректности данных/состояния.
-      DS1Assigned = false; // Служебная строка логики DS18B20.
-      DS1Available = false; // Служебная строка логики DS18B20.
-    } else if (&target == &sensor1) { // Служебная строка логики DS18B20.
-      DS2Assigned = false; // Служебная строка логики DS18B20.
-      DS2Available = false; // Служебная строка логики DS18B20.
-    }
-    info = "Привязка датчика снята."; // Служебная строка логики DS18B20.
-    return true; // Возвращаем рассчитанный результат вызывающему коду.
-  }
 
-  if (index < -1) { // Проверяем условие корректности данных/состояния.
-    info = "Ожидание выбора датчика."; // Служебная строка логики DS18B20.
-    return false; // Возвращаем рассчитанный результат вызывающему коду.
-  }
   
-  if (ds18FoundCount == 0) { // Проверяем условие корректности данных/состояния.
-    info = "Сначала нажмите кнопку поиска датчиков."; // Служебная строка логики DS18B20.
-    return false; // Возвращаем рассчитанный результат вызывающему коду.
+
+// if (sensors.isConversionComplete()) { // Эта строка кода проверяет, завершено ли преобразование данных в датчике. 
+//  float DS_1 = sensors.getTempC(sensor1);
+// if (DS_1 != -127) {DS1=DS_1;
+// } //не работает только округляет... - DS1 = static_cast<int>(DS_1 * 10.0) / 10.0;  // Удаляем символ сотой части
+   
+   
+
+// sensors.requestTemperaturesByAddress(sensor1);  // Запрашиваем следующее измерение температуры для указанного датчика
+
+
+
+//   }
+
+
+
+void Temp_DS18B20(int interval_Temp_DS18B20) {
+  static unsigned long timer;  
+  if (millis() - timer < interval_Temp_DS18B20) return;
+  timer = millis();
+
+  sensors.requestTemperatures(); // Запрашиваем температуру со всех датчиков
+
+  // Датчик 1
+  DS1Available = false;
+  float temp1 = sensors.getTempC(sensor1);
+  if (temp1 != DEVICE_DISCONNECTED_C && temp1 > -100 && temp1 < 150) {
+    DS1 = roundf(temp1 * 10) / 10.0;  // округление до десятых
+    DS1Available = true;
   }
 
-if (index >= ds18FoundCount || index >= static_cast<int>(kMaxDs18Sensors)) { // Проверяем условие корректности данных/состояния.
-    info = "Индекс " + String(index) + " недоступен. Сначала выполните поиск датчиков."; // Служебная строка логики DS18B20.
-    return false; // Возвращаем рассчитанный результат вызывающему коду.
-  }
-
-  memcpy(target, ds18Found[index], sizeof(DeviceAddress)); // Копируем выбранный 8-байтовый адрес датчика в целевую переменную.
-  if (deviceAddressIsZero(target)) { // Проверяем условие корректности данных/состояния.
-    info = "Выбран пустой адрес. Повторите поиск датчиков."; // Служебная строка логики DS18B20.
-    return false; // Возвращаем рассчитанный результат вызывающему коду.
-  }
-
-  label = formatDeviceAddress(target); // Служебная строка логики DS18B20.
-  saveValue<String>(storageKey, label); // Сохраняем значение в энергонезависимую память ESP32 (NVS).
-  if (&target == &sensor0) DS1Assigned = true; // Проверяем условие корректности данных/состояния.
-  if (&target == &sensor1) DS2Assigned = true; // Проверяем условие корректности данных/состояния.
-  info = "Выбран датчик " + String(index) + ": " + label; // Служебная строка логики DS18B20.
-  return true; // Возвращаем рассчитанный результат вызывающему коду.
-}
-
-void setup_ds18(String &sensor0Label, String &sensor1Label) { // Начало функции инициализации/чтения DS18B20.
-  sensors.begin(); // Выполняем действие библиотеки DallasTemperature для DS18B20.
-
-  loadSavedDs18Address(kDs18Sensor0StorageKey, sensor0, sensor0Label); // Загружаем ранее сохранённый адрес датчика из NVS.
-  loadSavedDs18Address(kDs18Sensor1StorageKey, sensor1, sensor1Label); // Загружаем ранее сохранённый адрес датчика из NVS.
-
-  DS1Assigned = !deviceAddressIsZero(sensor0); // Служебная строка логики DS18B20.
-  DS2Assigned = !deviceAddressIsZero(sensor1); // Служебная строка логики DS18B20.
-
-
-
-  if (DS1Assigned) sensors.setResolution(sensor0, 12); // Проверяем условие корректности данных/состояния.
-  if (DS2Assigned) sensors.setResolution(sensor1, 12); // Проверяем условие корректности данных/состояния.
-  sensors.setWaitForConversion(true); // Выполняем действие библиотеки DallasTemperature для DS18B20.
-}
-void Temp_DS18B20(int interval_Temp_DS18B20) { // Начало функции инициализации/чтения DS18B20.
-  static unsigned long timer; // Служебная строка логики DS18B20.
-  if (millis() - timer < interval_Temp_DS18B20) return; // Проверяем условие корректности данных/состояния.
-  timer = millis(); // Служебная строка логики DS18B20.
-
-  sensors.requestTemperatures(); // Выполняем действие библиотеки DallasTemperature для DS18B20.
-
-  DS1Assigned = !deviceAddressIsZero(sensor0); // Служебная строка логики DS18B20.
-  DS1Available = false; // Служебная строка логики DS18B20.
-  if (DS1Assigned) { // Проверяем условие корректности данных/состояния.
-    float temp0 = sensors.getTempC(sensor0); // Служебная строка логики DS18B20.
-    if (temp0 != DEVICE_DISCONNECTED_C && temp0 > -100 && temp0 < 150) { // Проверяем условие корректности данных/состояния.
-      DS1 = roundf(temp0 * 10) / 10.0; // Служебная строка логики DS18B20.
-      DS1Available = true; // Служебная строка логики DS18B20.
-    } else { // Служебная строка логики DS18B20.
-      DS1 = 0.0f; // Служебная строка логики DS18B20.
-    }
-  } else { // Служебная строка логики DS18B20.
-    DS1 = 0.0f; // Служебная строка логики DS18B20.
-  }
- DS2Assigned = !deviceAddressIsZero(sensor1); // Служебная строка логики DS18B20.
-  DS2Available = false; // Служебная строка логики DS18B20.
-  if (DS2Assigned) { // Проверяем условие корректности данных/состояния.
-    float temp1 = sensors.getTempC(sensor1); // Служебная строка логики DS18B20.
-    if (temp1 != DEVICE_DISCONNECTED_C && temp1 > -100 && temp1 < 150) { // Проверяем условие корректности данных/состояния.
-      DS2 = roundf(temp1 * 10) / 10.0; // Служебная строка логики DS18B20.
-      DS2Available = true; // Служебная строка логики DS18B20.
-    } else { // Служебная строка логики DS18B20.
-      DS2 = 0.0f; // Служебная строка логики DS18B20.
-    }
-  } else { // Служебная строка логики DS18B20.
-    DS2 = 0.0f; // Служебная строка логики DS18B20.
+  // Датчик 0
+  DS2Available = false;
+  float temp0 = sensors.getTempC(sensor0);
+  if (temp0 != DEVICE_DISCONNECTED_C && temp0 > -100 && temp0 < 150) {
+    DS2 = roundf(temp0 * 10) / 10.0;  // округление до десятых
+    DS2Available = true;
   }
 }
+
+
+
+
+
+
+
+//   //interval_DS18B20 = (jee.param("interval_DS18B20").toInt())*1000;//Записываем полученныей интервал в переменную для возможности задавать из интерфейса
+
+//  // отправляем запрос на измерение температуры - если датчик один на шине
+//   ds_sensor.requestTemperatures();
+//   // считываем данные из регистра датчика
+//   float temperature = ds_sensor.getTempCByIndex(0);
+  
+//   ds_sensor.requestTemperatures();
+
+
+//   if(temperature != -127 && temperature != 85)  Temp_DS_18B20 = String(temperature); //jee.var("Temp_DS18B20", String(temperature));
+//   //if(temperature != -127) {jee.var("temperature", String(temperature));}
+//   //Включаем циркуляцию воды чтоб не замерзла вода 
+//   //if(temperature < 0.35 && temperature > -5) {Power_Nasos=true;} else if (temperature > 0.7 && temperature < 1 || temperature < -5){Power_Nasos=false;}
+
+
+
+//   // switch(Step_addr){ //измеряем по очереди температуру на разных датчиках
+
+//   // case 1: {
+//   //   ds_sensor.requestTemperatures(); 
+//   //   DS11=ds_sensor.getTempC(sensor1);
+//   //   if(DS11 != -127) {jee.var("DS1", String(DS11));}  //jee.var("DS3", String(random(1000)));
+    
+//   //   Step_addr=2; break;} 
+
+
+//   // case 2: {
+//   //   ds_sensor.requestTemperatures(); 
+//   //   DS21=ds_sensor.getTempC(sensor2);
+//   //   if(DS21 != -127) {jee.var("DS2", String(DS21));} //jee.var("DS4", String(random(1000))); 
+//   //   //Serial.print("D18B20 - 4  =  "); Serial.print(DS4); Serial.println("  C");
+  
+//   //   Step_addr=1; break;} 
+    
+          
+//   //   }//END switch
+
+// }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// //#include <OneWire.h>
+// // #include <DallasTemperature.h>
+
+// // #define DS_PIN 4
+
+// // OneWire oneWire_ds(DS_PIN);
+// // DallasTemperature ds_sensor(&oneWire_ds);
+
+// // bool ds_setup;
+
+// // float ds(int interval)
+// // {
+    
+
+// //     static bool ds_setup;
+// //     static unsigned long ds_timer;
+// //     static unsigned int ds_interval = interval;
+// //     static float t;
+
+// //     if(!ds_setup)
+// //     {
+// //         ds_sensor.begin();
+// //         ds_setup = true;
+// //     }
+
+// //     if (ds_timer + ds_interval > millis())
+// //         return t;
+// //     ds_timer = millis();
+// //     ds_sensor.requestTemperatures();
+// //     t = ds_sensor.getTempCByIndex(0);
+// // }
+
+// /************************* Настраиваем работу с датчиком температуры DS18B20 *********************************/
+
+// #include <OneWire.h>
+// #include <DallasTemperature.h>
+
+// #define DS_PIN 26 //DS_PIN 27//пин подключения датчиков температуры DS18B20
+
+// OneWire  oneWire_ds(DS_PIN);
+// DallasTemperature ds_sensor(&oneWire_ds);
+
+// byte qty; //количество градусников на шине
+
+// DeviceAddress sensor0 = {0x28, 0xFF, 0x64, 0x1E, 0x83, 0x7A, 0x5, 0x83};
+// DeviceAddress sensor1 = {0x28, 0xFF, 0x64, 0x1E, 0x83, 0x61, 0xBE, 0x5E};
+
+
+
+// float /*DS1= 20,DS2= 20,DS3= 20,DS4= 20,*/DS11,DS21;
+
+// String Temp_DS_18B20; // Для вывода на Web страницу
+
+// /*OneWire  ds(pin_DS18B20);        // Линия 1-Wire для опроса датчика температуры DS18B20
+
+// float celsius;
+
+// float term_addr1;       //Содержит последнее измеренное значение температуры в X
+// float term_addr2;       //Содержит последнее измеренное значение температуры в XX
+// float term_addr3;       //Содержит последнее измеренное значение температуры в XXX
+// float term_addr4;       //Содержит последнее измеренное значение температуры в XXXX
+// float term_addr5;       //Содержит последнее измеренное значение температуры в XXXXX
+// float term_addr6;       //Содержит последнее измеренное значение температуры в XXXXXX
+// float term_addr7;       //Содержит последнее измеренное значение температуры в XXXXX
+// float term_addr8;       //Содержит последнее измеренное значение температуры в XXXXXX
+
+
+
+
+// unsigned long Startup_time_s;     //Время с момента включения контроллера в секундах
+// unsigned char StepTEMP=1;         //Номер шага в функции измерения температуры
+// */
+
+// unsigned char Step_addr=1;        //измеряем по очереди температуру на разных датчиках
+
+
+
+// /************************* Инициализируем работу с датчиков температуры DS18B20 *********************************/
+// void setup_ds18 (void){
+// sensors.begin();
+// // ds_sensor.setResolution(12);  // устанавливаем разрешение датчика от 9 до 12 бит
+// // qty = ds_sensor.getDeviceCount(); //Записываем колличество градусников на шине
+// // Serial.print("Search DALLAS: ");
+// // Serial.print(qty); Serial.println("  devices");
+// // Serial.print(ds_sensor.getTempCByIndex(1));  Serial.println("index");
+
+  
+//     // показываем сколько датчиков нашли на шине
+//   Serial.print("Found ");
+//   Serial.print(sensors.getDeviceCount(), DEC);
+//   Serial.println(" devices.");
+
+//     // достаем адрес датчика с индесом 0 
+//   if (!sensors.getAddress(sensor0, 0)){ 
+//     Serial.println("Unable to find address for Device 0"); 
+//   } 
+
+//     // отпаравляем адрес из массива в монитор порта
+//   Serial.print("address sensor 0: ");   
+//   for (uint8_t i = 0; i < 8; i++)  {  
+//     Serial.print("0x");   
+//     Serial.print(sensor0[i], HEX);
+//     Serial.print(", ");
+//   }
+//   Serial.println();
+
+//       // достаем адрес датчика с индесом 1 
+//   if (!sensors.getAddress(sensor1, 1)){ 
+//     Serial.println("Unable to find address for Device 0"); 
+//   } 
+
+//     // отпаравляем адрес из массива в монитор порта
+//   Serial.print("address sensor 1: ");   
+//   for (uint8_t i = 0; i < 8; i++)  {  
+//     Serial.print("0x");   
+//     Serial.print(sensor1[i], HEX);
+//     Serial.print(", ");
+//   }
+//   Serial.println();
+ 
+//     // устанавливаем разрешение датчика 11 бит (может быть 9, 10, 11, 12) 
+//     // на точность измерения температуры показатель не влияет.
+//   sensors.setResolution(sensor0, 11); 
+//   sensors.setResolution(sensor1, 11); 
+ 
+
+// }
+
+
+
+
+
+
+// void Temp_DS18B20(int interval_Temp_DS18B20){ //Считываем датчики по заданному таймеру
+//   static unsigned long timer;  
+//   if (interval_Temp_DS18B20 + timer > millis()) return;
+//   timer = millis();
+//   //interval_DS18B20 = (jee.param("interval_DS18B20").toInt())*1000;//Записываем полученныей интервал в переменную для возможности задавать из интерфейса
+
+
+// //  // отправляем запрос на измерение температуры - если датчик один на шине
+// //   ds_sensor.requestTemperatures();
+// //   // считываем данные из регистра датчика
+// //   float temperature = ds_sensor.getTempCByIndex(0);
+// //   ds_sensor.requestTemperatures();
+
+// //char myStr8[10]; // Для преобразования Float в String
+// //memset(myStr8, '\0', 10); // 10 байт не в HEX представлении, очистить массив перед записью данных 
+
+
+//   switch(Step_addr){ //измеряем по очереди температуру на разных датчиках
+
+//   case 1: {
+//     ds_sensor.requestTemperatures(); 
+//     DS11=ds_sensor.getTempC(sensor0);
+//     if(DS11 != -127) {jee.var("DS1", String(DS11));}  //jee.var("DS3", String(random(1000)));
+    
+   
+//     //dtostrf(DS11, 2, 2, myStr8);  // выводим в строку myStr8 2 разряда до, 2 разряда после запятой
+//     String MyStr = String(DS11*100/100, 2);
+
+//     myNex.writeStr("page0.t0.txt", MyStr + " C"); //выводим на Nextion
+//     myNex.writeStr("heat.t1.txt", MyStr + " C"); //выводим на Nextion
+//     Temp_DS_18B20 = MyStr; // Для вывода на Web страницу
+    
+//     Step_addr=2; break;} 
+
+
+//   case 2: {
+//     ds_sensor.requestTemperatures(); 
+//     DS21=ds_sensor.getTempC(sensor1);
+//     if(DS21 != -127) {jee.var("DS2", String(DS21));} //jee.var("DS4", String(random(1000))); 
+
+//     String MyStr1 = String(DS21*100/100, 2);
+//     myNex.writeStr("heat.t2.txt", MyStr1 + " C"); //выводим на Nextion
+
+//     Step_addr=1; break;} 
+    
+
+    
+
+    
+          
+//     }//END switch
+
+    
+
+// }
