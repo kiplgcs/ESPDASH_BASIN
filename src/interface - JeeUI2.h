@@ -9,7 +9,7 @@ inline void interface(){ // Декларатиынве функции интер
     UI_HIDDEN("ThemeColor", ThemeColor);
 
     UI_MENU("📊 Общая информация по бассейну");
-    //UI_MENU("🧰 Controls");
+    UI_MENU("🧰 Controls");
     //UI_MENU("🧰 test");
     UI_MENU("🧹 Настройка фильтрации");
     UI_MENU("🧹 Настройка промывки фильтра");
@@ -38,7 +38,7 @@ inline void interface(){ // Декларатиынве функции интер
 
     
     // Controls tab
-    // UI_PAGE();
+     UI_PAGE();
     
         // UI_RANGE("MotorSpeed", MotorSpeedSetting, 0, 100, 1, "⚙️ Motor Speed");
         // UI_DUAL_RANGE_KEYS("RangeSlider", RangeMin, RangeMax, "RangeMin", "RangeMax", 10, 40, 1, "🎚️ Range Min-Max");
@@ -53,12 +53,12 @@ inline void interface(){ // Декларатиынве функции интер
         // UI_BUTTON("button2", button2, "gray", "🔘 My Button1");
 
         // static String PopupComment;
-        // UI_POPUP_BEGIN("DataEntry", "📝 Ввод данных", "🪟 Открыть окно");
+
+    // UI_POPUP_BEGIN("DataEntry", "📝 Ввод данных", "🪟 Открыть окно");
         // UI_TEXT("PopupComment", PopupComment, "💬 Комментарий");
         
-
-        // UI_TEXT("InfoString", InfoString, "x:30%;y:40%;fontSize:12;color:#00ff00");
-        // UI_TEXT("InfoString1", InfoString1, "x:70%;y:70%;fontSize:12;color:#00ff00");
+         UI_TEXT("InfoString", InfoString, "x:30%;y:40%;fontSize:12;color:#00ff00");
+         UI_TEXT("InfoString1", InfoString1, "x:70%;y:70%;fontSize:12;color:#00ff00");
 
     // UI_POPUP_END();
 
