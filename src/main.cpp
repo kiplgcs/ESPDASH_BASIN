@@ -62,6 +62,19 @@ Adafruit_ADS1115 ads2; // Второй ADS1115 - Хлор
 #include <Slow.h> //Периодически выполняем  - для обратной связи с устройствами
 
 
+constexpr BaseType_t kWebMqttCore = 0; // Назначаем ядро 0 для общего сетевого контура WiFi+WEB+MQTT.
+constexpr BaseType_t kMainLogicCore = 1; // Назначаем ядро 1 для всей основной прикладной логики.
+TaskHandle_t webMqttTaskHandle = nullptr; // Сохраняем дескриптор задачи Web+MQTT для диагностики и контроля.
+
+void webMqttTask(void * /*parameter*/) { // Определяем задачу FreeRTOS, которая будет крутить только WiFi+WEB+MQTT.
+  for (;;) { // Запускаем бесконечный цикл, потому что задача должна работать весь аптайм контроллера.
+    wifiModuleLoop(); // Выполняем обслуживание WiFi и WEB-интерфейса в сетевом контуре ядра 0.
+    handleMqttLoop(); // Выполняем обслуживание MQTT в том же сетевом контуре ядра 0.
+    vTaskDelay(pdMS_TO_TICKS(2)); // Делаем короткую паузу, чтобы отдать CPU другим задачам FreeRTOS.
+  } // Закрываем цикл непрерывного обслуживания сетевого контура.
+} // Закрываем функцию задачи, закрепляемой за ядром 0.
+
+
 // ---------- NTP (синхронизация времени) ----------
 WiFiUDP ntpUDP;
 
@@ -180,6 +193,10 @@ void setup() {
 
   setup_Modbus();
 
+  xTaskCreatePinnedToCore(webMqttTask, "WebMqttCoreTask", 8192, nullptr, 2, &webMqttTaskHandle, kWebMqttCore); // Создаем и прикрепляем задачу WiFi+WEB+MQTT именно к ядру 0.
+  Serial.printf("[BOOT] CORE MAP -> WiFi+WEB+MQTT: %d | Main logic(loop): %d\n", kWebMqttCore, kMainLogicCore); // Печатаем явную карту ядер, чтобы одним взглядом видеть распределение.
+
+
 
 Serial.printf(
   "Heap Free: %u | Heap Min: %u | Max Block: %u | PSRAM Free: %u\n",
@@ -226,9 +243,14 @@ inline void h2o2ServiceLoop(){ // Сервисная обработка кноп
 /* ---------- Loop ---------- */
 void loop() {
 
-  static int lastDs18ScanButton = 0; // Храним прошлое состояние кнопки, чтобы ловить только фронт нажатия.
+  static bool mainCoreLogged = false; // Запоминаем, что диагностический лог по ядру loop уже был напечатан.
+  if (!mainCoreLogged) { // Проверяем, что стартовый лог по ядру основной логики еще не выводился.
+    Serial.printf("[BOOT] loop() main logic confirmed on core %d\n", xPortGetCoreID()); // Печатаем фактическое ядро, где реально выполняется основной loop.
+    mainCoreLogged = true; // Фиксируем флаг, чтобы не засорять UART повторяющимися логами.
+  } // Закрываем одноразовый блок диагностики ядра основной логики.
 
-  wifiModuleLoop();
+
+  static int lastDs18ScanButton = 0; // Храним прошлое состояние кнопки, чтобы ловить только фронт нажатия.
 
   
   if (Ds18ScanButton != lastDs18ScanButton) { // Проверяем изменение состояния кнопки поиска.
@@ -492,8 +514,6 @@ loop_CL2(2100); // Обработка логики хлора
     addSeriesPoint(entry.first, CurrentTime, entry.second()); // Обновление всех графиков
   }
 
-  
-  handleMqttLoop();// Обработка MQTT-клиента
 
   loop_WS2815();  
 

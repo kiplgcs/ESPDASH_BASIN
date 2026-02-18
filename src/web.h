@@ -102,6 +102,9 @@ extern bool DS2Available;
 extern bool DS1Assigned; // Признак, что датчик бассейна привязан.
 extern bool DS2Assigned; // Признак, что датчик после нагревателя привязан.
 
+extern bool ReadRelayArray[16]; // Readback состояний Modbus-реле (объявление, реализация в ModbusRTU_RS485.h)
+
+
 String formatTemperatureString(float value, bool available);
 
 void onDs18Sensor0Select(const int &value); // Callback назначения найденного индекса на sensor0.
@@ -602,9 +605,30 @@ private:
       return (Power_H2O2 || ManualPulse_H2O2_Active) ? String("1") : String("0");
     });
 
-        registerUiValueProvider("AirPump", [](){ return AirPump ? String("1") : String("0"); }); // реальное состояние компрессора воздуха
-    registerUiValueProvider("SolValveFilBack", [](){ return SolValveFilBack ? String("1") : String("0"); }); // состояние соленоида трехходовых клапанов
-    registerUiValueProvider("SolSandDump", [](){ return SolSandDump ? String("1") : String("0"); }); // состояние соленоида сброса песка
+    // Кнопки промывки должны отражать и логику автоматики, и фактическое состояние реле.
+    // Поэтому объединяем: ручной флаг UI + автофлаг шага + обратное чтение Modbus.
+    registerUiValueProvider("AirPump", [](){
+      const bool active = AirPump || AirPumpAuto || ReadRelayArray[9];
+      return active ? String("1") : String("0");
+    }); // компрессор воздуха
+    registerUiValueProvider("SolValveFilBack", [](){
+      const bool active = SolValveFilBack || ValveBackwashAuto || ReadRelayArray[11];
+      return active ? String("1") : String("0");
+    }); // соленоид трехходовых клапанов
+    registerUiValueProvider("SolSandDump", [](){
+      const bool active = SolSandDump || SolSandDumpAuto || ReadRelayArray[12];
+      return active ? String("1") : String("0");
+    }); // соленоид сброса песка
+    registerUiValueProvider("Power_Filtr", [](){
+      const bool active = Power_Filtr || ReadRelayArray[8];
+      return active ? String("1") : String("0");
+    }); // насос фильтрации: команда + факт реле
+    registerUiValueProvider("Power_Clean", [](){
+      const bool active = Power_Clean || CleanSequenceActive || ReadRelayArray[3];
+      return active ? String("1") : String("0");
+    }); // промывка: логический цикл + факт реле
+
+
 
     server.on("/", HTTP_GET, [self](AsyncWebServerRequest *r){
       if(!ensureAuthorized(r)) return;

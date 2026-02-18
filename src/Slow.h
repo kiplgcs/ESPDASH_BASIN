@@ -195,41 +195,42 @@ const bool onHeatPage = (Nx_page_id == 5); // Страница нагрева а
 const bool onDispensersPage = (Nx_page_id == 9); // Страница дозаторов активна
 
 
-Lamp          = ReadRelayArray[0];
-Pow_WS2815    = ReadRelayArray[1];
-Power_Filtr  = ReadRelayArray[8];
-Power_Clean  = ReadRelayArray[3];
-Power_Heat   = ReadRelayArray[4];
-Power_H2O2   = ReadRelayArray[5];
-Power_ACO    = ReadRelayArray[6];
-Power_Topping= ReadRelayArray[10];
-AirPump = ReadRelayArray[9];
-SolValveFilBack = ReadRelayArray[11];
-SolSandDump = ReadRelayArray[12];
+// Для UI/Nextion важно показывать факт по реле, но нельзя перезаписывать
+// управляющие флаги автоматики значениями обратного чтения,
+// иначе появляется самозащелка: логика выключает реле, а readback снова
+// поднимает флаг в true и команда «выкл» никогда не доходит.
+const bool lampRelayState = ReadRelayArray[0];
+const bool rgbRelayState = ReadRelayArray[1];
+const bool filtrRelayState = ReadRelayArray[8];
+const bool cleanRelayState = ReadRelayArray[3];
+const bool heatRelayState = ReadRelayArray[4];
+const bool h2o2RelayState = ReadRelayArray[5];
+const bool acoRelayState = ReadRelayArray[6];
+const bool toppingRelayState = ReadRelayArray[10];
 
 switch (sync_step) {
   case 0:
-    myNex.writeNum("page0.b0.pic", Lamp ? 2 : 1);
-    myNex.writeNum("page0.b12.pic", Pow_WS2815 ? 2 : 1);
+    myNex.writeNum("page0.b0.pic", lampRelayState ? 2 : 1);
+    myNex.writeNum("page0.b12.pic", rgbRelayState ? 2 : 1);
     sync_step++;
     break;
   case 1:
-    myNex.writeNum("page0.b4.pic", Power_Heat ? 10 : 9);
-    myNex.writeNum("page0.b3.pic", Power_Topping ? 8 : 7);
+    myNex.writeNum("page0.b4.pic", heatRelayState ? 10 : 9);
+    myNex.writeNum("page0.b3.pic", toppingRelayState ? 8 : 7);
     sync_step++;
     break;
   case 2:
-    myNex.writeNum("page0.b1.pic", Power_Filtr ? 4 : 3);
-    myNex.writeNum("page0.b2.pic", Power_Clean ? 6 : 5);
+    myNex.writeNum("page0.b1.pic", filtrRelayState ? 4 : 3);
+    myNex.writeNum("page0.b2.pic", cleanRelayState ? 6 : 5);
     sync_step++;
     break;
   case 3:
-    myNex.writeNum("page0.b5.pic", Power_H2O2 ? 12 : 11);
+    myNex.writeNum("page0.b5.pic", h2o2RelayState ? 12 : 11);
     myNex.writeStr("page0.b5.txt", Info_H2O2);
     sync_step++;
     break;
   case 4:
-    myNex.writeNum("page0.b6.pic", Power_ACO ? 12 : 11);
+    myNex.writeNum("page0.b6.pic", acoRelayState ? 12 : 11);
     myNex.writeStr("page0.b6.txt", Info_ACO);
     sync_step++;
     break;
