@@ -202,11 +202,11 @@ unsigned long ManualPulse_ACO_StartedAt = 0;
 
 
 bool PH_Control_ACO, Saved_PHControlACO; // Флаг для отслеживания предыдущего состояния PH_Control_ACO
-int ACO_Work = 6, Saved_ACO_Work;
+int ACO_Work = 5, Saved_ACO_Work;
 
 
 bool NaOCl_H2O2_Control, Saved_NaOCl_H2O2_Control;
-int H2O2_Work = 6, Saved_H2O2_Work;
+int H2O2_Work = 5, Saved_H2O2_Work;
 
 int corr_ORP_temper_mV; 		// ОРП с учетом калибровки по температуре
 int CalRastvor256mV	= 256;	//Калибровочный раствор
@@ -2920,6 +2920,7 @@ function setImg(x){
         if(key=="ACO_Work"){
           ACO_Work = valStr.toInt();
           if(ACO_Work < 1) ACO_Work = 1;
+          if(ACO_Work > 13) ACO_Work = 13;
           saveValue<int>("ACO_Work", ACO_Work);
           r->send(200,"text/plain","OK");
           return;
@@ -2927,6 +2928,7 @@ function setImg(x){
         if(key=="H2O2_Work"){
           H2O2_Work = valStr.toInt();
           if(H2O2_Work < 1) H2O2_Work = 1;
+          if(H2O2_Work > 13) H2O2_Work = 13;
           saveValue<int>("H2O2_Work", H2O2_Work);
           r->send(200,"text/plain","OK");
           return;
