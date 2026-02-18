@@ -173,7 +173,9 @@ void setup() {
   Ds18Sensor0Index = loadValue<int>(kDs18Sensor0IndexStorageKey, Ds18Sensor0Index); // Поднимаем из NVS последний индекс для sensor0.
   Ds18Sensor1Index = loadValue<int>(kDs18Sensor1IndexStorageKey, Ds18Sensor1Index); // Поднимаем из NVS последний индекс для sensor1.
 
-  interface(); // Для загрузки и выгрузки из памяти EEPOM сохраненных данных
+  interface(); // Первичная сборка UI нужна для загрузки/сохранения связанных значений из EEPROM
+  dashInterfaceInitialized = true; // Критический фикс: запрещаем повторный вызов interface() в dash.begin(), иначе вкладки/элементы дублируются
+  
   syncCleanDaysFromSelection();
 
   ColorRGB = LedColorMode.equalsIgnoreCase("manual");

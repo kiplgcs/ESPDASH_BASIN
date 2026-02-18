@@ -41,9 +41,9 @@ inline void interface(){ // Декларатиынве функции интер
      UI_PAGE();
     
         UI_RANGE("MotorSpeed", MotorSpeedSetting, 0, 100, 1, "⚙️ Motor Speed");
-        // UI_DUAL_RANGE_KEYS("RangeSlider", RangeMin, RangeMax, "RangeMin", "RangeMax", 10, 40, 1, "🎚️ Range Min-Max");
-        // UI_NUMBER("IntInput", IntInput, "🔢 Enter Integer", false);
-        // UI_NUMBER("FloatInput", FloatInput, "🔣 Enter Float", true);
+        UI_DUAL_RANGE_KEYS("RangeSlider", RangeMin, RangeMax, "RangeMin", "RangeMax", 10, 40, 1, "🎚️ Range Min-Max");
+        UI_NUMBER("IntInput", IntInput, "🔢 Enter Integer", false);
+        UI_NUMBER("FloatInput", FloatInput, "🔣 Enter Float", true);
         
         // UI_TEXT("Comment", Comment, "💬 Comment");
 

@@ -5,9 +5,11 @@
 #include <AsyncTCP.h>            // Асинхронный TCP для ESP32 (не блокирующий)
 #include <ESPAsyncWebServer.h>   // Асинхронный веб-сервер для ESP32
 #include <esp_system.h>
+#include <esp_heap_caps.h>
 #include <vector>                // STL вектор для хранения элементов UI
 #include <functional>
 #include <map>                   // контейнер для провайдеров значений UI
+#include <memory>                // shared_ptr для безопасной жизни HTML-буфера в chunk-callback
 #include <esp_chip_info.h>
 #include <esp_efuse.h>
 #ifdef ARDUINO_ARCH_ESP32
@@ -21,6 +23,34 @@
 #include <ArduinoJson.h>
 
 using std::vector;              // Используем vector без указания std:: каждый раз
+
+
+inline const char* webResetReasonToText(esp_reset_reason_t reason){ // Переводим код причины ресета в понятный текст для Serial-диагностики
+  switch(reason){ // Нормализуем все важные типы перезапуска, чтобы быстро видеть источник проблемы
+    case ESP_RST_POWERON: return "Power On"; // Питание подано заново (обычный старт)
+    case ESP_RST_EXT: return "External Reset"; // Внешний reset-пин или внешний источник сброса
+    case ESP_RST_SW: return "Software Reset"; // Программный перезапуск из кода
+    case ESP_RST_PANIC: return "Panic"; // Авария/исключение ядра (panic)
+    case ESP_RST_INT_WDT: return "Interrupt Watchdog"; // Сработал watchdog прерываний
+    case ESP_RST_TASK_WDT: return "Task Watchdog"; // Сработал task watchdog (наш ключевой симптом)
+    case ESP_RST_WDT: return "Other Watchdog"; // Иной watchdog-ресет (не task/int)
+    case ESP_RST_DEEPSLEEP: return "Deep Sleep"; // Пробуждение/рестарт после deep sleep
+    case ESP_RST_BROWNOUT: return "Brownout"; // Просадка питания (brownout)
+    case ESP_RST_SDIO: return "SDIO"; // Редкий reset по SDIO-подсистеме
+    default: return "Unknown"; // Неизвестный код, чтобы не терять диагностику
+  }
+}
+
+inline void logWebHeapStats(const char* stage){ // Унифицированный лог heap по этапам GET / для поиска OOM/фрагментации
+  const size_t free8 = heap_caps_get_free_size(MALLOC_CAP_8BIT); // Доступная 8-битная куча (основной индикатор свободной RAM)
+  const size_t largest8 = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT); // Самый крупный непрерывный блок (критичен для reserve)
+  const uint32_t fragPercent = free8 ? static_cast<uint32_t>(100U - ((largest8 * 100U) / free8)) : 100U; // Оценка фрагментации: чем выше, тем хуже крупные аллокации
+  Serial.printf("[WEB][HEAP] %s | free8=%u largest8=%u frag~=%u%%\n", stage, // Печатаем метрики в привязке к этапу, чтобы видеть где деградирует память
+                static_cast<unsigned>(free8), static_cast<unsigned>(largest8), static_cast<unsigned>(fragPercent)); // Явные uint для корректного форматирования printf
+}
+
+
+
 
 inline std::map<String, std::function<String()>> uiValueProviders; // Простая карта пользовательских генераторов значений UI
 
@@ -629,14 +659,40 @@ private:
     }); // промывка: логический цикл + факт реле
 
 
-
-    server.on("/", HTTP_GET, [self](AsyncWebServerRequest *r){
+      server.on("/", HTTP_GET, [self](AsyncWebServerRequest *r){
       if(!ensureAuthorized(r)) return;
+
+      const uint32_t requestStartMs = millis(); // Общее время GET /: потом сравниваем с таймингами этапов
+      uint32_t stageStartMs = requestStartMs; // Точка отсчёта длительности текущего этапа рендера
+      uint32_t stageBuildHeaderMs = 0; // Время этапа сборки head/CSS для поиска узкого места
+      uint32_t stageRenderTabsMs = 0; // Время рендера вкладок (контейнеры страниц)
+      uint32_t stageRenderElementsMs = 0; // Суммарное время рендера элементов интерфейса
+      uint32_t stageRenderPopupsMs = 0; // Время рендера popup-блоков
+      uint32_t stageSendMs = 0; // Время постановки/старта отправки ответа клиенту
+      Serial.printf("[WEB:/] begin | resetReason=%s\n", webResetReasonToText(esp_reset_reason()));
+      Serial.printf("[WEB:/][timing] start=%u ms\n", static_cast<unsigned>(0)); // Базовый маркер начала GET / для корреляции логов
+      logWebHeapStats("before-html-build"); // Снимок кучи до генерации HTML для контроля фрагментации
+
        // Формируем HTML-страницу
-      String html;
-      html.reserve(120000);
+      String html; // Единый буфер HTML, который далее отдаётся в chunked-режиме
+      logWebHeapStats("before-reserve"); // Проверяем heap перед крупным reserve
+      const size_t htmlReserveBytes = 260000; // Увеличенный reserve снижает realloc и риск обрыва при росте UI
+      if(!html.reserve(htmlReserveBytes)){
+        Serial.printf("[WEB:/] html.reserve(%u) failed\n", static_cast<unsigned>(htmlReserveBytes)); // Явно фиксируем OOM/фрагментацию до отправки
+        logWebHeapStats("reserve-failed"); // Фиксируем состояние памяти в точке отказа reserve
+        r->send(500, "text/plain", "Insufficient heap for HTML page"); // Явный ответ вместо краша при нехватке памяти
+        return; // Прерываем обработку, чтобы не усугублять ситуацию с памятью
+      }
+      Serial.printf("[WEB:/] html.reserve ok | reserved=%u\n", static_cast<unsigned>(htmlReserveBytes)); // Подтверждаем, что буфер под страницу выделен заранее
+      logWebHeapStats("after-reserve"); // Контроль, сколько heap осталось после резерва буфера
+
       html = "<!DOCTYPE html><html><head><meta charset='UTF-8'><meta http-equiv='Content-Type' content='text/html; charset=UTF-8'><title>";
       html += dashAppTitle;
+
+      stageBuildHeaderMs = millis() - stageStartMs; // Фиксируем длительность buildHeader для диагностики WDT
+      Serial.printf("[WEB:/][timing] buildHeader=%u ms\n", static_cast<unsigned>(stageBuildHeaderMs)); // Лог этапа buildHeader
+      stageStartMs = millis(); // Новый отсчёт для следующего крупного этапа сборки HTML
+
       html += "</title>"
       "<style>" // Начало встроенных CSS-стилей интерфейса
       "body{margin:0;background:"+ThemeColor+";color:#ddd;font-family:'Inter', 'Segoe UI', 'Roboto', Arial, sans-serif;} " // Базовые стили страницы и цвет темы
@@ -949,7 +1005,7 @@ private:
       html += "<div id='sidebar'>"; // Начало боковой панели
       bool first = true; // Флаг для первой вкладки (активной по умолчанию)
       for(auto &t : self->tabs){ // Перебор зарегистрированных вкладок
-        html += "<button onclick=\"showPage('"+t.id+"',this)\""; // Кнопка вкладки с обработчиком
+          html += "<button onclick=\"showPage('"+t.id+"',this)\""; // Кнопка вкладки с обработчиком
         if(first){ html += " class='active'"; first=false; } // Первая вкладка делается активной
         html += ">"+t.title+"</button>"; // Заголовок вкладки
       }
@@ -966,8 +1022,10 @@ private:
       html += "<div id='main'>"; // Начало основной области
 
       auto renderTabElements = [&](const String &tabId){ // Лямбда для рендера элементов вкладки
+        const uint32_t renderElementsStartMs = millis(); // Старт таймера рендера элементов конкретной вкладки
+        uint16_t renderedCount = 0; // Счётчик отрисованных элементов для контроля полноты вывода
         for(auto &e : self->elements){ // Перебор всех UI-элементов
-              if(e.tab != tabId || e.type != "image") continue; // Фильтр по вкладке и типу image
+        if(e.tab != tabId || e.type != "image") continue; // Фильтр по вкладке и типу image
 
               String imgSrc = e.label; // Источник изображения
               if(!imgSrc.startsWith("http") && !imgSrc.startsWith("/")) imgSrc = "/" + imgSrc; // Приведение к относительному пути
@@ -1476,7 +1534,12 @@ private:
               }
 
                             html += "</div>";
+            renderedCount++; // Подсчитываем реально добавленные элементы в HTML
           }
+        Serial.printf("[WEB:/][timing] renderElements tab=%s ms=%u count=%u\n", // Помогает увидеть вкладку, где начинается торможение
+                      tabId.c_str(),
+                      static_cast<unsigned>(millis() - renderElementsStartMs),
+                      static_cast<unsigned>(renderedCount));
                 };
 
       bool firstPage = true;
@@ -1484,10 +1547,17 @@ private:
            html += "<div id='"+t.id+"' class='page"+String(firstPage?" active":"")+"'>"
                   "<div class='page-header'><h3>"+t.title+"</h3>"
                   "<div class='page-datetime' id='page-datetime-"+t.id+"'>--</div></div>";
-          renderTabElements(t.id);
+          const uint32_t renderElementsTabStartMs = millis(); // Таймер рендера элементов внутри текущей tab-страницы
+          renderTabElements(t.id); // Рендерим элементы текущей вкладки в общий HTML
+          stageRenderElementsMs += (millis() - renderElementsTabStartMs); // Накапливаем время renderElements по всем вкладкам
           html += "</div>";
           firstPage = false;
       }
+
+      stageRenderTabsMs = millis() - stageStartMs; // Общая длительность этапа renderTabs
+      Serial.printf("[WEB:/][timing] renderTabs=%u ms\n", static_cast<unsigned>(stageRenderTabsMs)); // Лог renderTabs для поиска долгого участка
+      Serial.printf("[WEB:/][timing] renderElements=%u ms\n", static_cast<unsigned>(stageRenderElementsMs)); // Лог суммарного времени renderElements
+      stageStartMs = millis(); // Переключаем таймер на измерение этапа renderPopups
 
       for(auto &popup : self->popups){
           html += "<div id='popup-"+popup.id+"' class='dash-modal hidden' data-popup='"+popup.id+"'>"
@@ -1495,9 +1565,14 @@ private:
                   "<div class='dash-modal-header'><h4>"+popup.title+"</h4>"
                   "<button class='icon-btn' onclick=\"closePopup('"+popup.id+"')\">&times;</button></div>"
                   "<div class='dash-modal-body'><div class='popup-grid'>";
-          renderTabElements(popup.tabId);
+          const uint32_t renderPopupElementsStartMs = millis(); // Таймер элементов popup, чтобы отделить вкладки от модалок
+          renderTabElements(popup.tabId); // Используем тот же рендер для содержимого модального окна
+          stageRenderElementsMs += (millis() - renderPopupElementsStartMs); // Добавляем время popup-элементов в общий счётчик
           html += "</div></div></div></div>";
       }
+
+      stageRenderPopupsMs = millis() - stageStartMs; // Длительность этапа renderPopups
+      Serial.printf("[WEB:/][timing] renderPopups=%u ms\n", static_cast<unsigned>(stageRenderPopupsMs)); // Лог renderPopups для профилирования
 
       
       // ====== WiFi страница ======
@@ -2778,7 +2853,46 @@ function setImg(x){
 </script></body></html>
 )rawliteral";
 
-      r->send(200,"text/html",html);
+ const uint32_t htmlBuildMs = millis() - requestStartMs; // Полное время сборки HTML до начала отправки
+      Serial.printf("[WEB:/] html-built | bytes=%u reserve=%u buildMs=%u\n", static_cast<unsigned>(html.length()), static_cast<unsigned>(htmlReserveBytes), static_cast<unsigned>(htmlBuildMs)); // Контроль итогового размера страницы после добавления элементов
+      logWebHeapStats("after-html-build-before-send"); // Проверяем heap после сборки и до сетевой отправки
+
+      Serial.println("[WEB:/] chunked-send begin"); // Отправляем HTML по частям, чтобы не блокировать async_tcp длинным print()
+      const uint32_t sendStartMs = millis(); // Отсчёт длительности этапа постановки chunked-отправки
+      auto htmlPtr = std::make_shared<String>(std::move(html)); // Буфер живёт до конца chunk-отправки и не освобождается преждевременно
+      const size_t htmlTotalLen = htmlPtr->length(); // Полная длина ответа для корректной нарезки чанков
+      AsyncWebServerResponse *response = r->beginChunkedResponse("text/html; charset=UTF-8", // Chunked режим устраняет единичную тяжёлую отправку 120KB+
+        [htmlPtr, htmlTotalLen, sendStartMs](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
+          if(index == 0){ // Первый вызов: логируем параметры чанков, чтобы видеть реальный maxLen
+            Serial.printf("[WEB:/][chunk] start total=%u maxChunk=%u\n", // Диагностика реального размера порции, выдаваемой стеком
+                          static_cast<unsigned>(htmlTotalLen),
+                          static_cast<unsigned>(maxLen));
+          }
+          if(index >= htmlTotalLen){ // Достигнут конец буфера: штатно завершаем передачу
+            Serial.printf("[WEB:/][chunk] done total=%u sendMs=%u\n", // Финальный маркер завершения отдачи всех чанков
+                          static_cast<unsigned>(htmlTotalLen),
+                          static_cast<unsigned>(millis() - sendStartMs));
+            return 0; // Нормальное завершение chunked-ответа после передачи всего буфера
+          }
+          if(maxLen == 0){ // Важный фикс: 0 здесь не конец, просим стек повторить вызов позже
+            return RESPONSE_TRY_AGAIN; // Предотвращает обрыв страницы, который был виден на скриншоте
+          }
+          const size_t remaining = htmlTotalLen - index; // Сколько байт ещё осталось отправить клиенту
+          const size_t toCopy = remaining < maxLen ? remaining : maxLen; // Отдаём только доступный кусок без выхода за границы буфера
+          memcpy(buffer, htmlPtr->c_str() + index, toCopy); // Копируем текущий кусок в буфер сети без доп.алокаций
+          return toCopy; // Сообщаем стеку размер готового чанка
+        }
+      );
+      r->send(response); // Запускаем асинхронную отправку chunked-ответа клиенту
+      stageSendMs = millis() - sendStartMs; // Время очереди/старта отправки chunked-ответа
+      Serial.printf("[WEB:/][timing] sendQueued=%u ms\n", static_cast<unsigned>(stageSendMs)); // Отдельный маркер сетевого этапа
+      const uint32_t slowestMs = max(max(stageBuildHeaderMs, stageRenderTabsMs), max(stageRenderPopupsMs, stageSendMs)); // Вычисляем узкое место текущего запроса
+      const char *slowestStage = (slowestMs == stageBuildHeaderMs) ? "buildHeader" : // Имя самого долгого этапа для быстрого анализа
+                                 (slowestMs == stageRenderTabsMs) ? "renderTabs" :
+                                 (slowestMs == stageRenderPopupsMs) ? "renderPopups" : "send";
+      Serial.printf("[WEB:/][timing] slowestStage=%s %u ms\n", slowestStage, static_cast<unsigned>(slowestMs)); // Итог: какой этап оказался самым медленным
+      Serial.printf("[WEB:/] send queued | totalMs=%u\n", static_cast<unsigned>(millis() - requestStartMs)); // Полная длительность обработки запроса /
+      logWebHeapStats("after-send-queued"); // Контроль heap после постановки ответа в отправку
     });
 
         server.on("/popup/auth", HTTP_GET, [](AsyncWebServerRequest *r){
