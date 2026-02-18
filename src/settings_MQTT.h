@@ -519,10 +519,91 @@ struct MqttDiscoveryEntity {
   const char* payloadOff;
 };
 
+enum MqttDiscoveryGroup {
+  DISCOVERY_GROUP_OVERVIEW,
+  DISCOVERY_GROUP_FILTRATION,
+  DISCOVERY_GROUP_LIGHTING,
+  DISCOVERY_GROUP_DOSING,
+  DISCOVERY_GROUP_HEATING,
+  DISCOVERY_GROUP_SERVICE
+};
+
+inline MqttDiscoveryGroup mqttDiscoveryGroupForEntityId(const char* id){
+  const String entityId = id ? String(id) : String();
+
+  if(entityId.startsWith("Filtr") || entityId.startsWith("Clean") ||
+     entityId == "Power_Filtr" || entityId == "Power_Clean" ||
+     entityId == "DaysSelect") return DISCOVERY_GROUP_FILTRATION;
+
+  if(entityId.startsWith("Led") || entityId.startsWith("Lamp") ||
+     entityId.startsWith("Rgb") || entityId.startsWith("UlLight") ||
+     entityId == "SetLamp" || entityId == "SetRGB" ||
+     entityId == "Pow_WS2815" || entityId == "WS2815_Time1" ||
+     entityId == "Pow_Ul_light" || entityId == "Ul_light_Time" ||
+     entityId == "LEDColor") return DISCOVERY_GROUP_LIGHTING;
+
+  if(entityId == "PH" || entityId.startsWith("PH") || entityId.startsWith("ORP") ||
+     entityId == "ppmCl" || entityId == "Power_H2O2" || entityId == "Power_ACO" ||
+     entityId == "Power_H2O2_Button" || entityId == "Power_ACO_Button" ||
+     entityId == "NaOCl_H2O2_Control" || entityId == "PH_Control_ACO" ||
+     entityId == "ACO_Work" || entityId == "H2O2_Work" ||
+     entityId == "CalRastvor256mV" || entityId == "Calibration_ORP_mV") return DISCOVERY_GROUP_DOSING;
+
+  if(entityId.startsWith("Heat") || entityId.startsWith("RoomTemp") ||
+     entityId == "Power_Heat" || entityId == "Activation_Heat" ||
+     entityId == "Sider_heat" || entityId == "RoomTemper" ||
+     entityId == "Power_Warm_floor_heating") return DISCOVERY_GROUP_HEATING;
+
+  if(entityId == "status" || entityId == "alive" || entityId == "restart" ||
+     entityId == "button1" || entityId == "button2" || entityId == "Comment" ||
+     entityId == "ThemeColor" || entityId == "Timer1") return DISCOVERY_GROUP_SERVICE;
+
+  return DISCOVERY_GROUP_OVERVIEW;
+}
+
+inline const char* mqttDiscoveryGroupSuffix(MqttDiscoveryGroup group){
+  switch(group){
+    case DISCOVERY_GROUP_FILTRATION: return "filtration";
+    case DISCOVERY_GROUP_LIGHTING: return "lighting";
+    case DISCOVERY_GROUP_DOSING: return "dosing";
+    case DISCOVERY_GROUP_HEATING: return "heating";
+    case DISCOVERY_GROUP_SERVICE: return "service";
+    case DISCOVERY_GROUP_OVERVIEW:
+    default: return "overview";
+  }
+}
+
+inline const char* mqttDiscoveryGroupName(MqttDiscoveryGroup group){
+  switch(group){
+    case DISCOVERY_GROUP_FILTRATION: return "Filtration";
+    case DISCOVERY_GROUP_LIGHTING: return "Lighting";
+    case DISCOVERY_GROUP_DOSING: return "Dosing";
+    case DISCOVERY_GROUP_HEATING: return "Heating";
+    case DISCOVERY_GROUP_SERVICE: return "Service";
+    case DISCOVERY_GROUP_OVERVIEW:
+    default: return "Overview";
+  }
+}
+
+inline void publishDiscoveryDeviceBlockGrouped(JsonDocument &doc,
+                                               const String &rootDeviceId,
+                                               const String &rootDeviceName,
+                                               MqttDiscoveryGroup group){
+  JsonObject device = doc["device"].to<JsonObject>();
+  JsonArray identifiers = device["identifiers"].to<JsonArray>();
+  const String groupDeviceId = rootDeviceId + "_" + mqttDiscoveryGroupSuffix(group);
+  identifiers.add(groupDeviceId);
+  device["name"] = rootDeviceName + " " + mqttDiscoveryGroupName(group);
+  device["model"] = "ESP32-S3";
+  device["manufacturer"] = "Espressif";
+  if(group != DISCOVERY_GROUP_OVERVIEW) device["via_device"] = rootDeviceId;
+}
+
 inline MqttDiscoveryPublishResult publishMqttDiscoveryEntity(const MqttDiscoveryEntity &entity,
                                        const String &deviceId,
                                        const String &deviceName,
                                        bool minimalDevice){ // публикация сущности
+                                          (void)minimalDevice;
   JsonDocument doc; // JSON-документ
   const String uniqueId = deviceId + "_" + entity.id; // уникальный id
   const String topic = String(mqttDiscoveryPrefix) + "/" + entity.component + "/" + uniqueId + "/config"; // топик config
@@ -541,15 +622,7 @@ inline MqttDiscoveryPublishResult publishMqttDiscoveryEntity(const MqttDiscovery
   if(entity.payloadOn) doc["payload_on"] = entity.payloadOn; // payload_on
   if(entity.payloadOff) doc["payload_off"] = entity.payloadOff; // payload_off
 
-  if(minimalDevice){
-    publishDiscoveryDeviceBlockMinimal(doc, deviceId); // минимальный блок device
-  } else {
-  if(minimalDevice){
-    publishDiscoveryDeviceBlockMinimal(doc, deviceId); // минимальный блок device
-  } else {
-    publishDiscoveryDeviceBlock(doc, deviceId, deviceName); // блок device
-  }
-  }
+    publishDiscoveryDeviceBlockGrouped(doc, deviceId, deviceName, mqttDiscoveryGroupForEntityId(entity.id));
 
   String payload; // строка JSON
   serializeJson(doc, payload); // сериализация JSON
@@ -567,6 +640,7 @@ inline MqttDiscoveryPublishResult publishMqttDiscoverySelect(const char* id,
                                        const String &deviceName,
                                        bool minimalDevice,
                                        bool includeOptions){ // публикация select
+                                          (void)minimalDevice;
   JsonDocument doc; // JSON-документ
   const String uniqueId = deviceId + "_" + id; // уникальный id
   const String topic = String(mqttDiscoveryPrefix) + "/select/" + uniqueId + "/config"; // топик config
@@ -585,7 +659,7 @@ inline MqttDiscoveryPublishResult publishMqttDiscoverySelect(const char* id,
     }
   }
 
-  publishDiscoveryDeviceBlock(doc, deviceId, deviceName); // блок device
+  publishDiscoveryDeviceBlockGrouped(doc, deviceId, deviceName, mqttDiscoveryGroupForEntityId(id));
 
   String payload; // строка JSON
   serializeJson(doc, payload); // сериализация JSON
