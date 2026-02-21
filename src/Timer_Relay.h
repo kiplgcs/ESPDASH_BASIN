@@ -662,7 +662,7 @@ if (AktualReadInput) {
   Error err = RS485.addRequest(40001, 1, 0x05, 0, Lamp ? devices[0].value : devices[1].value); // реле№1 для Lamp
   err = RS485.addRequest(40001, 1, 0x05, 1, Pow_WS2815 ? devices[0].value : devices[1].value); //реле№2 для Pow_WS2815
   err = RS485.addRequest(40001, 1, 0x05, 8, Power_Filtr ? devices[0].value : devices[1].value); //реле№3 для Power_Filtr
-  err = RS485.addRequest(40001, 1, 0x05, 3, Power_Clean ? devices[0].value : devices[1].value); //реле№4 для Power_Clean
+  //err = RS485.addRequest(40001, 1, 0x05, 3, Power_Clean ? devices[0].value : devices[1].value); //реле№4 для Power_Clean - служит не для реле а только о факте начала и окончания промывки для передачи в Nextion
 
   if (!Activation_Heat) {
     err = RS485.addRequest(40001, 1, 0x05, 4, devices[1].value); //реле№5 для PowerHeat

@@ -521,52 +521,98 @@ struct MqttDiscoveryEntity {
 
 enum MqttDiscoveryGroup {
   DISCOVERY_GROUP_OVERVIEW,
+  DISCOVERY_GROUP_CONTROLS,
   DISCOVERY_GROUP_FILTRATION,
-  DISCOVERY_GROUP_LIGHTING,
-  DISCOVERY_GROUP_DOSING,
-  DISCOVERY_GROUP_HEATING,
+  DISCOVERY_GROUP_BACKWASH,
+  DISCOVERY_GROUP_LAMP,
+  DISCOVERY_GROUP_RGB,
+  DISCOVERY_GROUP_WATER_LEVEL,
+  DISCOVERY_GROUP_POOL_TEMPERATURE,
+  DISCOVERY_GROUP_PH_NAOCL,
+  DISCOVERY_GROUP_CHLORINE_ACO,
+  DISCOVERY_GROUP_ROOM_TEMPERATURE,
+  DISCOVERY_GROUP_OUTDOOR_LIGHTING,
   DISCOVERY_GROUP_SERVICE
 };
 
 inline MqttDiscoveryGroup mqttDiscoveryGroupForEntityId(const char* id){
   const String entityId = id ? String(id) : String();
 
-  if(entityId.startsWith("Filtr") || entityId.startsWith("Clean") ||
-     entityId == "Power_Filtr" || entityId == "Power_Clean" ||
-     entityId == "DaysSelect") return DISCOVERY_GROUP_FILTRATION;
+if(entityId == "OverlayPoolTemp" || entityId == "OverlayHeaterTemp" ||
+     entityId == "OverlayLevelUpper" || entityId == "OverlayLevelLower" ||
+     entityId == "OverlayPh" || entityId == "OverlayChlorine" ||
+     entityId == "OverlayFilterState") return DISCOVERY_GROUP_OVERVIEW;
 
-  if(entityId.startsWith("Led") || entityId.startsWith("Lamp") ||
-     entityId.startsWith("Rgb") || entityId.startsWith("UlLight") ||
-     entityId == "SetLamp" || entityId == "SetRGB" ||
-     entityId == "Pow_WS2815" || entityId == "WS2815_Time1" ||
-     entityId == "Pow_Ul_light" || entityId == "Ul_light_Time" ||
-     entityId == "LEDColor") return DISCOVERY_GROUP_LIGHTING;
+  if(entityId == "MotorSpeed" || entityId == "RangeSlider" ||
+     entityId == "IntInput" || entityId == "FloatInput" ||
+     entityId == "RandomVal" || entityId == "button1" ||
+     entityId == "button2") return DISCOVERY_GROUP_CONTROLS;
 
-  if(entityId == "PH" || entityId.startsWith("PH") || entityId.startsWith("ORP") ||
-     entityId == "ppmCl" || entityId == "Power_H2O2" || entityId == "Power_ACO" ||
-     entityId == "Power_H2O2_Button" || entityId == "Power_ACO_Button" ||
-     entityId == "NaOCl_H2O2_Control" || entityId == "PH_Control_ACO" ||
-     entityId == "ACO_Work" || entityId == "H2O2_Work" ||
-     entityId == "CalRastvor256mV" || entityId == "Calibration_ORP_mV") return DISCOVERY_GROUP_DOSING;
+  if(entityId == "Power_Filtr" || entityId == "Filtr_Time1" ||
+     entityId == "Filtr_Time2" || entityId == "Filtr_Time3" ||
+     entityId == "FiltrTimer1_ON" || entityId == "FiltrTimer1_OFF" ||
+     entityId == "FiltrTimer2_ON" || entityId == "FiltrTimer2_OFF" ||
+     entityId == "FiltrTimer3_ON" || entityId == "FiltrTimer3_OFF") return DISCOVERY_GROUP_FILTRATION;
 
-  if(entityId.startsWith("Heat") || entityId.startsWith("RoomTemp") ||
-     entityId == "Power_Heat" || entityId == "Activation_Heat" ||
-     entityId == "Sider_heat" || entityId == "RoomTemper" ||
-     entityId == "Power_Warm_floor_heating") return DISCOVERY_GROUP_HEATING;
+  if(entityId == "Power_Clean" || entityId == "Clean_Time1" ||
+     entityId == "Timer1" || entityId == "DaysSelect" ||
+     entityId == "CleanTimer1_ON" || entityId == "CleanTimer1_OFF") return DISCOVERY_GROUP_BACKWASH;
 
-  if(entityId == "status" || entityId == "alive" || entityId == "restart" ||
-     entityId == "button1" || entityId == "button2" || entityId == "Comment" ||
-     entityId == "ThemeColor" || entityId == "Timer1") return DISCOVERY_GROUP_SERVICE;
+  if(entityId == "InfoString2" || entityId == "SetLamp" ||
+     entityId == "Lumen_Ul" || entityId == "LampTimer_ON" ||
+     entityId == "LampTimer_OFF") return DISCOVERY_GROUP_LAMP;
+
+  if(entityId == "WS2815_Time1" || entityId == "Pow_WS2815" ||
+     entityId == "SetRGB" || entityId == "LEDColor" ||
+     entityId == "LedColorMode" || entityId == "LedPattern" ||
+     entityId == "LedAutoplay" || entityId == "LedAutoplayDuration" ||
+     entityId == "LedColorOrder" || entityId == "RgbTimer_ON" ||
+     entityId == "RgbTimer_OFF") return DISCOVERY_GROUP_RGB;
+
+  if(entityId == "Activation_Water_Level" || entityId == "WaterLevelSensorUpper" ||
+     entityId == "WaterLevelSensorLower" || entityId == "Power_Topping_State" ||
+     entityId == "Power_Topping" || entityId == "InfoStringDIN") return DISCOVERY_GROUP_WATER_LEVEL;
+
+  if(entityId == "DS1" || entityId == "Sider_heat" ||
+     entityId == "Activation_Heat" || entityId == "Power_Heat") return DISCOVERY_GROUP_POOL_TEMPERATURE;
+
+  if(entityId == "PH" || entityId == "PH_Control_ACO" ||
+     entityId == "PH_setting" || entityId == "analogValuePH" ||
+     entityId == "Float_PH_Slider" || entityId == "PH1_CAL" ||
+     entityId == "PH2_CAL" || entityId == "Temper_Reference" ||
+     entityId == "Temper_PH" || entityId == "Power_H2O2_Button") return DISCOVERY_GROUP_PH_NAOCL;
+
+  if(entityId == "ppmCl" || entityId == "corrected_ORP_Eh_mV" ||
+     entityId == "Power_H2O2" || entityId == "Power_ACO" ||
+     entityId == "NaOCl_H2O2_Control" || entityId == "ORP_setting" ||
+     entityId == "CalRastvor256mV" || entityId == "Calibration_ORP_mV" ||
+     entityId == "Power_ACO_Button" || entityId == "ACO_Work" ||
+     entityId == "H2O2_Work") return DISCOVERY_GROUP_CHLORINE_ACO;
+
+  if(entityId == "RoomTemp" || entityId == "RoomTempRange" ||
+     entityId == "RoomTemper" || entityId == "Power_Warm_floor_heating") return DISCOVERY_GROUP_ROOM_TEMPERATURE;
+
+  if(entityId == "Pow_Ul_light" || entityId == "Ul_light_Time" ||
+     entityId == "UlLightTimer_ON" || entityId == "UlLightTimer_OFF") return DISCOVERY_GROUP_OUTDOOR_LIGHTING;
+
+  if(entityId == "status" || entityId == "alive" || entityId == "restart" || entityId == "Comment" || entityId == "ThemeColor") return DISCOVERY_GROUP_SERVICE;
 
   return DISCOVERY_GROUP_OVERVIEW;
 }
 
 inline const char* mqttDiscoveryGroupSuffix(MqttDiscoveryGroup group){
   switch(group){
+    case DISCOVERY_GROUP_CONTROLS: return "controls";
     case DISCOVERY_GROUP_FILTRATION: return "filtration";
-    case DISCOVERY_GROUP_LIGHTING: return "lighting";
-    case DISCOVERY_GROUP_DOSING: return "dosing";
-    case DISCOVERY_GROUP_HEATING: return "heating";
+    case DISCOVERY_GROUP_BACKWASH: return "backwash";
+    case DISCOVERY_GROUP_LAMP: return "lamp";
+    case DISCOVERY_GROUP_RGB: return "rgb";
+    case DISCOVERY_GROUP_WATER_LEVEL: return "water_level";
+    case DISCOVERY_GROUP_POOL_TEMPERATURE: return "pool_temperature";
+    case DISCOVERY_GROUP_PH_NAOCL: return "ph_naocl";
+    case DISCOVERY_GROUP_CHLORINE_ACO: return "chlorine_aco";
+    case DISCOVERY_GROUP_ROOM_TEMPERATURE: return "room_temperature";
+    case DISCOVERY_GROUP_OUTDOOR_LIGHTING: return "outdoor_lighting";
     case DISCOVERY_GROUP_SERVICE: return "service";
     case DISCOVERY_GROUP_OVERVIEW:
     default: return "overview";
@@ -575,13 +621,20 @@ inline const char* mqttDiscoveryGroupSuffix(MqttDiscoveryGroup group){
 
 inline const char* mqttDiscoveryGroupName(MqttDiscoveryGroup group){
   switch(group){
-    case DISCOVERY_GROUP_FILTRATION: return "Filtration";
-    case DISCOVERY_GROUP_LIGHTING: return "Lighting";
-    case DISCOVERY_GROUP_DOSING: return "Dosing";
-    case DISCOVERY_GROUP_HEATING: return "Heating";
+    case DISCOVERY_GROUP_CONTROLS: return "Controls";
+    case DISCOVERY_GROUP_FILTRATION: return "Настройка фильтрации";
+    case DISCOVERY_GROUP_BACKWASH: return "Настройка промывки фильтра";
+    case DISCOVERY_GROUP_LAMP: return "Управление лампой";
+    case DISCOVERY_GROUP_RGB: return "Управление RGB подсветкой";
+    case DISCOVERY_GROUP_WATER_LEVEL: return "Контроль уровня воды";
+    case DISCOVERY_GROUP_POOL_TEMPERATURE: return "Контроль температуры";
+    case DISCOVERY_GROUP_PH_NAOCL: return "Контроль PH (NaOCl)";
+    case DISCOVERY_GROUP_CHLORINE_ACO: return "Контроль хлора CL (ACO)";
+    case DISCOVERY_GROUP_ROOM_TEMPERATURE: return "Контроль температуры в помещении";
+    case DISCOVERY_GROUP_OUTDOOR_LIGHTING: return "Уличное освещение";
     case DISCOVERY_GROUP_SERVICE: return "Service";
     case DISCOVERY_GROUP_OVERVIEW:
-    default: return "Overview";
+    default: return "Общая информация по бассейну";
   }
 }
 
@@ -683,7 +736,6 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
 
   static const MqttDiscoveryEntity baseEntities[] = {
     {"sensor", "status", "ESP32 Uptime", "home/esp32/status", nullptr, "duration", "s", "measurement", "{{ value | replace('ESP32 uptime: ', '') | replace('s','') }}", nullptr, nullptr},
-    {"sensor", "test", "ESP32 Test Sensor", "home/esp32/test", nullptr, nullptr, nullptr, "measurement", nullptr, nullptr, nullptr},
     {"sensor", "DS1", "Pool Water Temperature", "home/esp32/DS1", nullptr, "temperature", "°C", "measurement", nullptr, nullptr, nullptr},
     {"sensor", "RoomTemp", "Room Temperature", "home/esp32/RoomTemp", nullptr, "temperature", "°C", "measurement", nullptr, nullptr, nullptr},
     {"sensor", "PH", "Pool pH", "home/esp32/PH", nullptr, nullptr, "pH", "measurement", nullptr, nullptr, nullptr},
