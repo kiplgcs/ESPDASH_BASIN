@@ -672,7 +672,7 @@ if (AktualReadInput) {
 
   err = RS485.addRequest(40001, 1, 0x05, 14, Power_Warm_floor_heating ? devices[0].value : devices[1].value); // реле№15 теплый пол
   err = RS485.addRequest(40001, 1, 0x05, 15, Pow_Ul_light ? devices[0].value : devices[1].value); //Уличное освещение на столбе
-  err = RS485.addRequest(40001, 1, 0x05, 10, Power_Topping ? devices[0].value : devices[1].value); // реле№11 соленоид долива воды
+  err = RS485.addRequest(40001, 1, 0x05, 13, Power_Topping ? devices[0].value : devices[1].value); // реле№14 соленоид долива воды
 
   const bool airPumpActive = AirPump || AirPumpAuto; // Активность компрессора с учетом ручного и авто режима
   const bool valveBackwashActive = SolValveFilBack || ValveBackwashAuto; // Активность соленоида клапанов с учетом ручного и авто режима
