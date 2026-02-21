@@ -206,7 +206,7 @@ const bool cleanRelayState = ReadRelayArray[3];
 const bool heatRelayState = ReadRelayArray[4];
 const bool h2o2RelayState = ReadRelayArray[5];
 const bool acoRelayState = ReadRelayArray[6];
-const bool toppingRelayState = ReadRelayArray[10];
+const bool toppingRelayState = ReadRelayArray[13];
 
 switch (sync_step) {
   case 0:

@@ -273,7 +273,7 @@ bool Power_Clean, Power_Clean1; // Промывка фильтра
 bool Clean_Time1, Saved_Clean_Time1; // Разрешения работы включения по времени
 uint16_t Saved_Clean_timeON1, Saved_Clean_timeOFF1;
 
-bool AirPump, SolValveFilBack, SolSandDump; // Тестовые реле компрессора воздуха, соленоида клапанов и сброса песка
+bool AirPump, SolValveFilBack, SolValveFiltration, SolSandDump; // Тестовые реле компрессора воздуха, соленоидов клапанов и сброса песка
 int TimerAirSetting = 60; // Время накачки воздуха компрессором (сек)
 int TimerValveSetting = 30; // Время на переключение трехходовых клапанов (сек)
 int TimerBackwashSetting = 120; // Время обратной промывки (сек)
@@ -282,6 +282,7 @@ int TimerSolSandDump = 30; // Время сброса песка (сек)
 bool AirPumpAuto; // Автоматическое включение компрессора воздуха в режиме промывки
 bool SolSandDumpAuto; // Автоматическое включение соленоида сброса песка после промывки
 bool ValveBackwashAuto; // Автоматическое включение соленоида переключения клапанов в BACKWASH
+bool ValveFiltrationAuto; // Автоматическое включение соленоида переключения клапанов в FILTRATION
 
 bool CleanSequenceActive; // Флаг активной последовательности промывки
 bool CleanResumeFiltration; // Нужно ли восстановить фильтрацию после промывки
@@ -645,6 +646,10 @@ private:
       const bool active = SolValveFilBack || ValveBackwashAuto || ReadRelayArray[11];
       return active ? String("1") : String("0");
     }); // соленоид трехходовых клапанов
+      registerUiValueProvider("SolValveFiltration", [](){
+      const bool active = SolValveFiltration || ValveFiltrationAuto || ReadRelayArray[10];
+      return active ? String("1") : String("0");
+    }); // соленоид трехходовых клапанов в FILTRATION
     registerUiValueProvider("SolSandDump", [](){
       const bool active = SolSandDump || SolSandDumpAuto || ReadRelayArray[12];
       return active ? String("1") : String("0");
@@ -748,6 +753,8 @@ private:
       ".dash-btn.off{background:#222;color:#ddd;opacity:0.9;} " // Неактивное состояние кнопки
             "#AirPump.on,#SolValveFilBack.on,#SolSandDump.on{background:#2e7d32;border-color:#2e7d32;color:#fff;} " // Активные реле промывки
       "#AirPump.off,#SolValveFilBack.off,#SolSandDump.off{background:#3a3a3a;border-color:#3a3a3a;color:#fff;} " // Неактивные реле промывки
+      "#AirPump.on,#SolValveFilBack.on,#SolValveFiltration.on,#SolSandDump.on{background:#2e7d32;border-color:#2e7d32;color:#fff;} " // Активные реле промывки
+      "#AirPump.off,#SolValveFilBack.off,#SolValveFiltration.off,#SolSandDump.off{background:#3a3a3a;border-color:#3a3a3a;color:#fff;} " // Неактивные реле промывки
       ".dash-btn:hover{transform:translateY(-1px);box-shadow:0 6px 14px rgba(0,0,0,0.45);} " // Эффект наведения на кнопку
                 ".page{display:none;position:relative;grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap:15px;} " // Страница интерфейса
       ".page.active{display:block;} " // Отображение активной страницы
@@ -2758,8 +2765,9 @@ window.addEventListener('resize', ()=>{
     syncDashButton('Power_H2O2_Button', j.Power_H2O2_Button);
     syncDashButton('Power_ACO_Button', j.Power_ACO_Button);
     syncDashButton('Power_Topping', j.Power_Topping);
-        syncDashButton('AirPump', j.AirPump);
+    syncDashButton('AirPump', j.AirPump);
     syncDashButton('SolValveFilBack', j.SolValveFilBack);
+    syncDashButton('SolValveFiltration', j.SolValveFiltration);
     syncDashButton('SolSandDump', j.SolSandDump);
     if(typeof j.MotorSpeed !== 'undefined') updateSliderDisplay('MotorSpeed', j.MotorSpeed);
     if(typeof j.RangeMin !== 'undefined' && typeof j.RangeMax !== 'undefined') setRangeSliderUI('RangeSlider', j.RangeMin, j.RangeMax);
