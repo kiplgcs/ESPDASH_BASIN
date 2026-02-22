@@ -3,6 +3,7 @@
 #include <math.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
+#include "web.h"
 #include "wifi_manager.h"
 
 // DeviceAddress sensor0 = {0x28, 0xff, 0x64, 0x1e, 0x83, 0x7a, 0x05, 0x83}; // Указываем адрес датчика 28-ff-64-1e-83-7a-05-83
@@ -181,6 +182,44 @@ void setup_ds18(String &sensor0Label, String &sensor1Label) { // Начало ф
   if (DS2Assigned) sensors.setResolution(sensor1, 12); // Проверяем условие корректности данных/состояния.
 
   sensors.setWaitForConversion(true); // Выполняем действие библиотеки DallasTemperature для DS18B20.
+}
+
+inline void onDs18Sensor0Select(const int &value) { // Обрабатываем назначение датчика на температуру бассейна.
+  if (assignDs18SensorFromIndex(sensor0, value, Ds18Sensor0Address, kDs18Sensor0StorageKey, Ds18ScanInfo)) { // Пишем выбранный адрес в sensor0 и обновляем статус.
+    saveValue<int>(kDs18Sensor0IndexStorageKey, value); // Сохраняем выбранный индекс в NVS.
+    if (DS1Assigned) { // Применяем настройки только если адрес действительно назначен.
+      sensors.setResolution(sensor0, 12); // Фиксируем точность измерения 12 бит.
+      sensors.requestTemperaturesByAddress(sensor0); // Сразу запрашиваем первое измерение для нового адреса.
+    } // Завершаем блок применения настроек для sensor0.
+  } // Завершаем блок успешного назначения sensor0.
+}
+
+inline void onDs18Sensor1Select(const int &value) { // Обрабатываем назначение датчика на температуру после нагревателя.
+  if (assignDs18SensorFromIndex(sensor1, value, Ds18Sensor1Address, kDs18Sensor1StorageKey, Ds18ScanInfo)) { // Пишем выбранный адрес в sensor1 и обновляем статус.
+    saveValue<int>(kDs18Sensor1IndexStorageKey, value); // Сохраняем выбранный индекс в NVS.
+    if (DS2Assigned) { // Применяем настройки только если адрес действительно назначен.
+      sensors.setResolution(sensor1, 12); // Фиксируем точность измерения 12 бит.
+      sensors.requestTemperaturesByAddress(sensor1); // Сразу запрашиваем первое измерение для нового адреса.
+    } // Завершаем блок применения настроек для sensor1.
+  } // Завершаем блок успешного назначения sensor1.
+}
+
+inline void setupDs18Bindings() { // Загружаем и применяем UI-связки DS18B20 при старте.
+  setup_ds18(Ds18Sensor0Address, Ds18Sensor1Address); // Загружаем привязанные адреса DS18B20 из NVS при старте.
+  Ds18Sensor0Index = loadValue<int>(kDs18Sensor0IndexStorageKey, Ds18Sensor0Index); // Поднимаем из NVS последний индекс для sensor0.
+  Ds18Sensor1Index = loadValue<int>(kDs18Sensor1IndexStorageKey, Ds18Sensor1Index); // Поднимаем из NVS последний индекс для sensor1.
+}
+
+inline void handleDs18ScanButton() { // Отрабатываем нажатие кнопки ручного поиска датчиков.
+  static int lastDs18ScanButton = 0; // Храним прошлое состояние кнопки, чтобы ловить только фронт нажатия.
+  if (Ds18ScanButton != lastDs18ScanButton) { // Проверяем изменение состояния кнопки поиска.
+    lastDs18ScanButton = Ds18ScanButton; // Запоминаем новое состояние кнопки.
+    if (Ds18ScanButton == 1) { // Выполняем поиск строго по нажатию.
+      Ds18ScanInfo = scanDs18Sensors(); // Сканируем шину и выводим найденные адреса.
+      Ds18ScanButton = 0; // Сбрасываем кнопку после выполнения поиска.
+      saveButtonState("ds18ScanButton", 0); // Сохраняем сброшенное состояние, чтобы UI не залипал.
+    } // Завершаем обработку нажатия кнопки поиска.
+  } // Завершаем проверку события по кнопке поиска.
 }
 
 void Temp_DS18B20(int interval_Temp_DS18B20) { // Начало функции инициализации/чтения DS18B20.

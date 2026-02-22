@@ -19,30 +19,6 @@
 #include "ds18.h"
 
 
-
-void onDs18Sensor0Select(const int &value) { // Обрабатываем назначение датчика на температуру бассейна.
-  if (assignDs18SensorFromIndex(sensor0, value, Ds18Sensor0Address, kDs18Sensor0StorageKey, Ds18ScanInfo)) { // Пишем выбранный адрес в sensor0 и обновляем статус.
-    saveValue<int>(kDs18Sensor0IndexStorageKey, value); // Сохраняем выбранный индекс в NVS.
-    if (DS1Assigned) { // Применяем настройки только если адрес действительно назначен.
-      sensors.setResolution(sensor0, 12); // Фиксируем точность измерения 12 бит.
-      sensors.requestTemperaturesByAddress(sensor0); // Сразу запрашиваем первое измерение для нового адреса.
-    } // Завершаем блок применения настроек для sensor0.
-  } // Завершаем блок успешного назначения sensor0.
-}
-
-void onDs18Sensor1Select(const int &value) { // Обрабатываем назначение датчика на температуру после нагревателя.
-  if (assignDs18SensorFromIndex(sensor1, value, Ds18Sensor1Address, kDs18Sensor1StorageKey, Ds18ScanInfo)) { // Пишем выбранный адрес в sensor1 и обновляем статус.
-    saveValue<int>(kDs18Sensor1IndexStorageKey, value); // Сохраняем выбранный индекс в NVS.
-    if (DS2Assigned) { // Применяем настройки только если адрес действительно назначен.
-      sensors.setResolution(sensor1, 12); // Фиксируем точность измерения 12 бит.
-      sensors.requestTemperaturesByAddress(sensor1); // Сразу запрашиваем первое измерение для нового адреса.
-    } // Завершаем блок применения настроек для sensor1.
-  } // Завершаем блок успешного назначения sensor1.
-}
-
-
-
-
 /************************* Подключаем библиотеку  АЦП модуль ADS1115 16-бит *********************************/
 #include <Adafruit_ADS1X15.h> // Библиотека для работы с модулями ADS1115 и ADS1015 (используется в PH_CL2.h)
 //Adafruit_ADS1115 ads;  /* Use this for the 16-bit version */
@@ -168,10 +144,7 @@ void setup() {
 
   readNextionTime(); // При старте сразу пробуем взять время с RTC Nextion
 
-  setup_ds18(Ds18Sensor0Address, Ds18Sensor1Address); // Загружаем привязанные адреса DS18B20 из NVS при старте.
-
-  Ds18Sensor0Index = loadValue<int>(kDs18Sensor0IndexStorageKey, Ds18Sensor0Index); // Поднимаем из NVS последний индекс для sensor0.
-  Ds18Sensor1Index = loadValue<int>(kDs18Sensor1IndexStorageKey, Ds18Sensor1Index); // Поднимаем из NVS последний индекс для sensor1.
+  setupDs18Bindings(); // Загружаем и применяем связанные настройки DS18B20.
 
   interface(); // Первичная сборка UI нужна для загрузки/сохранения связанных значений из EEPROM
   dashInterfaceInitialized = true; // Критический фикс: запрещаем повторный вызов interface() в dash.begin(), иначе вкладки/элементы дублируются
@@ -252,21 +225,9 @@ void loop() {
   } // Закрываем одноразовый блок диагностики ядра основной логики.
 
 
-  static int lastDs18ScanButton = 0; // Храним прошлое состояние кнопки, чтобы ловить только фронт нажатия.
+  handleDs18ScanButton(); // Обрабатываем кнопку поиска датчиков DS18B20.
 
-  
-  if (Ds18ScanButton != lastDs18ScanButton) { // Проверяем изменение состояния кнопки поиска.
-    lastDs18ScanButton = Ds18ScanButton; // Запоминаем новое состояние кнопки.
-    if (Ds18ScanButton == 1) { // Выполняем поиск строго по нажатию.
-      Ds18ScanInfo = scanDs18Sensors(); // Сканируем шину и выводим найденные адреса.
-      Ds18ScanButton = 0; // Сбрасываем кнопку после выполнения поиска.
-      saveButtonState("ds18ScanButton", 0); // Сохраняем сброшенное состояние, чтобы UI не залипал.
-    } // Завершаем обработку фронта нажатия кнопки поиска.
-  } // Завершаем проверку события по кнопке поиска.
-  
-
-  
-  acoServiceLoop(); // Обработка ручного импульса ACO по состоянию
+    acoServiceLoop(); // Обработка ручного импульса ACO по состоянию
   h2o2ServiceLoop(); // Обработка ручного импульса H2O2 по состоянию
   // Обновление времени через NTP/Nextion/память
   NPT_Time(period_get_NPT_Time);
