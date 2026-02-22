@@ -676,8 +676,11 @@ if (AktualReadInput) {
   err = RS485.addRequest(40001, 1, 0x05, 8, Power_Filtr ? devices[0].value : devices[1].value); //реле№3 для Power_Filtr
   //err = RS485.addRequest(40001, 1, 0x05, 3, Power_Clean ? devices[0].value : devices[1].value); //реле№4 для Power_Clean - служит не для реле а только о факте начала и окончания промывки для передачи в Nextion
 
-  if (!Activation_Heat) {
-    err = RS485.addRequest(40001, 1, 0x05, 4, devices[1].value); //реле№5 для PowerHeat
+  const bool heatInterlockPumpActive = Power_Filtr || ReadRelayArray[8]; // Защитная блокировка: нагрев разрешён только при работающем насосе воды.
+  
+  if (!Activation_Heat || !heatInterlockPumpActive) {
+    Power_Heat = false; // Принудительно снимаем команду нагрева, чтобы исключить включение без протока воды.
+    err = RS485.addRequest(40001, 1, 0x05, 4, devices[1].value); // реле№5 для PowerHeat
   } else {
     err = RS485.addRequest(40001, 1, 0x05, 4, Power_Heat ? devices[0].value : devices[1].value);
   }
