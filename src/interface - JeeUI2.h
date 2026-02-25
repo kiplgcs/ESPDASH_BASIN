@@ -87,7 +87,6 @@ inline void interface(){ // Декларатиынве функции интер
     //UI_IMAGE("FilterImage", "/anim1.gif", "width:100;height:100; x:10%;y:0%;"); // Временно убрал данную картину за ненадобностью
 
         UI_BUTTON("Power_Filtr", Power_Filtr, "gray", "🧽 Фильтрация (вручную)");
-    // UI_CHECKBOX("Power_Filtr", Power_Filtr, "Фильтрация (вручную)");
     UI_CHECKBOX("Filtr_Time1", Filtr_Time1, "⏱️ Таймер фильтрации №1");
         UI_TIMER("FiltrTimer1", "⏱️ Таймер фильтрации №1", FiltrTimer1ON, FiltrTimer1OFF, noopTimerCallback);
     UI_CHECKBOX("Filtr_Time2", Filtr_Time2, "⏱️ Таймер фильтрации №2");

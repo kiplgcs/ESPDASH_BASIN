@@ -291,6 +291,14 @@ if (Saved_Filtr_timeON2 != filtrTimer2.on && !triggerRestartNextion) {Saved_Filt
 //   myNex.writeNum("set_filtr.n7.val", getSubstring(Filtr_timeOFF2, 3, 4));
 // }
 
+if (Saved_Filtr_timeOFF2 != filtrTimer2.off && !triggerRestartNextion) {Saved_Filtr_timeOFF2 = filtrTimer2.off;
+  myNex.writeStr("dim=50");
+  myNex.writeStr("page set_filtr");
+  String filtrOff2Str = formatMinutesToTime(filtrTimer2.off);
+  myNex.writeNum("set_filtr.n6.val", getSubstring(filtrOff2Str, 0, 1));
+  myNex.writeNum("set_filtr.n7.val", getSubstring(filtrOff2Str, 3, 4));
+}
+
 // if (Saved_Filtr_timeON3 != Filtr_timeON3 && !triggerRestartNextion) {Saved_Filtr_timeON3 = Filtr_timeON3;
 //   myNex.writeStr("dim=50");
 //   myNex.writeStr("page set_filtr");
