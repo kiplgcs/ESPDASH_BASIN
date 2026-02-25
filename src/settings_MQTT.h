@@ -760,19 +760,35 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
     {"binary_sensor", "WaterLevelSensorUpper", "Water Level Upper", "home/esp32/WaterLevelSensorUpper", nullptr, "moisture", nullptr, nullptr, nullptr, "1", "0"},
     {"binary_sensor", "WaterLevelSensorLower", "Water Level Lower", "home/esp32/WaterLevelSensorLower", nullptr, "moisture", nullptr, nullptr, nullptr, "1", "0"},
     {"binary_sensor", "Power_Warm_floor_heating", "Floor Heating State", "home/esp32/Power_Warm_floor_heating", nullptr, "heat", nullptr, nullptr, nullptr, "1", "0"},
-    {"switch", "Power_Filtr", "Pool Filter (Manual)", "home/esp32/Power_Filtr", "home/esp32/Power_Filtr/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
-    {"switch", "Filtr_Time1", "Filter Timer 1", "home/esp32/Filtr_Time1", "home/esp32/Filtr_Time1/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
-    {"switch", "Filtr_Time2", "Filter Timer 2", "home/esp32/Filtr_Time2", "home/esp32/Filtr_Time2/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
-    {"switch", "Filtr_Time3", "Filter Timer 3", "home/esp32/Filtr_Time3", "home/esp32/Filtr_Time3/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
-    {"switch", "Power_Clean", "Filter Backwash", "home/esp32/Power_Clean", "home/esp32/Power_Clean/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
-    {"switch", "Clean_Time1", "Backwash Timer", "home/esp32/Clean_Time1", "home/esp32/Clean_Time1/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
-    {"switch", "Pow_Ul_light", "Outdoor Light (Manual)", "home/esp32/Pow_Ul_light", "home/esp32/Pow_Ul_light/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
-    {"switch", "Ul_light_Time", "Outdoor Light Timer", "home/esp32/Ul_light_Time", "home/esp32/Ul_light_Time/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+     {"switch", "Power_Filtr", "🧽 Фильтрация (ручной)", "home/esp32/Power_Filtr", "home/esp32/Power_Filtr/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"switch", "Filtr_Time1", "⏱️ Фильтрация №1", "home/esp32/Filtr_Time1", "home/esp32/Filtr_Time1/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"text", "FiltrTimer1_ON", "🟢 Фильтр №1 ВКЛ", "home/esp32/FiltrTimer1_ON", "home/esp32/FiltrTimer1_ON/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"text", "FiltrTimer1_OFF", "🔴 Фильтр №1 ВЫКЛ", "home/esp32/FiltrTimer1_OFF", "home/esp32/FiltrTimer1_OFF/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"switch", "Filtr_Time2", "⏱️ Фильтрация №2", "home/esp32/Filtr_Time2", "home/esp32/Filtr_Time2/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"text", "FiltrTimer2_ON", "🟢 Фильтр №2 ВКЛ", "home/esp32/FiltrTimer2_ON", "home/esp32/FiltrTimer2_ON/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"text", "FiltrTimer2_OFF", "🔴 Фильтр №2 ВЫКЛ", "home/esp32/FiltrTimer2_OFF", "home/esp32/FiltrTimer2_OFF/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"switch", "Filtr_Time3", "⏱️ Фильтрация №3", "home/esp32/Filtr_Time3", "home/esp32/Filtr_Time3/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"text", "FiltrTimer3_ON", "🟢 Фильтр №3 ВКЛ", "home/esp32/FiltrTimer3_ON", "home/esp32/FiltrTimer3_ON/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"text", "FiltrTimer3_OFF", "🔴 Фильтр №3 ВЫКЛ", "home/esp32/FiltrTimer3_OFF", "home/esp32/FiltrTimer3_OFF/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"switch", "Power_Clean", "🧼 Промывка (ручной)", "home/esp32/Power_Clean", "home/esp32/Power_Clean/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"switch", "Clean_Time1", "🗓️ Промывка по времени", "home/esp32/Clean_Time1", "home/esp32/Clean_Time1/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"text", "Timer1", "⏰ Старт промывки", "home/esp32/Timer1", "home/esp32/Timer1/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"text", "DaysSelect", "📅 Дни промывки", "home/esp32/DaysSelect", "home/esp32/DaysSelect/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"text", "CleanTimer1_ON", "🟢 Промывка ВКЛ", "home/esp32/CleanTimer1_ON", "home/esp32/CleanTimer1_ON/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"text", "CleanTimer1_OFF", "🔴 Промывка ВЫКЛ", "home/esp32/CleanTimer1_OFF", "home/esp32/CleanTimer1_OFF/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"text", "LampTimer_ON", "🟢 Лампа ВКЛ", "home/esp32/LampTimer_ON", "home/esp32/LampTimer_ON/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"text", "LampTimer_OFF", "🔴 Лампа ВЫКЛ", "home/esp32/LampTimer_OFF", "home/esp32/LampTimer_OFF/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"switch", "WS2815_Time1", "⏱️ Таймер RGB", "home/esp32/WS2815_Time1", "home/esp32/WS2815_Time1/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"text", "RgbTimer_ON", "🟢 RGB ВКЛ", "home/esp32/RgbTimer_ON", "home/esp32/RgbTimer_ON/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"text", "RgbTimer_OFF", "🔴 RGB ВЫКЛ", "home/esp32/RgbTimer_OFF", "home/esp32/RgbTimer_OFF/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"switch", "Pow_WS2815", "🌈 RGB лента", "home/esp32/Pow_WS2815", "home/esp32/Pow_WS2815/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"switch", "Activation_Heat", "Heating Control", "home/esp32/Activation_Heat", "home/esp32/Activation_Heat/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
      {"switch", "Activation_Water_Level", "Water Level Control", "home/esp32/Activation_Water_Level", "home/esp32/Activation_Water_Level/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"switch", "Power_Topping", "Water Top Up Valve", "home/esp32/Power_Topping", "home/esp32/Power_Topping/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
-    {"switch", "WS2815_Time1", "RGB Timer", "home/esp32/WS2815_Time1", "home/esp32/WS2815_Time1/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
-    {"switch", "Pow_WS2815", "RGB Strip Power", "home/esp32/Pow_WS2815", "home/esp32/Pow_WS2815/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+        {"switch", "Pow_Ul_light", "🚏 Свет улицы (ручной)", "home/esp32/Pow_Ul_light", "home/esp32/Pow_Ul_light/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"switch", "Ul_light_Time", "⏱️ Таймер улицы", "home/esp32/Ul_light_Time", "home/esp32/Ul_light_Time/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"text", "UlLightTimer_ON", "🟢 Улица ВКЛ", "home/esp32/UlLightTimer_ON", "home/esp32/UlLightTimer_ON/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"text", "UlLightTimer_OFF", "🔴 Улица ВЫКЛ", "home/esp32/UlLightTimer_OFF", "home/esp32/UlLightTimer_OFF/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"switch", "PH_Control_ACO", "pH Control (ACO)", "home/esp32/PH_Control_ACO", "home/esp32/PH_Control_ACO/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"switch", "NaOCl_H2O2_Control", "Chlorine Control (NaOCl)", "home/esp32/NaOCl_H2O2_Control", "home/esp32/NaOCl_H2O2_Control/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"switch", "RoomTemper", "Room Temperature Control", "home/esp32/RoomTemper", "home/esp32/RoomTemper/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
@@ -797,25 +813,9 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
     {"text", "Comment", "Comment", "home/esp32/Comment", "home/esp32/Comment/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"text", "ThemeColor", "Theme Color", "home/esp32/ThemeColor", "home/esp32/ThemeColor/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"text", "LEDColor", "LED Color", "home/esp32/LEDColor", "home/esp32/LEDColor/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
-    {"text", "DaysSelect", "Backwash Days", "home/esp32/DaysSelect", "home/esp32/DaysSelect/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"text", "RangeSlider", "Range Min-Max", "home/esp32/RangeSlider", "home/esp32/RangeSlider/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"text", "RoomTempRange", "Room Temp Range", "home/esp32/RoomTempRange", "home/esp32/RoomTempRange/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"text", "Float_PH_Slider", "pH Range", "home/esp32/Float_PH_Slider", "home/esp32/Float_PH_Slider/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
-    {"text", "Timer1", "Timer 1", "home/esp32/Timer1", "home/esp32/Timer1/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
-    {"text", "FiltrTimer1_ON", "Filter Timer 1 ON", "home/esp32/FiltrTimer1_ON", "home/esp32/FiltrTimer1_ON/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
-    {"text", "FiltrTimer1_OFF", "Filter Timer 1 OFF", "home/esp32/FiltrTimer1_OFF", "home/esp32/FiltrTimer1_OFF/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
-    {"text", "FiltrTimer2_ON", "Filter Timer 2 ON", "home/esp32/FiltrTimer2_ON", "home/esp32/FiltrTimer2_ON/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
-    {"text", "FiltrTimer2_OFF", "Filter Timer 2 OFF", "home/esp32/FiltrTimer2_OFF", "home/esp32/FiltrTimer2_OFF/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
-    {"text", "FiltrTimer3_ON", "Filter Timer 3 ON", "home/esp32/FiltrTimer3_ON", "home/esp32/FiltrTimer3_ON/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
-    {"text", "FiltrTimer3_OFF", "Filter Timer 3 OFF", "home/esp32/FiltrTimer3_OFF", "home/esp32/FiltrTimer3_OFF/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
-    {"text", "CleanTimer1_ON", "Backwash Timer ON", "home/esp32/CleanTimer1_ON", "home/esp32/CleanTimer1_ON/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
-    {"text", "CleanTimer1_OFF", "Backwash Timer OFF", "home/esp32/CleanTimer1_OFF", "home/esp32/CleanTimer1_OFF/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
-    {"text", "LampTimer_ON", "Lamp Timer ON", "home/esp32/LampTimer_ON", "home/esp32/LampTimer_ON/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
-    {"text", "LampTimer_OFF", "Lamp Timer OFF", "home/esp32/LampTimer_OFF", "home/esp32/LampTimer_OFF/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
-    {"text", "RgbTimer_ON", "RGB Timer ON", "home/esp32/RgbTimer_ON", "home/esp32/RgbTimer_ON/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
-    {"text", "RgbTimer_OFF", "RGB Timer OFF", "home/esp32/RgbTimer_OFF", "home/esp32/RgbTimer_OFF/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
-    {"text", "UlLightTimer_ON", "Outdoor Light Timer ON", "home/esp32/UlLightTimer_ON", "home/esp32/UlLightTimer_ON/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
-    {"text", "UlLightTimer_OFF", "Outdoor Light Timer OFF", "home/esp32/UlLightTimer_OFF", "home/esp32/UlLightTimer_OFF/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"button", "restart", "ESP32 Restart", nullptr, "home/esp32/button/restart/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr}
   };
 
@@ -859,21 +859,21 @@ if(mqttDiscoveryStage == DISCOVERY_MAIN_ENTITIES){
       if(mqttDiscoveryIndex < baseCount){
         result = publishMqttDiscoveryEntity(baseEntities[mqttDiscoveryIndex], deviceId, deviceName, true);
       } else if(mqttDiscoveryIndex == baseCount){
-        result = publishMqttDiscoverySelect("SetLamp", "Lamp Mode", "home/esp32/SetLamp", "home/esp32/SetLamp/set", selectOptions, 4, deviceId, deviceName, true, true);
+        result = publishMqttDiscoverySelect("SetLamp", "💡 Режим света", "home/esp32/SetLamp", "home/esp32/SetLamp/set", selectOptions, 4, deviceId, deviceName, true, true);
       } else if(mqttDiscoveryIndex == baseCount + 1){
-        result = publishMqttDiscoverySelect("SetRGB", "RGB Mode", "home/esp32/SetRGB", "home/esp32/SetRGB/set", selectOptions, 4, deviceId, deviceName, true, true);
+        result = publishMqttDiscoverySelect("SetRGB", "🎛️ Режим RGB", "home/esp32/SetRGB", "home/esp32/SetRGB/set", selectOptions, 4, deviceId, deviceName, true, true);
         } else if(mqttDiscoveryIndex == baseCount + 2){
-        result = publishMqttDiscoverySelect("LedColorMode", "LED Color Mode", "home/esp32/LedColorMode", "home/esp32/LedColorMode/set", ledColorModeOptions, 2, deviceId, deviceName, true, true);
+        result = publishMqttDiscoverySelect("LedColorMode", "🎨 Режим цвета RGB", "home/esp32/LedColorMode", "home/esp32/LedColorMode/set", ledColorModeOptions, 2, deviceId, deviceName, true, true);
       } else if(mqttDiscoveryIndex == baseCount + 3){
-        result = publishMqttDiscoverySelect("LedPattern", "LED Pattern", "home/esp32/LedPattern", "home/esp32/LedPattern/set", ledPatternOptions, 24, deviceId, deviceName, true, true);
+         result = publishMqttDiscoverySelect("LedPattern", "✨ Эффект RGB", "home/esp32/LedPattern", "home/esp32/LedPattern/set", ledPatternOptions, 24, deviceId, deviceName, true, true);
       } else if(mqttDiscoveryIndex == baseCount + 4){
-        result = publishMqttDiscoverySelect("LedAutoplay", "LED Autoplay", "home/esp32/LedAutoplay", "home/esp32/LedAutoplay/set", ledAutoplayOptions, 2, deviceId, deviceName, true, true);
+        result = publishMqttDiscoverySelect("LedAutoplay", "🔁 Автосмена RGB", "home/esp32/LedAutoplay", "home/esp32/LedAutoplay/set", ledAutoplayOptions, 2, deviceId, deviceName, true, true);
       } else if(mqttDiscoveryIndex == baseCount + 5){
-        result = publishMqttDiscoverySelect("LedColorOrder", "LED Color Order", "home/esp32/LedColorOrder", "home/esp32/LedColorOrder/set", ledColorOrderOptions, 6, deviceId, deviceName, true, true);
+        result = publishMqttDiscoverySelect("LedColorOrder", "🎚️ Порядок цветов", "home/esp32/LedColorOrder", "home/esp32/LedColorOrder/set", ledColorOrderOptions, 6, deviceId, deviceName, true, true);
       } else if(mqttDiscoveryIndex == baseCount + 6){
-        result = publishMqttDiscoverySelect("ACO_Work", "ACO Dosing Period", "home/esp32/ACO_Work", "home/esp32/ACO_Work/set", dosingOptions, 13, deviceId, deviceName, true, true);
+         result = publishMqttDiscoverySelect("ACO_Work", "🧴 Период дозирования ACO", "home/esp32/ACO_Work", "home/esp32/ACO_Work/set", dosingOptions, 13, deviceId, deviceName, true, true);
       } else if(mqttDiscoveryIndex == baseCount + 7){
-        result = publishMqttDiscoverySelect("H2O2_Work", "NaOCl Dosing Period", "home/esp32/H2O2_Work", "home/esp32/H2O2_Work/set", dosingOptions, 13, deviceId, deviceName, true, true);
+        result = publishMqttDiscoverySelect("H2O2_Work", "🧪 Период дозирования NaOCl", "home/esp32/H2O2_Work", "home/esp32/H2O2_Work/set", dosingOptions, 13, deviceId, deviceName, true, true);
       }
 
  if(!result.published){
@@ -907,21 +907,21 @@ if(mqttDiscoveryStage == DISCOVERY_MAIN_ENTITIES){
               const char* const* options = nullptr;
               size_t optionsCount = 0;
               if(selectIndex == 0){
-                id = "SetLamp"; name = "Lamp Mode"; stateTopic = "home/esp32/SetLamp"; commandTopic = "home/esp32/SetLamp/set"; options = selectOptions; optionsCount = 4;
+                id = "SetLamp"; name = "💡 Режим света"; stateTopic = "home/esp32/SetLamp"; commandTopic = "home/esp32/SetLamp/set"; options = selectOptions; optionsCount = 4;
               } else if(selectIndex == 1){
-                id = "SetRGB"; name = "RGB Mode"; stateTopic = "home/esp32/SetRGB"; commandTopic = "home/esp32/SetRGB/set"; options = selectOptions; optionsCount = 4;
+                id = "SetRGB"; name = "🎛️ Режим RGB"; stateTopic = "home/esp32/SetRGB"; commandTopic = "home/esp32/SetRGB/set"; options = selectOptions; optionsCount = 4;
               } else if(selectIndex == 2){
-                id = "LedColorMode"; name = "LED Color Mode"; stateTopic = "home/esp32/LedColorMode"; commandTopic = "home/esp32/LedColorMode/set"; options = ledColorModeOptions; optionsCount = 2;
+                id = "LedColorMode"; name = "🎨 Режим цвета RGB"; stateTopic = "home/esp32/LedColorMode"; commandTopic = "home/esp32/LedColorMode/set"; options = ledColorModeOptions; optionsCount = 2;
               } else if(selectIndex == 3){
-                id = "LedPattern"; name = "LED Pattern"; stateTopic = "home/esp32/LedPattern"; commandTopic = "home/esp32/LedPattern/set"; options = ledPatternOptions; optionsCount = 24;
+                id = "LedPattern"; name = "✨ Эффект RGB"; stateTopic = "home/esp32/LedPattern"; commandTopic = "home/esp32/LedPattern/set"; options = ledPatternOptions; optionsCount = 24;
               } else if(selectIndex == 4){
-                id = "LedAutoplay"; name = "LED Autoplay"; stateTopic = "home/esp32/LedAutoplay"; commandTopic = "home/esp32/LedAutoplay/set"; options = ledAutoplayOptions; optionsCount = 2;
+                id = "LedAutoplay"; name = "🔁 Автосмена RGB"; stateTopic = "home/esp32/LedAutoplay"; commandTopic = "home/esp32/LedAutoplay/set"; options = ledAutoplayOptions; optionsCount = 2;
               } else if(selectIndex == 5){
-                id = "LedColorOrder"; name = "LED Color Order"; stateTopic = "home/esp32/LedColorOrder"; commandTopic = "home/esp32/LedColorOrder/set"; options = ledColorOrderOptions; optionsCount = 6;
+                 id = "LedColorOrder"; name = "🎚️ Порядок цветов"; stateTopic = "home/esp32/LedColorOrder"; commandTopic = "home/esp32/LedColorOrder/set"; options = ledColorOrderOptions; optionsCount = 6;
               } else if(selectIndex == 6){
-                id = "ACO_Work"; name = "ACO Dosing Period"; stateTopic = "home/esp32/ACO_Work"; commandTopic = "home/esp32/ACO_Work/set"; options = dosingOptions; optionsCount = 13;
+                id = "ACO_Work"; name = "🧴 Период дозирования ACO"; stateTopic = "home/esp32/ACO_Work"; commandTopic = "home/esp32/ACO_Work/set"; options = dosingOptions; optionsCount = 13;
               } else if(selectIndex == 7){
-                id = "H2O2_Work"; name = "NaOCl Dosing Period"; stateTopic = "home/esp32/H2O2_Work"; commandTopic = "home/esp32/H2O2_Work/set"; options = dosingOptions; optionsCount = 13;
+                 id = "H2O2_Work"; name = "🧪 Период дозирования NaOCl"; stateTopic = "home/esp32/H2O2_Work"; commandTopic = "home/esp32/H2O2_Work/set"; options = dosingOptions; optionsCount = 13;
               }
               if(id){
                 MqttDiscoveryPublishResult fallbackResult = publishMqttDiscoverySelect(id, name, stateTopic, commandTopic, options, optionsCount, deviceId, deviceName, true, false);
