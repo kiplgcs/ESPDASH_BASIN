@@ -174,13 +174,16 @@ inline void mqttApplyDaysSelect(const String &value){
   String next = value;
   next.trim();
 
-  if(next.startsWith("toggle:")){
-    const String day = next.substring(7);
+  if(next.startsWith("toggle:") || next.startsWith("add:") || next.startsWith("remove:")){
+    bool removeDay = next.startsWith("remove:");
+    const int prefixLen = next.startsWith("toggle:") ? 7 : (removeDay ? 7 : 4);
+    const String day = next.substring(prefixLen);
     String marked = "," + DaysSelect + ",";
     const String token = day + ",";
-    if(marked.indexOf(token) >= 0){
+    const bool hasDay = marked.indexOf(token) >= 0;
+    if((next.startsWith("toggle:") && hasDay) || (removeDay && hasDay)){
       marked.replace(token, ",");
-    } else {
+    } else if((next.startsWith("toggle:") && !hasDay) || (!removeDay && !next.startsWith("toggle:") && !hasDay)){
       marked += day + ",";
     }
     while(marked.indexOf(",,") >= 0) marked.replace(",,", ",");
@@ -801,14 +804,13 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
     {"switch", "Power_Clean", "🧼 Промывка (ручной)", "home/esp32/Power_Clean", "home/esp32/Power_Clean/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"switch", "Clean_Time1", "🗓️ Промывка по времени", "home/esp32/Clean_Time1", "home/esp32/Clean_Time1/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"text", "Timer1", "⏰ Старт промывки", "home/esp32/Timer1", "home/esp32/Timer1/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
-    {"sensor", "DaysSelect", "📅 Дни промывки", "home/esp32/DaysSelect", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
-    {"button", "DaysMonToggle", "📅 ПН", nullptr, "home/esp32/DaysSelect/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, "toggle:Mon"},
-    {"button", "DaysTueToggle", "📅 ВТ", nullptr, "home/esp32/DaysSelect/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, "toggle:Tue"},
-    {"button", "DaysWedToggle", "📅 СР", nullptr, "home/esp32/DaysSelect/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, "toggle:Wed"},
-    {"button", "DaysThuToggle", "📅 ЧТ", nullptr, "home/esp32/DaysSelect/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, "toggle:Thu"},
-    {"button", "DaysFriToggle", "📅 ПТ", nullptr, "home/esp32/DaysSelect/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, "toggle:Fri"},
-    {"button", "DaysSatToggle", "📅 СБ", nullptr, "home/esp32/DaysSelect/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, "toggle:Sat"},
-    {"button", "DaysSunToggle", "📅 ВС", nullptr, "home/esp32/DaysSelect/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, "toggle:Sun"},
+    {"switch", "DaysMonToggle", "📅 01 ПН", "home/esp32/DaysSelect", "home/esp32/DaysSelect/set", nullptr, nullptr, nullptr, "{{ 'ON' if 'Mon' in value else 'OFF' }}", "add:Mon", "remove:Mon"},
+    {"switch", "DaysTueToggle", "📅 02 ВТ", "home/esp32/DaysSelect", "home/esp32/DaysSelect/set", nullptr, nullptr, nullptr, "{{ 'ON' if 'Tue' in value else 'OFF' }}", "add:Tue", "remove:Tue"},
+    {"switch", "DaysWedToggle", "📅 03 СР", "home/esp32/DaysSelect", "home/esp32/DaysSelect/set", nullptr, nullptr, nullptr, "{{ 'ON' if 'Wed' in value else 'OFF' }}", "add:Wed", "remove:Wed"},
+    {"switch", "DaysThuToggle", "📅 04 ЧТ", "home/esp32/DaysSelect", "home/esp32/DaysSelect/set", nullptr, nullptr, nullptr, "{{ 'ON' if 'Thu' in value else 'OFF' }}", "add:Thu", "remove:Thu"},
+    {"switch", "DaysFriToggle", "📅 05 ПТ", "home/esp32/DaysSelect", "home/esp32/DaysSelect/set", nullptr, nullptr, nullptr, "{{ 'ON' if 'Fri' in value else 'OFF' }}", "add:Fri", "remove:Fri"},
+    {"switch", "DaysSatToggle", "📅 06 СБ", "home/esp32/DaysSelect", "home/esp32/DaysSelect/set", nullptr, nullptr, nullptr, "{{ 'ON' if 'Sat' in value else 'OFF' }}", "add:Sat", "remove:Sat"},
+    {"switch", "DaysSunToggle", "📅 07 ВС", "home/esp32/DaysSelect", "home/esp32/DaysSelect/set", nullptr, nullptr, nullptr, "{{ 'ON' if 'Sun' in value else 'OFF' }}", "add:Sun", "remove:Sun"},
     {"text", "CleanTimer1_ON", "🟢 Промывка ВКЛ", "home/esp32/CleanTimer1_ON", "home/esp32/CleanTimer1_ON/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"text", "CleanTimer1_OFF", "🔴 Промывка ВЫКЛ", "home/esp32/CleanTimer1_OFF", "home/esp32/CleanTimer1_OFF/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
      {"text", "LampTimer_ON", "02 🟢 Время вкл. лампы по таймеру", "home/esp32/LampTimer_ON", "home/esp32/LampTimer_ON/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
