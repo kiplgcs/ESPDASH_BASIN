@@ -171,7 +171,25 @@ inline uint16_t mqttTimerOffMinutes(const String &id){
 }
 
 inline void mqttApplyDaysSelect(const String &value){
-  DaysSelect = value;
+  String next = value;
+  next.trim();
+
+  if(next.startsWith("toggle:")){
+    const String day = next.substring(7);
+    String marked = "," + DaysSelect + ",";
+    const String token = day + ",";
+    if(marked.indexOf(token) >= 0){
+      marked.replace(token, ",");
+    } else {
+      marked += day + ",";
+    }
+    while(marked.indexOf(",,") >= 0) marked.replace(",,", ",");
+    if(marked.startsWith(",")) marked.remove(0, 1);
+    if(marked.endsWith(",")) marked.remove(marked.length() - 1);
+    next = marked;
+  }
+
+  DaysSelect = next;
   syncCleanDaysFromSelection();
   saveValue<String>("DaysSelect", DaysSelect);
 }
@@ -517,6 +535,7 @@ struct MqttDiscoveryEntity {
   const char* valueTemplate;
   const char* payloadOn;
   const char* payloadOff;
+  const char* payloadPress = nullptr;
 };
 
 enum MqttDiscoveryGroup {
@@ -556,6 +575,10 @@ if(entityId == "OverlayPoolTemp" || entityId == "OverlayHeaterTemp" ||
 
   if(entityId == "Power_Clean" || entityId == "Clean_Time1" ||
      entityId == "Timer1" || entityId == "DaysSelect" ||
+    entityId == "DaysMonToggle" || entityId == "DaysTueToggle" ||
+     entityId == "DaysWedToggle" || entityId == "DaysThuToggle" ||
+     entityId == "DaysFriToggle" || entityId == "DaysSatToggle" ||
+     entityId == "DaysSunToggle" ||
      entityId == "CleanTimer1_ON" || entityId == "CleanTimer1_OFF") return DISCOVERY_GROUP_BACKWASH;
 
   if(entityId == "InfoString2" || entityId == "SetLamp" ||
@@ -563,7 +586,7 @@ if(entityId == "OverlayPoolTemp" || entityId == "OverlayHeaterTemp" ||
      entityId == "LampTimer_OFF") return DISCOVERY_GROUP_LAMP;
 
   if(entityId == "WS2815_Time1" || entityId == "Pow_WS2815" ||
-     entityId == "SetRGB" || entityId == "LEDColor" ||
+     entityId == "SetRGB" || entityId == "LEDColor" || entityId == "LedBrightness" ||
      entityId == "LedColorMode" || entityId == "LedPattern" ||
      entityId == "LedAutoplay" || entityId == "LedAutoplayDuration" ||
      entityId == "LedColorOrder" || entityId == "RgbTimer_ON" ||
@@ -646,7 +669,11 @@ inline void publishDiscoveryDeviceBlockGrouped(JsonDocument &doc,
   JsonArray identifiers = device["identifiers"].to<JsonArray>();
   const String groupDeviceId = rootDeviceId + "_" + mqttDiscoveryGroupSuffix(group);
   identifiers.add(groupDeviceId);
-  device["name"] = rootDeviceName + " " + mqttDiscoveryGroupName(group);
+  String compactRootName = rootDeviceName;
+  if(compactRootName.startsWith("ESP32 ") && compactRootName.length() > 5){
+    compactRootName = "ESP32 " + compactRootName.substring(compactRootName.length() - 5);
+  }
+  device["name"] = compactRootName + " • " + mqttDiscoveryGroupName(group);
   device["model"] = "ESP32-S3";
   device["manufacturer"] = "Espressif";
   if(group != DISCOVERY_GROUP_OVERVIEW) device["via_device"] = rootDeviceId;
@@ -674,6 +701,7 @@ inline MqttDiscoveryPublishResult publishMqttDiscoveryEntity(const MqttDiscovery
   if(entity.valueTemplate) doc["value_template"] = entity.valueTemplate; // value_template
   if(entity.payloadOn) doc["payload_on"] = entity.payloadOn; // payload_on
   if(entity.payloadOff) doc["payload_off"] = entity.payloadOff; // payload_off
+    if(entity.payloadPress) doc["payload_press"] = entity.payloadPress; // payload_press
 
     publishDiscoveryDeviceBlockGrouped(doc, deviceId, deviceName, mqttDiscoveryGroupForEntityId(entity.id));
 
@@ -773,7 +801,14 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
     {"switch", "Power_Clean", "🧼 Промывка (ручной)", "home/esp32/Power_Clean", "home/esp32/Power_Clean/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"switch", "Clean_Time1", "🗓️ Промывка по времени", "home/esp32/Clean_Time1", "home/esp32/Clean_Time1/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"text", "Timer1", "⏰ Старт промывки", "home/esp32/Timer1", "home/esp32/Timer1/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
-    {"text", "DaysSelect", "📅 Дни промывки", "home/esp32/DaysSelect", "home/esp32/DaysSelect/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"sensor", "DaysSelect", "📅 Дни промывки", "home/esp32/DaysSelect", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"button", "DaysMonToggle", "📅 ПН", nullptr, "home/esp32/DaysSelect/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, "toggle:Mon"},
+    {"button", "DaysTueToggle", "📅 ВТ", nullptr, "home/esp32/DaysSelect/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, "toggle:Tue"},
+    {"button", "DaysWedToggle", "📅 СР", nullptr, "home/esp32/DaysSelect/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, "toggle:Wed"},
+    {"button", "DaysThuToggle", "📅 ЧТ", nullptr, "home/esp32/DaysSelect/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, "toggle:Thu"},
+    {"button", "DaysFriToggle", "📅 ПТ", nullptr, "home/esp32/DaysSelect/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, "toggle:Fri"},
+    {"button", "DaysSatToggle", "📅 СБ", nullptr, "home/esp32/DaysSelect/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, "toggle:Sat"},
+    {"button", "DaysSunToggle", "📅 ВС", nullptr, "home/esp32/DaysSelect/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, "toggle:Sun"},
     {"text", "CleanTimer1_ON", "🟢 Промывка ВКЛ", "home/esp32/CleanTimer1_ON", "home/esp32/CleanTimer1_ON/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"text", "CleanTimer1_OFF", "🔴 Промывка ВЫКЛ", "home/esp32/CleanTimer1_OFF", "home/esp32/CleanTimer1_OFF/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
      {"text", "LampTimer_ON", "02 🟢 Время вкл. лампы по таймеру", "home/esp32/LampTimer_ON", "home/esp32/LampTimer_ON/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
