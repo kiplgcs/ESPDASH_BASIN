@@ -35,6 +35,7 @@ inline bool mqttDiscoveryFullDevicePublished = false; // полный device б�
 inline size_t mqttDiscoveryLastMaxPayload = 0; // максимум payload discovery
 inline size_t mqttDiscoveryRetryIndex = 0; // индекс повторной публикации
 inline uint8_t mqttDiscoveryRetryCount = 0; // число повторов на сущность
+inline bool mqttDiscoveryLegacyCleanupDone = false; // очистка удалённых legacy-сущностей
 #endif
 
 // inline void publishMqttAvailability(const char* payload, bool retain = true){ // публикация доступности
@@ -577,11 +578,6 @@ if(entityId == "OverlayPoolTemp" || entityId == "OverlayHeaterTemp" ||
      entityId == "FiltrTimer3_ON" || entityId == "FiltrTimer3_OFF") return DISCOVERY_GROUP_FILTRATION;
 
   if(entityId == "Power_Clean" || entityId == "Clean_Time1" ||
-     entityId == "Timer1" || entityId == "DaysSelect" ||
-    entityId == "DaysMonToggle" || entityId == "DaysTueToggle" ||
-     entityId == "DaysWedToggle" || entityId == "DaysThuToggle" ||
-     entityId == "DaysFriToggle" || entityId == "DaysSatToggle" ||
-     entityId == "DaysSunToggle" ||
      entityId == "CleanTimer1_ON" || entityId == "CleanTimer1_OFF") return DISCOVERY_GROUP_BACKWASH;
 
   if(entityId == "InfoString2" || entityId == "SetLamp" ||
@@ -764,6 +760,33 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
 
   const String deviceId = mqttDiscoveryDeviceId(); // id устройства
   const String deviceName = mqttDiscoveryDeviceName(); // имя устройства
+  
+   if(!mqttDiscoveryLegacyCleanupDone){
+    struct LegacyEntityConfig { const char* component; const char* id; };
+    static const LegacyEntityConfig legacyEntities[] = {
+      {"text", "DaysSelect"},
+      {"switch", "DaysMonToggle"},
+      {"switch", "DaysTueToggle"},
+      {"switch", "DaysWedToggle"},
+      {"switch", "DaysThuToggle"},
+      {"switch", "DaysFriToggle"},
+      {"switch", "DaysSatToggle"},
+      {"switch", "DaysSunToggle"}
+    };
+
+    bool cleanupOk = true;
+    for(const auto &legacy : legacyEntities){
+      const String uniqueId = deviceId + "_" + legacy.id;
+      const String topic = String(mqttDiscoveryPrefix) + "/" + legacy.component + "/" + uniqueId + "/config";
+      if(!mqttClient.publish(topic.c_str(), "", true)){
+        cleanupOk = false;
+      }
+    }
+
+    if(!cleanupOk) return; // повторим очистку в следующем цикле
+    mqttDiscoveryLegacyCleanupDone = true;
+  }
+
 
   static const MqttDiscoveryEntity baseEntities[] = {
     {"sensor", "status", "ESP32 Uptime", "home/esp32/status", nullptr, "duration", "s", "measurement", "{{ value | replace('ESP32 uptime: ', '') | replace('s','') }}", nullptr, nullptr},
@@ -804,13 +827,6 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
     {"switch", "Power_Clean", "🧼 Промывка (ручной)", "home/esp32/Power_Clean", "home/esp32/Power_Clean/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"switch", "Clean_Time1", "🗓️ Промывка по времени", "home/esp32/Clean_Time1", "home/esp32/Clean_Time1/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"text", "Timer1", "⏰ Старт промывки", "home/esp32/Timer1", "home/esp32/Timer1/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
-    {"switch", "DaysMonToggle", "📅 01 ПН", "home/esp32/DaysSelect", "home/esp32/DaysSelect/set", nullptr, nullptr, nullptr, "{{ 'ON' if 'Mon' in value else 'OFF' }}", "add:Mon", "remove:Mon"},
-    {"switch", "DaysTueToggle", "📅 02 ВТ", "home/esp32/DaysSelect", "home/esp32/DaysSelect/set", nullptr, nullptr, nullptr, "{{ 'ON' if 'Tue' in value else 'OFF' }}", "add:Tue", "remove:Tue"},
-    {"switch", "DaysWedToggle", "📅 03 СР", "home/esp32/DaysSelect", "home/esp32/DaysSelect/set", nullptr, nullptr, nullptr, "{{ 'ON' if 'Wed' in value else 'OFF' }}", "add:Wed", "remove:Wed"},
-    {"switch", "DaysThuToggle", "📅 04 ЧТ", "home/esp32/DaysSelect", "home/esp32/DaysSelect/set", nullptr, nullptr, nullptr, "{{ 'ON' if 'Thu' in value else 'OFF' }}", "add:Thu", "remove:Thu"},
-    {"switch", "DaysFriToggle", "📅 05 ПТ", "home/esp32/DaysSelect", "home/esp32/DaysSelect/set", nullptr, nullptr, nullptr, "{{ 'ON' if 'Fri' in value else 'OFF' }}", "add:Fri", "remove:Fri"},
-    {"switch", "DaysSatToggle", "📅 06 СБ", "home/esp32/DaysSelect", "home/esp32/DaysSelect/set", nullptr, nullptr, nullptr, "{{ 'ON' if 'Sat' in value else 'OFF' }}", "add:Sat", "remove:Sat"},
-    {"switch", "DaysSunToggle", "📅 07 ВС", "home/esp32/DaysSelect", "home/esp32/DaysSelect/set", nullptr, nullptr, nullptr, "{{ 'ON' if 'Sun' in value else 'OFF' }}", "add:Sun", "remove:Sun"},
     {"text", "CleanTimer1_ON", "🟢 Промывка ВКЛ", "home/esp32/CleanTimer1_ON", "home/esp32/CleanTimer1_ON/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"text", "CleanTimer1_OFF", "🔴 Промывка ВЫКЛ", "home/esp32/CleanTimer1_OFF", "home/esp32/CleanTimer1_OFF/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
      {"text", "LampTimer_ON", "02 🟢 Время вкл. лампы по таймеру", "home/esp32/LampTimer_ON", "home/esp32/LampTimer_ON/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
@@ -884,6 +900,7 @@ if(mqttDiscoveryStage == DISCOVERY_TEST_SENSOR){
       mqttDiscoveryIndex = 0; // сброс индекса
       mqttDiscoveryRetryIndex = 0;
       mqttDiscoveryRetryCount = 0;
+      mqttDiscoveryLegacyCleanupDone = false;
     }
     return;
   }
@@ -1158,6 +1175,7 @@ bool connected = mqttClient.connect( // подключение с логином
       mqttDiscoveryLastMaxPayload = 0;
       mqttDiscoveryRetryIndex = 0;
       mqttDiscoveryRetryCount = 0;
+      mqttDiscoveryLegacyCleanupDone = false;
       publishHomeAssistantDiscovery(); // попытка публикации сразу после подключения
       #endif
 
@@ -1202,6 +1220,7 @@ inline void stopMqttService(){ // остановка MQTT
   mqttDiscoveryPending = false; // сброс discovery
   mqttDiscoveryStage = DISCOVERY_NONE; // сброс этапа
   mqttDiscoveryIndex = 0; // сброс индекса
+  mqttDiscoveryLegacyCleanupDone = false;
   #endif
 }
 
