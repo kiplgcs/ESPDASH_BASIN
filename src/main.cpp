@@ -295,22 +295,44 @@ loop_CL2(2100); // Обработка логики хлора
   Temperatura = DS1;      // Температура в бассейне
   
   // Формирование информационных строк
-  String dinStatus = "DIN входы 1-8: ";
+  String dinStatus = "🧩 Плата Modbus RTU RS485 Relay 16CH + DI16\n";
+
+  dinStatus += "\n🔌 РЕЛЕ 1-8  : ";
   for (int i = 0; i < 8; ++i) {
-    dinStatus += String(i + 1) + (ReadInputArray[i] ? "=1" : "=0");
+    dinStatus += String(i + 1) + (ReadRelayArray[i] ? "🟢" : "⚫");
     if (i < 7) {
       dinStatus += " ";
     }
   }
-  dinStatus += "\nDIN входы 9-16: ";
+  dinStatus += "\n🔌 РЕЛЕ 9-16 : ";
   for (int i = 8; i < 16; ++i) {
-    dinStatus += String(i + 1) + (ReadInputArray[i] ? "=1" : "=0");
+    dinStatus += String(i + 1) + (ReadRelayArray[i] ? "🟢" : "⚫");
     if (i < 15) {
       dinStatus += " ";
     }
   }
 
+  dinStatus += "\n\n📥 ВХОДЫ 1-8 : ";
+  for (int i = 0; i < 8; ++i) {
+    dinStatus += String(i + 1) + (ReadInputArray[i] ? "🔵" : "⚪");
+    if (i < 7) {
+      dinStatus += " ";
+    }
+  }
+
+  dinStatus += "\n📥 ВХОДЫ 9-16: ";
+  for (int i = 8; i < 16; ++i) {
+    dinStatus += String(i + 1) + (ReadInputArray[i] ? "🔵" : "⚪");
+    if (i < 15) {
+      dinStatus += " ";
+    }
+  }
+
+  dinStatus += "\n\n🟢/🔵 = активно   ⚫/⚪ = неактивно";
+
+
   InfoString = "Random value is " + String(RandomVal) + " at " + CurrentTime + "Pow_WS2815 = " + String(Pow_WS2815);
+  InfoStringRS485Model = "Waveshare Modbus RTU RS485 Relay 16CH + DI16";
   InfoStringDIN = dinStatus;
   InfoString1 = /*"Speed " + String(Speed, 1) + " / Temp " + String(Temperatura, 1)*/ + " button1 = " + String(button1)
               + " RangeSlider = " + String(RangeMin) + " / " + String(RangeMax);
