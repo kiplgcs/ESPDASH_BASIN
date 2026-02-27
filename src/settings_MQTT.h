@@ -669,6 +669,9 @@ struct MqttDiscoveryEntity {
   const char* payloadOn;
   const char* payloadOff;
   const char* payloadPress = nullptr;
+  const char* minValue = nullptr;
+  const char* maxValue = nullptr;
+  const char* stepValue = nullptr;
 };
 
 enum MqttDiscoveryGroup {
@@ -688,7 +691,8 @@ enum MqttDiscoveryGroup {
 };
 
 inline MqttDiscoveryGroup mqttDiscoveryGroupForEntityId(const char* id){
-  const String entityId = id ? String(id) : String();
+  String entityId = id ? String(id) : String();
+  entityId.trim();
 
 if(entityId == "OverlayPoolTemp" || entityId == "OverlayHeaterTemp" ||
      entityId == "OverlayLevelUpper" || entityId == "OverlayLevelLower" ||
@@ -719,6 +723,7 @@ if(entityId == "OverlayPoolTemp" || entityId == "OverlayHeaterTemp" ||
 
   if(entityId == "WS2815_Time1" || entityId == "Pow_WS2815" ||
      entityId == "SetRGB" || entityId == "LEDColor" || entityId == "LedBrightness" ||
+    entityId == "LED Brightness" || entityId.equalsIgnoreCase("ledbrightness") ||
      entityId == "LedColorMode" || entityId == "LedPattern" ||
      entityId == "LedAutoplay" || entityId == "LedAutoplayDuration" ||
      entityId == "LedColorOrder" || entityId == "RgbTimer_ON" ||
@@ -833,7 +838,10 @@ inline MqttDiscoveryPublishResult publishMqttDiscoveryEntity(const MqttDiscovery
   if(entity.valueTemplate) doc["value_template"] = entity.valueTemplate; // value_template
   if(entity.payloadOn) doc["payload_on"] = entity.payloadOn; // payload_on
   if(entity.payloadOff) doc["payload_off"] = entity.payloadOff; // payload_off
-    if(entity.payloadPress) doc["payload_press"] = entity.payloadPress; // payload_press
+  if(entity.payloadPress) doc["payload_press"] = entity.payloadPress; // payload_press
+  if(entity.minValue) doc["min"] = atof(entity.minValue); // min (number entities)
+  if(entity.maxValue) doc["max"] = atof(entity.maxValue); // max (number entities)
+  if(entity.stepValue) doc["step"] = atof(entity.stepValue); // step (number entities)
 
     publishDiscoveryDeviceBlockGrouped(doc, deviceId, deviceName, mqttDiscoveryGroupForEntityId(entity.id));
 
@@ -913,6 +921,7 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
       {"switch", "DaysSatToggle"},
       {"switch", "DaysSunToggle"},
       {"sensor", "LedBrightness"},
+      {"number", "LedBrightness"},
       {"switch", "SetRGB"},
       {"switch", "SetLamp"}
     };
@@ -1005,8 +1014,8 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
     {"number", "Sider_heat", "Heating Setpoint", "home/esp32/Sider_heat", "home/esp32/Sider_heat/set", nullptr, "°C", nullptr, nullptr, nullptr, nullptr},
     {"number", "PH_setting", "pH Upper Limit", "home/esp32/PH_setting", "home/esp32/PH_setting/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"number", "ORP_setting", "ORP Lower Limit", "home/esp32/ORP_setting", "home/esp32/ORP_setting/set", nullptr, "mV", nullptr, nullptr, nullptr, nullptr},
-    {"number", "LedBrightness", "LED Brightness", "home/esp32/LedBrightness", "home/esp32/LedBrightness/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
-    {"number", "LedAutoplayDuration", "LED Autoplay Duration", "home/esp32/LedAutoplayDuration", "home/esp32/LedAutoplayDuration/set", nullptr, "s", nullptr, nullptr, nullptr, nullptr},
+      {"number", "LedBrightness", "🔆 Яркость", "home/esp32/LedBrightness", "home/esp32/LedBrightness/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, "10", "255", "1"},
+    {"number", "LedAutoplayDuration", "⏳ Смена режима (сек)", "home/esp32/LedAutoplayDuration", "home/esp32/LedAutoplayDuration/set", nullptr, "s", nullptr, nullptr, nullptr, nullptr, nullptr, "5", "180", "5"},
     {"number", "PH1_CAL", "pH1 ADC", "home/esp32/PH1_CAL", "home/esp32/PH1_CAL/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"number", "PH2_CAL", "pH2 ADC", "home/esp32/PH2_CAL", "home/esp32/PH2_CAL/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"number", "Temper_Reference", "Reference Temperature", "home/esp32/Temper_Reference", "home/esp32/Temper_Reference/set", nullptr, "°C", nullptr, nullptr, nullptr, nullptr},
