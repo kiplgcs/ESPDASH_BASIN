@@ -145,6 +145,10 @@ extern float RoomTempOff; // граница выключения отоплен�
 extern bool Power_Warm_floor_heating; // обогрев пола
 extern String SetLamp; // режим лампы
 extern String SetRGB; // режим RGB
+extern bool Lamp; // состояние лампы
+extern bool Lamp_autosvet; // авто-режим лампы
+extern bool Power_Time1; // режим таймера лампы
+extern bool Pow_WS2815_autosvet; // авто-режим RGB
 extern String DaysSelect; // выбранные дни промывки
 class UIRegistry; // forward declaration
 extern UIRegistry ui; // доступ к UI-реестру таймеров
@@ -258,8 +262,69 @@ inline bool mqttPayloadIsOff(String payload){ // проверка выключе
   return payload == "0" || payload == "off" || payload == "false"; // OFF
 }
 
-inline bool mqttIsAllowedMode(const String &value){ // проверка режима
+inline bool mqttIsAllowedMode(String value){ // проверка режима
+  value.trim();
+  value.toLowerCase();
   return value == "off" || value == "on" || value == "auto" || value == "timer"; // допустимые режимы
+}
+
+inline String mqttNormalizedMode(String value){
+  value.trim();
+  value.toLowerCase();
+  return value;
+}
+
+inline void mqttApplyLampMode(const String &rawMode){
+  SetLamp = mqttNormalizedMode(rawMode);
+  if(SetLamp == "on"){
+    Lamp = true;
+    Lamp_autosvet = false;
+    Power_Time1 = false;
+  } else if(SetLamp == "auto"){
+    Lamp = false;
+    Lamp_autosvet = true;
+    Power_Time1 = false;
+  } else if(SetLamp == "timer"){
+    Lamp = false;
+    Lamp_autosvet = false;
+    Power_Time1 = true;
+  } else {
+    Lamp = false;
+    Lamp_autosvet = false;
+    Power_Time1 = false;
+  }
+
+  saveValue<String>("SetLamp", SetLamp);
+  saveButtonState("button_Lamp", Lamp ? 1 : 0);
+  saveValue<int>("Lamp_autosvet", Lamp_autosvet ? 1 : 0);
+  saveValue<int>("Power_Time1", Power_Time1 ? 1 : 0);
+}
+
+inline void mqttApplyRgbMode(const String &rawMode){
+  SetRGB = mqttNormalizedMode(rawMode);
+  if(SetRGB == "on"){
+    Pow_WS2815 = true;
+    Pow_WS2815_autosvet = false;
+    WS2815_Time1 = false;
+  } else if(SetRGB == "auto"){
+    Pow_WS2815 = false;
+    Pow_WS2815_autosvet = true;
+    WS2815_Time1 = false;
+  } else if(SetRGB == "timer"){
+    Pow_WS2815 = false;
+    Pow_WS2815_autosvet = false;
+    WS2815_Time1 = true;
+  } else {
+    Pow_WS2815 = false;
+    Pow_WS2815_autosvet = false;
+    WS2815_Time1 = false;
+  }
+
+  saveValue<String>("SetRGB", SetRGB);
+  saveButtonState("button_WS2815", Pow_WS2815 ? 1 : 0);
+  saveValue<int>("Pow_WS2815", Pow_WS2815 ? 1 : 0);
+  saveValue<int>("Pow_WS2815_autosvet", Pow_WS2815_autosvet ? 1 : 0);
+  saveValue<int>("WS2815_Time1", WS2815_Time1 ? 1 : 0);
 }
 
 inline void handleMqttCommandMessage(char* topic, byte* payload, unsigned int length){ // обработка MQTT команд
@@ -511,8 +576,7 @@ inline void handleMqttCommandMessage(char* topic, byte* payload, unsigned int le
 
   if(topicStr == "home/esp32/SetLamp/set"){
     if(mqttIsAllowedMode(message)){
-      SetLamp = message; // обновление режима
-      saveValue<String>("SetLamp", SetLamp); // сохранение
+      mqttApplyLampMode(message);
       publishMqttStateString("home/esp32/SetLamp", SetLamp); // публикация
     }
     return;
@@ -520,9 +584,10 @@ inline void handleMqttCommandMessage(char* topic, byte* payload, unsigned int le
 
   if(topicStr == "home/esp32/SetRGB/set"){
     if(mqttIsAllowedMode(message)){
-      SetRGB = message; // обновление режима
-      saveValue<String>("SetRGB", SetRGB); // сохранение
+      mqttApplyRgbMode(message);
       publishMqttStateString("home/esp32/SetRGB", SetRGB); // публикация
+      publishMqttStateBool("home/esp32/Pow_WS2815", Pow_WS2815);
+      publishMqttStateBool("home/esp32/WS2815_Time1", WS2815_Time1);
     }
     return;
   }
@@ -846,7 +911,10 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
       {"switch", "DaysThuToggle"},
       {"switch", "DaysFriToggle"},
       {"switch", "DaysSatToggle"},
-      {"switch", "DaysSunToggle"}
+      {"switch", "DaysSunToggle"},
+      {"sensor", "LedBrightness"},
+      {"switch", "SetRGB"},
+      {"switch", "SetLamp"}
     };
 
     bool cleanupOk = true;
