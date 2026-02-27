@@ -357,6 +357,6 @@ UI_BUTTON("Pow_Ul_light", Pow_Ul_light, "gray", "🚏 Включить/Откл�
 
     //Реле RS485
     UI_PAGE();
-    UI_TEXT("InfoStringDIN_RS485", InfoStringDIN, "x:40%;y:30%;fontSize:18;color:#00ffcc;white-space:pre-line;line-height:1.7");
+    UI_TEXT("InfoStringDIN_RS485", InfoStringDIN, "x:30%;y:30%;fontSize:18;color:#00ffcc;white-space:pre-line;line-height:1.7");
         
     }
