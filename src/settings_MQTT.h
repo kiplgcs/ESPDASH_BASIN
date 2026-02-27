@@ -55,7 +55,6 @@ inline String mqttResolvedHostName; // хост для которого выпо
 #if 1 // MQTT Discovery отключен (слишком много кода и не нужен)
 enum DiscoveryStage {
   DISCOVERY_NONE,
-  DISCOVERY_TEST_SENSOR,
   DISCOVERY_MAIN_ENTITIES,
   DISCOVERY_DONE
 };
@@ -327,6 +326,28 @@ inline void mqttApplyRgbMode(const String &rawMode){
   saveValue<int>("WS2815_Time1", WS2815_Time1 ? 1 : 0);
 }
 
+inline String mqttLedAutoplayState(){
+  return LedAutoplay ? "Автоматически" : "Вручную";
+}
+
+inline bool mqttParseLedAutoplay(const String &rawValue, bool &parsedValue){
+  String value = rawValue;
+  value.trim();
+  value.toLowerCase();
+
+  if(value == "1" || value == "true" || value == "on" || value == "auto" || value == "автоматически" || value == "автомат"){
+    parsedValue = true;
+    return true;
+  }
+
+  if(value == "0" || value == "false" || value == "off" || value == "manual" || value == "вручную" || value == "ручной"){
+    parsedValue = false;
+    return true;
+  }
+
+  return false;
+}
+
 inline void handleMqttCommandMessage(char* topic, byte* payload, unsigned int length){ // обработка MQTT команд
   String topicStr(topic); // топик
   String message; // payload строкой
@@ -440,12 +461,6 @@ inline void handleMqttCommandMessage(char* topic, byte* payload, unsigned int le
     return;
   }
 
-  if(topicStr == "home/esp32/RangeSlider/set"){
-    if(mqttApplyDualRangeInt(message, RangeMin, RangeMax, "RangeMin", "RangeMax")){
-      publishMqttStateString("home/esp32/RangeSlider", String(RangeMin) + "-" + String(RangeMax));
-    }
-    return;
-  }
 
   if(topicStr == "home/esp32/RoomTempRange/set"){
     if(mqttApplyDualRangeFloat(message, RoomTempOn, RoomTempOff, "RoomTempOn", "RoomTempOff")){
@@ -592,6 +607,16 @@ inline void handleMqttCommandMessage(char* topic, byte* payload, unsigned int le
     return;
   }
 
+    if(topicStr == "home/esp32/LedAutoplay/set"){
+    bool autoplayState = LedAutoplay;
+    if(mqttParseLedAutoplay(message, autoplayState)){
+      LedAutoplay = autoplayState;
+      saveValue<int>("LedAutoplay", LedAutoplay ? 1 : 0);
+      publishMqttStateString("home/esp32/LedAutoplay", mqttLedAutoplayState());
+    }
+    return;
+  }
+
   if(topicStr == "home/esp32/button/restart/set"){
     ESP.restart(); // перезапуск
     return;
@@ -603,6 +628,10 @@ inline void handleMqttCommandMessage(char* topic, byte* payload, unsigned int le
     const size_t suffixLen = 4; // "/set"
     if(topicStr.length() > prefixLen + suffixLen){
       String id = topicStr.substring(prefixLen, topicStr.length() - suffixLen);
+        if(id == "button1" || id == "button2" || id == "MotorSpeed" ||
+         id == "IntInput" || id == "FloatInput" || id == "RangeSlider"){
+        return;
+      }
       if(uiApplyValueForId(id, message)){
         publishMqttStateString((basePrefix + id).c_str(), uiValueForId(id));
       }
@@ -686,8 +715,7 @@ enum MqttDiscoveryGroup {
   DISCOVERY_GROUP_PH_NAOCL,
   DISCOVERY_GROUP_CHLORINE_ACO,
   DISCOVERY_GROUP_ROOM_TEMPERATURE,
-  DISCOVERY_GROUP_OUTDOOR_LIGHTING,
-  DISCOVERY_GROUP_SERVICE
+  DISCOVERY_GROUP_OUTDOOR_LIGHTING
 };
 
 inline MqttDiscoveryGroup mqttDiscoveryGroupForEntityId(const char* id){
@@ -698,11 +726,6 @@ if(entityId == "OverlayPoolTemp" || entityId == "OverlayHeaterTemp" ||
      entityId == "OverlayLevelUpper" || entityId == "OverlayLevelLower" ||
      entityId == "OverlayPh" || entityId == "OverlayChlorine" ||
      entityId == "OverlayFilterState") return DISCOVERY_GROUP_OVERVIEW;
-
-  if(entityId == "MotorSpeed" || entityId == "RangeSlider" ||
-     entityId == "IntInput" || entityId == "FloatInput" ||
-     entityId == "RandomVal" || entityId == "button1" ||
-     entityId == "button2") return DISCOVERY_GROUP_CONTROLS;
 
   if(entityId == "Power_Filtr" || entityId == "Filtr_Time1" ||
      entityId == "Filtr_Time2" || entityId == "Filtr_Time3" ||
@@ -755,8 +778,6 @@ if(entityId == "OverlayPoolTemp" || entityId == "OverlayHeaterTemp" ||
   if(entityId == "Pow_Ul_light" || entityId == "Ul_light_Time" ||
      entityId == "UlLightTimer_ON" || entityId == "UlLightTimer_OFF") return DISCOVERY_GROUP_OUTDOOR_LIGHTING;
 
-  if(entityId == "status" || entityId == "alive" || entityId == "restart" || entityId == "Comment" || entityId == "ThemeColor") return DISCOVERY_GROUP_SERVICE;
-
   return DISCOVERY_GROUP_OVERVIEW;
 }
 
@@ -773,7 +794,6 @@ inline const char* mqttDiscoveryGroupSuffix(MqttDiscoveryGroup group){
     case DISCOVERY_GROUP_CHLORINE_ACO: return "chlorine_aco";
     case DISCOVERY_GROUP_ROOM_TEMPERATURE: return "room_temperature";
     case DISCOVERY_GROUP_OUTDOOR_LIGHTING: return "outdoor_lighting";
-    case DISCOVERY_GROUP_SERVICE: return "service";
     case DISCOVERY_GROUP_OVERVIEW:
     default: return "overview";
   }
@@ -792,7 +812,6 @@ inline const char* mqttDiscoveryGroupName(MqttDiscoveryGroup group){
     case DISCOVERY_GROUP_CHLORINE_ACO: return "Контроль хлора CL (ACO)";
     case DISCOVERY_GROUP_ROOM_TEMPERATURE: return "Контроль температуры в помещении";
     case DISCOVERY_GROUP_OUTDOOR_LIGHTING: return "Уличное освещение";
-    case DISCOVERY_GROUP_SERVICE: return "Service";
     case DISCOVERY_GROUP_OVERVIEW:
     default: return "Общая информация по бассейну";
   }
@@ -923,7 +942,12 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
       {"sensor", "LedBrightness"},
       {"number", "LedBrightness"},
       {"switch", "SetRGB"},
-      {"switch", "SetLamp"}
+      {"switch", "SetLamp"},
+      {"sensor", "status"},
+      {"sensor", "alive"},
+      {"text", "Comment"},
+      {"text", "ThemeColor"},
+      {"button", "restart"}
     };
 
     bool cleanupOk = true;
@@ -941,7 +965,6 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
 
 
   static const MqttDiscoveryEntity baseEntities[] = {
-    {"sensor", "status", "ESP32 Uptime", "home/esp32/status", nullptr, "duration", "s", "measurement", "{{ value | replace('ESP32 uptime: ', '') | replace('s','') }}", nullptr, nullptr},
     {"sensor", "DS1", "Pool Water Temperature", "home/esp32/DS1", nullptr, "temperature", "°C", "measurement", nullptr, nullptr, nullptr},
     {"sensor", "RoomTemp", "Room Temperature", "home/esp32/RoomTemp", nullptr, "temperature", "°C", "measurement", nullptr, nullptr, nullptr},
     {"sensor", "PH", "Pool pH", "home/esp32/PH", nullptr, nullptr, "pH", "measurement", nullptr, nullptr, nullptr},
@@ -957,7 +980,6 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
     {"sensor", "InfoString2", "Lamp Info", "home/esp32/InfoString2", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"sensor", "InfoStringDIN", "DIN State", "home/esp32/InfoStringDIN", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"sensor", "Lumen_Ul", "Outdoor Luminance", "home/esp32/Lumen_Ul", nullptr, nullptr, "%", "measurement", nullptr, nullptr, nullptr},
-    {"sensor", "RandomVal", "Random Number", "home/esp32/RandomVal", nullptr, nullptr, nullptr, "measurement", nullptr, nullptr, nullptr},
     {"sensor", "analogValuePH", "PH ADC Value", "home/esp32/analogValuePH", nullptr, nullptr, nullptr, "measurement", nullptr, nullptr, nullptr},
     {"binary_sensor", "Power_H2O2", "NaOCl Pump State", "home/esp32/Power_H2O2", nullptr, "power", nullptr, nullptr, nullptr, "1", "0"},
     {"binary_sensor", "Power_ACO", "ACO Pump State", "home/esp32/Power_ACO", nullptr, "power", nullptr, nullptr, nullptr, "1", "0"},
@@ -1004,14 +1026,9 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
     {"switch", "PH_Control_ACO", "pH Control (ACO)", "home/esp32/PH_Control_ACO", "home/esp32/PH_Control_ACO/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"switch", "NaOCl_H2O2_Control", "Chlorine Control (NaOCl)", "home/esp32/NaOCl_H2O2_Control", "home/esp32/NaOCl_H2O2_Control/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"switch", "RoomTemper", "Room Temperature Control", "home/esp32/RoomTemper", "home/esp32/RoomTemper/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
-    {"switch", "button1", "UI Button 1", "home/esp32/button1", "home/esp32/button1/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
-    {"switch", "button2", "UI Button 2", "home/esp32/button2", "home/esp32/button2/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"switch", "Power_H2O2_Button", "NaOCl Manual Pump", "home/esp32/Power_H2O2_Button", "home/esp32/Power_H2O2_Button/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"switch", "Power_ACO_Button", "ACO Manual Pump", "home/esp32/Power_ACO_Button", "home/esp32/Power_ACO_Button/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
-    {"number", "MotorSpeed", "Motor Speed", "home/esp32/MotorSpeed", "home/esp32/MotorSpeed/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
-    {"number", "IntInput", "Integer Input", "home/esp32/IntInput", "home/esp32/IntInput/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
-    {"number", "FloatInput", "Float Input", "home/esp32/FloatInput", "home/esp32/FloatInput/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
-    {"number", "Sider_heat", "Heating Setpoint", "home/esp32/Sider_heat", "home/esp32/Sider_heat/set", nullptr, "°C", nullptr, nullptr, nullptr, nullptr},
+     {"number", "Sider_heat", "🎯 Уставка нагрева", "home/esp32/Sider_heat", "home/esp32/Sider_heat/set", nullptr, "°C", nullptr, nullptr, nullptr, nullptr, nullptr, "5", "30", "1"},
     {"number", "PH_setting", "pH Upper Limit", "home/esp32/PH_setting", "home/esp32/PH_setting/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"number", "ORP_setting", "ORP Lower Limit", "home/esp32/ORP_setting", "home/esp32/ORP_setting/set", nullptr, "mV", nullptr, nullptr, nullptr, nullptr},
       {"number", "LedBrightness", "🔆 Яркость", "home/esp32/LedBrightness", "home/esp32/LedBrightness/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, "10", "255", "1"},
@@ -1022,18 +1039,14 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
     {"number", "Temper_PH", "pH Temperature", "home/esp32/Temper_PH", "home/esp32/Temper_PH/set", nullptr, "°C", nullptr, nullptr, nullptr, nullptr},
     {"number", "CalRastvor256mV", "ORP Cal Solution", "home/esp32/CalRastvor256mV", "home/esp32/CalRastvor256mV/set", nullptr, "mV", nullptr, nullptr, nullptr, nullptr},
     {"number", "Calibration_ORP_mV", "ORP Calibration", "home/esp32/Calibration_ORP_mV", "home/esp32/Calibration_ORP_mV/set", nullptr, "mV", nullptr, nullptr, nullptr, nullptr},
-    {"text", "Comment", "Comment", "home/esp32/Comment", "home/esp32/Comment/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
-    {"text", "ThemeColor", "Theme Color", "home/esp32/ThemeColor", "home/esp32/ThemeColor/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"text", "LEDColor", "LED Color", "home/esp32/LEDColor", "home/esp32/LEDColor/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
-    {"text", "RangeSlider", "Range Min-Max", "home/esp32/RangeSlider", "home/esp32/RangeSlider/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"text", "RoomTempRange", "Room Temp Range", "home/esp32/RoomTempRange", "home/esp32/RoomTempRange/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"text", "Float_PH_Slider", "pH Range", "home/esp32/Float_PH_Slider", "home/esp32/Float_PH_Slider/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
-    {"button", "restart", "ESP32 Restart", nullptr, "home/esp32/button/restart/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr}
   };
 
   static const char* const selectOptions[] = {"off", "on", "auto", "timer"}; // варианты для select
   static const char* const ledColorModeOptions[] = {"auto", "manual"};
-  static const char* const ledAutoplayOptions[] = {"1", "0"};
+  static const char* const ledAutoplayOptions[] = {"Автоматически", "Вручную"};
   static const char* const ledPatternOptions[] = {
     "rainbow", "pulse", "chase", "comet", "color_wipe", "theater_chase", "scanner", "sparkle",
     "twinkle", "confetti", "waves", "breathe", "firefly", "ripple", "dots", "gradient",
@@ -1045,23 +1058,7 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
   const size_t totalCount = baseCount + 8; // количество select сущностей
 
   if(mqttDiscoveryStage == DISCOVERY_NONE){
-    mqttDiscoveryStage = DISCOVERY_TEST_SENSOR; // старт этапа
-  }
-
-if(mqttDiscoveryStage == DISCOVERY_TEST_SENSOR){
-    const MqttDiscoveryEntity testSensor = {"sensor", "alive", "ESP32 Alive", "home/esp32/alive", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
-    MqttDiscoveryPublishResult result = publishMqttDiscoveryEntity(testSensor, deviceId, deviceName, !mqttDiscoveryFullDevicePublished);
-    if(result.published){
-      mqttDiscoveryFullDevicePublished = true;
-      mqttDiscoveryLastMaxPayload = max(mqttDiscoveryLastMaxPayload, result.payloadLength);
-      mqttClient.publish("home/esp32/alive", "1", true); // якорный сенсор
-      mqttDiscoveryStage = DISCOVERY_MAIN_ENTITIES; // переход к основным сущностям
-      mqttDiscoveryIndex = 0; // сброс индекса
-      mqttDiscoveryRetryIndex = 0;
-      mqttDiscoveryRetryCount = 0;
-      mqttDiscoveryLegacyCleanupDone = false;
-    }
-    return;
+    mqttDiscoveryStage = DISCOVERY_MAIN_ENTITIES; // старт этапа
   }
 
 if(mqttDiscoveryStage == DISCOVERY_MAIN_ENTITIES){
@@ -1365,7 +1362,6 @@ bool connected = mqttClient.connect( // подключение с логином
       mqttClient.subscribe("home/esp32/Activation_Heat/set", 0); // команда нагрева
       mqttClient.subscribe("home/esp32/SetLamp/set", 0); // команда режима лампы
       mqttClient.subscribe("home/esp32/SetRGB/set", 0); // команда режима RGB
-      mqttClient.subscribe("home/esp32/button/restart/set", 0); // команда перезапуска
       mqttClient.subscribe("home/esp32/+/set", 0); // универсальная подписка на команды
     
     } else { // если не удалось подключиться
@@ -1418,10 +1414,6 @@ inline void handleMqttLoop(){ // основной цикл MQTT
   if(now - mqttLastPublish >= mqttPublishInterval){ // проверка интервала
     mqttLastPublish = now; // обновление времени
     if(mqttClient.connected()){ // если подключены
-      String payload = String("ESP32 uptime: ") + String(now / 1000) + "s"; // сообщение
-      
-      mqttClient.publish("home/esp32/status", payload.c_str(), true); // публикация
-    
       publishMqttStateString("home/esp32/test", "123");
       publishMqttStateFloat("home/esp32/DS1", DS1);
       publishMqttStateFloat("home/esp32/RoomTemp", DS1); // RoomTemp использует DS1 в UI
@@ -1437,9 +1429,7 @@ inline void handleMqttLoop(){ // основной цикл MQTT
       publishMqttStateString("home/esp32/OverlayFilterState", OverlayFilterState);
       publishMqttStateString("home/esp32/InfoString2", InfoString2);
       publishMqttStateString("home/esp32/InfoStringDIN", InfoStringDIN);
-      publishMqttStateString("home/esp32/ThemeColor", ThemeColor);
       publishMqttStateInt("home/esp32/Lumen_Ul", Lumen_Ul);
-      publishMqttStateInt("home/esp32/RandomVal", RandomVal);
       publishMqttStateInt("home/esp32/analogValuePH", analogValuePH_Comp);
 
       publishMqttStateBool("home/esp32/Power_H2O2", Power_H2O2);
@@ -1464,24 +1454,17 @@ inline void handleMqttLoop(){ // основной цикл MQTT
       publishMqttStateBool("home/esp32/NaOCl_H2O2_Control", NaOCl_H2O2_Control);
       publishMqttStateBool("home/esp32/RoomTemper", RoomTemper);
       publishMqttStateBool("home/esp32/Ul_light_Time", Ul_light_Time);
-      publishMqttStateInt("home/esp32/button1", button1);
-      publishMqttStateInt("home/esp32/button2", button2);
       publishMqttStateString("home/esp32/Power_H2O2_Button", uiValueForId("Power_H2O2_Button"));
       publishMqttStateString("home/esp32/Power_ACO_Button", uiValueForId("Power_ACO_Button"));
-      publishMqttStateInt("home/esp32/MotorSpeed", MotorSpeedSetting);
-      publishMqttStateInt("home/esp32/IntInput", IntInput);
-      publishMqttStateFloat("home/esp32/FloatInput", FloatInput);
-      publishMqttStateString("home/esp32/RangeSlider", String(RangeMin) + "-" + String(RangeMax));
       publishMqttStateString("home/esp32/RoomTempRange", String(RoomTempOn, 1) + "-" + String(RoomTempOff, 1));
       publishMqttStateString("home/esp32/Float_PH_Slider", String(PH1, 2) + "-" + String(PH2, 2));
       publishMqttStateString("home/esp32/Timer1", Timer1);
-      publishMqttStateString("home/esp32/Comment", Comment);
       publishMqttStateString("home/esp32/LEDColor", LEDColor);
       publishMqttStateString("home/esp32/LedColorMode", LedColorMode);
       publishMqttStateInt("home/esp32/LedBrightness", LedBrightness);
       publishMqttStateString("home/esp32/LedPattern", LedPattern);
       publishMqttStateInt("home/esp32/LedAutoplayDuration", LedAutoplayDuration);
-      publishMqttStateBool("home/esp32/LedAutoplay", LedAutoplay);
+      publishMqttStateString("home/esp32/LedAutoplay", mqttLedAutoplayState());
       publishMqttStateString("home/esp32/LedColorOrder", LedColorOrder);
       publishMqttStateInt("home/esp32/Sider_heat", Sider_heat);
       publishMqttStateFloat("home/esp32/PH_setting", PH_setting);
