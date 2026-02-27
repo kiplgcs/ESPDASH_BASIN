@@ -9,7 +9,7 @@ inline void interface(){ // Декларатиынве функции интер
     UI_HIDDEN("ThemeColor", ThemeColor);
 
     UI_MENU("📊 Общая информация по бассейну");
-    UI_MENU("🧰 Controls");
+    // UI_MENU("🧰 Controls");
     //UI_MENU("🧰 test");
     UI_MENU("🧹 Настройка фильтрации");
     UI_MENU("🧹 Настройка промывки фильтра");
@@ -38,49 +38,49 @@ inline void interface(){ // Декларатиынве функции интер
     UI_TEXT("OverlayFilterState", OverlayFilterState, "x:395;y:470;fontSize:12;color:#00ff00");
 
     
-    // Controls tab
-     UI_PAGE();
-    
-        UI_RANGE("MotorSpeed", MotorSpeedSetting, 0, 100, 1, "⚙️ Motor Speed");
-        UI_DUAL_RANGE_KEYS("RangeSlider", RangeMin, RangeMax, "RangeMin", "RangeMax", 10, 40, 1, "🎚️ Range Min-Max");
-        UI_NUMBER("IntInput", IntInput, "🔢 Enter Integer", false);
-        UI_NUMBER("FloatInput", FloatInput, "🔣 Enter Float", true);
-        
-        // UI_TEXT("Comment", Comment, "💬 Comment");
+                            // // Controls tab
+                            // UI_PAGE();
+                            
+                            //     UI_RANGE("MotorSpeed", MotorSpeedSetting, 0, 100, 1, "⚙️ Motor Speed");
+                            //     UI_DUAL_RANGE_KEYS("RangeSlider", RangeMin, RangeMax, "RangeMin", "RangeMax", 10, 40, 1, "🎚️ Range Min-Max");
+                            //     UI_NUMBER("IntInput", IntInput, "🔢 Enter Integer", false);
+                            //     UI_NUMBER("FloatInput", FloatInput, "🔣 Enter Float", true);
+                                
+                            //     // UI_TEXT("Comment", Comment, "💬 Comment");
 
-        // UI_DISPLAY_INT("RandomVal", RandomVal, "🔢 Random Number");
-    
-        // UI_BUTTON("button1", button1, "gray", "🔘 My Button");
-        // UI_BUTTON("button2", button2, "gray", "🔘 My Button1");
+                            //     // UI_DISPLAY_INT("RandomVal", RandomVal, "🔢 Random Number");
+                            
+                            //     // UI_BUTTON("button1", button1, "gray", "🔘 My Button");
+                            //     // UI_BUTTON("button2", button2, "gray", "🔘 My Button1");
 
-        // static String PopupComment;
+                            //     // static String PopupComment;
 
-    // UI_POPUP_BEGIN("DataEntry", "📝 Ввод данных", "🪟 Открыть окно");
-        // UI_TEXT("PopupComment", PopupComment, "💬 Комментарий");
-        
-         UI_TEXT("InfoString", InfoString, "x:30%;y:40%;fontSize:12;color:#00ff00");
-         UI_TEXT("InfoString1", InfoString1, "x:70%;y:70%;fontSize:12;color:#00ff00");
+                            // // UI_POPUP_BEGIN("DataEntry", "📝 Ввод данных", "🪟 Открыть окно");
+                            //     // UI_TEXT("PopupComment", PopupComment, "💬 Комментарий");
+                                
+                            //     UI_TEXT("InfoString", InfoString, "x:30%;y:40%;fontSize:12;color:#00ff00");
+                            //     UI_TEXT("InfoString1", InfoString1, "x:70%;y:70%;fontSize:12;color:#00ff00");
 
-    // UI_POPUP_END();
+                            // // UI_POPUP_END();
 
-    // // test
-    // UI_PAGE();
-    // UI_SELECT_DAYS("Daystest", DaysSelect, "📅 Дни промывки");
-    // UI_TIMER("Timertest", "⏱️ Таймер test", TimertestON, TimertestOFF);
+                            // // // test
+                            // // UI_PAGE();
+                            // // UI_SELECT_DAYS("Daystest", DaysSelect, "📅 Дни промывки");
+                            // // UI_TIMER("Timertest", "⏱️ Таймер test", TimertestON, TimertestOFF);
 
-    
-    // UI_TIME("TimertestTime", Timer1, "⏰ Start Time");
+                            
+                            // // UI_TIME("TimertestTime", Timer1, "⏰ Start Time");
 
 
-    // UI_BUTTON("button_test", button1, "gray", "🔘 My Button");
-    // UI_TEXT("Popuptest", PopupComment, "💬 Комментарий");
-    
-    // UI_DISPLAY_INT("Randomtest", RandomVal, "🔢 Random Number");
-    // UI_NUMBER("Inttest", IntInput, "🔢 Enter Integer", false);
-    // UI_NUMBER("Floattest", FloatInput, "🔣 Enter Float", true);
-    // UI_RANGE("Motortest", MotorSpeedSetting, 0, 100, 1, "⚙️ Motor Speed");
-    // UI_DUAL_RANGE_KEYS("Rangetest", RangeMin, RangeMax, "RangeMin", "RangeMax", 10, 40, 1, "🎚️ Range Min-Max");
-    // UI_TEXT("Overlaytest", OverlayFilterState, "x:300;y:400;fontSize:12;color:#00ff00");
+                            // // UI_BUTTON("button_test", button1, "gray", "🔘 My Button");
+                            // // UI_TEXT("Popuptest", PopupComment, "💬 Комментарий");
+                            
+                            // // UI_DISPLAY_INT("Randomtest", RandomVal, "🔢 Random Number");
+                            // // UI_NUMBER("Inttest", IntInput, "🔢 Enter Integer", false);
+                            // // UI_NUMBER("Floattest", FloatInput, "🔣 Enter Float", true);
+                            // // UI_RANGE("Motortest", MotorSpeedSetting, 0, 100, 1, "⚙️ Motor Speed");
+                            // // UI_DUAL_RANGE_KEYS("Rangetest", RangeMin, RangeMax, "RangeMin", "RangeMax", 10, 40, 1, "🎚️ Range Min-Max");
+                            // // UI_TEXT("Overlaytest", OverlayFilterState, "x:300;y:400;fontSize:12;color:#00ff00");
     
 
     // Настройка фильтрации
