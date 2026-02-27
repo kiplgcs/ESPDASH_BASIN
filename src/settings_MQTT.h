@@ -157,6 +157,7 @@ bool mqttApplyTimerField(const String &fieldId, const String &value); // при�
 uint16_t mqttTimerOnMinutes(const String &id); // время включения таймера
 uint16_t mqttTimerOffMinutes(const String &id); // время выключения таймера
 void mqttApplyDaysSelect(const String &value); // применить выбор дней промывки
+bool mqttDaysSelectContains(const char* dayToken); // проверить включен ли день в DaysSelect
 
 // MQTT-помощники для таймеров/дней (перенесены сюда, чтобы MQTT-логика была в одном файле)
 inline bool mqttApplyTimerField(const String &fieldId, const String &value){
@@ -196,6 +197,13 @@ inline void mqttApplyDaysSelect(const String &value){
   DaysSelect = next;
   syncCleanDaysFromSelection();
   saveValue<String>("DaysSelect", DaysSelect);
+}
+
+inline bool mqttDaysSelectContains(const char* dayToken){
+  if(dayToken == nullptr || dayToken[0] == '\0') return false;
+  const String marked = "," + DaysSelect + ",";
+  const String token = String(dayToken) + ",";
+  return marked.indexOf(token) >= 0;
 }
 
 inline bool mqttApplyDualRangeInt(const String &payload, int &minRef, int &maxRef,
@@ -308,6 +316,62 @@ inline void handleMqttCommandMessage(char* topic, byte* payload, unsigned int le
   if(topicStr == "home/esp32/DaysSelect/set"){
     mqttApplyDaysSelect(message); // обновление строки дней
     publishMqttStateString("home/esp32/DaysSelect", DaysSelect); // публикация
+     publishMqttStateBool("home/esp32/DaysMonToggle", mqttDaysSelectContains("Mon"));
+    publishMqttStateBool("home/esp32/DaysTueToggle", mqttDaysSelectContains("Tue"));
+    publishMqttStateBool("home/esp32/DaysWedToggle", mqttDaysSelectContains("Wed"));
+    publishMqttStateBool("home/esp32/DaysThuToggle", mqttDaysSelectContains("Thu"));
+    publishMqttStateBool("home/esp32/DaysFriToggle", mqttDaysSelectContains("Fri"));
+    publishMqttStateBool("home/esp32/DaysSatToggle", mqttDaysSelectContains("Sat"));
+    publishMqttStateBool("home/esp32/DaysSunToggle", mqttDaysSelectContains("Sun"));
+    return;
+  }
+
+  if(topicStr == "home/esp32/DaysMonToggle/set"){
+    mqttApplyDaysSelect(mqttPayloadIsOn(message) ? "add:Mon" : "remove:Mon");
+    publishMqttStateBool("home/esp32/DaysMonToggle", mqttDaysSelectContains("Mon"));
+    publishMqttStateString("home/esp32/DaysSelect", DaysSelect);
+    return;
+  }
+
+  if(topicStr == "home/esp32/DaysTueToggle/set"){
+    mqttApplyDaysSelect(mqttPayloadIsOn(message) ? "add:Tue" : "remove:Tue");
+    publishMqttStateBool("home/esp32/DaysTueToggle", mqttDaysSelectContains("Tue"));
+    publishMqttStateString("home/esp32/DaysSelect", DaysSelect);
+    return;
+  }
+
+  if(topicStr == "home/esp32/DaysWedToggle/set"){
+    mqttApplyDaysSelect(mqttPayloadIsOn(message) ? "add:Wed" : "remove:Wed");
+    publishMqttStateBool("home/esp32/DaysWedToggle", mqttDaysSelectContains("Wed"));
+    publishMqttStateString("home/esp32/DaysSelect", DaysSelect);
+    return;
+  }
+
+  if(topicStr == "home/esp32/DaysThuToggle/set"){
+    mqttApplyDaysSelect(mqttPayloadIsOn(message) ? "add:Thu" : "remove:Thu");
+    publishMqttStateBool("home/esp32/DaysThuToggle", mqttDaysSelectContains("Thu"));
+    publishMqttStateString("home/esp32/DaysSelect", DaysSelect);
+    return;
+  }
+
+  if(topicStr == "home/esp32/DaysFriToggle/set"){
+    mqttApplyDaysSelect(mqttPayloadIsOn(message) ? "add:Fri" : "remove:Fri");
+    publishMqttStateBool("home/esp32/DaysFriToggle", mqttDaysSelectContains("Fri"));
+    publishMqttStateString("home/esp32/DaysSelect", DaysSelect);
+    return;
+  }
+
+  if(topicStr == "home/esp32/DaysSatToggle/set"){
+    mqttApplyDaysSelect(mqttPayloadIsOn(message) ? "add:Sat" : "remove:Sat");
+    publishMqttStateBool("home/esp32/DaysSatToggle", mqttDaysSelectContains("Sat"));
+    publishMqttStateString("home/esp32/DaysSelect", DaysSelect);
+    return;
+  }
+
+  if(topicStr == "home/esp32/DaysSunToggle/set"){
+    mqttApplyDaysSelect(mqttPayloadIsOn(message) ? "add:Sun" : "remove:Sun");
+    publishMqttStateBool("home/esp32/DaysSunToggle", mqttDaysSelectContains("Sun"));
+    publishMqttStateString("home/esp32/DaysSelect", DaysSelect);
     return;
   }
 
@@ -578,7 +642,11 @@ if(entityId == "OverlayPoolTemp" || entityId == "OverlayHeaterTemp" ||
      entityId == "FiltrTimer3_ON" || entityId == "FiltrTimer3_OFF") return DISCOVERY_GROUP_FILTRATION;
 
   if(entityId == "Power_Clean" || entityId == "Clean_Time1" ||
-     entityId == "CleanTimer1_ON" || entityId == "CleanTimer1_OFF") return DISCOVERY_GROUP_BACKWASH;
+     entityId == "CleanTimer1_ON" || entityId == "CleanTimer1_OFF" ||
+     entityId == "DaysMonToggle" || entityId == "DaysTueToggle" ||
+     entityId == "DaysWedToggle" || entityId == "DaysThuToggle" ||
+     entityId == "DaysFriToggle" || entityId == "DaysSatToggle" ||
+     entityId == "DaysSunToggle") return DISCOVERY_GROUP_BACKWASH;
 
   if(entityId == "InfoString2" || entityId == "SetLamp" ||
      entityId == "Lumen_Ul" || entityId == "LampTimer_ON" ||
@@ -765,6 +833,13 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
     struct LegacyEntityConfig { const char* component; const char* id; };
     static const LegacyEntityConfig legacyEntities[] = {
       {"text", "DaysSelect"},
+      {"button", "DaysMonToggle"},
+      {"button", "DaysTueToggle"},
+      {"button", "DaysWedToggle"},
+      {"button", "DaysThuToggle"},
+      {"button", "DaysFriToggle"},
+      {"button", "DaysSatToggle"},
+      {"button", "DaysSunToggle"},
       {"switch", "DaysMonToggle"},
       {"switch", "DaysTueToggle"},
       {"switch", "DaysWedToggle"},
@@ -826,6 +901,13 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
     {"text", "FiltrTimer3_OFF", "10 🔴 Время откл. по таймеру №3", "home/esp32/FiltrTimer3_OFF", "home/esp32/FiltrTimer3_OFF/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"switch", "Power_Clean", "🧼 Промывка (ручной)", "home/esp32/Power_Clean", "home/esp32/Power_Clean/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"switch", "Clean_Time1", "🗓️ Промывка по времени", "home/esp32/Clean_Time1", "home/esp32/Clean_Time1/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"switch", "DaysMonToggle", "01 ПН", "home/esp32/DaysMonToggle", "home/esp32/DaysMonToggle/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"switch", "DaysTueToggle", "02 ВТ", "home/esp32/DaysTueToggle", "home/esp32/DaysTueToggle/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"switch", "DaysWedToggle", "03 СР", "home/esp32/DaysWedToggle", "home/esp32/DaysWedToggle/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"switch", "DaysThuToggle", "04 ЧТ", "home/esp32/DaysThuToggle", "home/esp32/DaysThuToggle/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"switch", "DaysFriToggle", "05 ПТ", "home/esp32/DaysFriToggle", "home/esp32/DaysFriToggle/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"switch", "DaysSatToggle", "06 СБ", "home/esp32/DaysSatToggle", "home/esp32/DaysSatToggle/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"switch", "DaysSunToggle", "07 ВС", "home/esp32/DaysSunToggle", "home/esp32/DaysSunToggle/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"text", "Timer1", "⏰ Старт промывки", "home/esp32/Timer1", "home/esp32/Timer1/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"text", "CleanTimer1_ON", "🟢 Промывка ВКЛ", "home/esp32/CleanTimer1_ON", "home/esp32/CleanTimer1_ON/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"text", "CleanTimer1_OFF", "🔴 Промывка ВЫКЛ", "home/esp32/CleanTimer1_OFF", "home/esp32/CleanTimer1_OFF/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
@@ -1187,6 +1269,13 @@ bool connected = mqttClient.connect( // подключение с логином
       mqttClient.subscribe("home/esp32/Power_Clean/set", 0); // промывка фильтра
       mqttClient.subscribe("home/esp32/Clean_Time1/set", 0); // таймер промывки
       mqttClient.subscribe("home/esp32/DaysSelect/set", 0); // дни промывки
+      mqttClient.subscribe("home/esp32/DaysMonToggle/set", 0); // понедельник промывки
+      mqttClient.subscribe("home/esp32/DaysTueToggle/set", 0); // вторник промывки
+      mqttClient.subscribe("home/esp32/DaysWedToggle/set", 0); // среда промывки
+      mqttClient.subscribe("home/esp32/DaysThuToggle/set", 0); // четверг промывки
+      mqttClient.subscribe("home/esp32/DaysFriToggle/set", 0); // пятница промывки
+      mqttClient.subscribe("home/esp32/DaysSatToggle/set", 0); // суббота промывки
+      mqttClient.subscribe("home/esp32/DaysSunToggle/set", 0); // воскресенье промывки
       mqttClient.subscribe("home/esp32/FiltrTimer1_ON/set", 0); // время фильтрации №1 ON
       mqttClient.subscribe("home/esp32/FiltrTimer1_OFF/set", 0); // время фильтрации №1 OFF
       mqttClient.subscribe("home/esp32/FiltrTimer2_ON/set", 0); // время фильтрации №2 ON
@@ -1329,6 +1418,13 @@ inline void handleMqttLoop(){ // основной цикл MQTT
       publishMqttStateInt("home/esp32/CalRastvor256mV", CalRastvor256mV);
       publishMqttStateInt("home/esp32/Calibration_ORP_mV", Calibration_ORP_mV);
       publishMqttStateString("home/esp32/DaysSelect", DaysSelect);
+      publishMqttStateBool("home/esp32/DaysMonToggle", mqttDaysSelectContains("Mon"));
+      publishMqttStateBool("home/esp32/DaysTueToggle", mqttDaysSelectContains("Tue"));
+      publishMqttStateBool("home/esp32/DaysWedToggle", mqttDaysSelectContains("Wed"));
+      publishMqttStateBool("home/esp32/DaysThuToggle", mqttDaysSelectContains("Thu"));
+      publishMqttStateBool("home/esp32/DaysFriToggle", mqttDaysSelectContains("Fri"));
+      publishMqttStateBool("home/esp32/DaysSatToggle", mqttDaysSelectContains("Sat"));
+      publishMqttStateBool("home/esp32/DaysSunToggle", mqttDaysSelectContains("Sun"));
       publishMqttStateString("home/esp32/FiltrTimer1_ON", formatMinutesToTime(mqttTimerOnMinutes("FiltrTimer1")));
       publishMqttStateString("home/esp32/FiltrTimer1_OFF", formatMinutesToTime(mqttTimerOffMinutes("FiltrTimer1")));
       publishMqttStateString("home/esp32/FiltrTimer2_ON", formatMinutesToTime(mqttTimerOnMinutes("FiltrTimer2")));
