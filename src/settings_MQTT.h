@@ -1016,32 +1016,32 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
     {"text", "RgbTimer_ON", "02 🟢 Время вкл. RGB по таймеру", "home/esp32/RgbTimer_ON", "home/esp32/RgbTimer_ON/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"text", "RgbTimer_OFF", "03 🔴 Время откл. RGB по таймеру", "home/esp32/RgbTimer_OFF", "home/esp32/RgbTimer_OFF/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"switch", "Pow_WS2815", "🌈 RGB лента", "home/esp32/Pow_WS2815", "home/esp32/Pow_WS2815/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
-    {"switch", "Activation_Heat", "Heating Control", "home/esp32/Activation_Heat", "home/esp32/Activation_Heat/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
-     {"switch", "Activation_Water_Level", "Water Level Control", "home/esp32/Activation_Water_Level", "home/esp32/Activation_Water_Level/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
-    {"switch", "Power_Topping", "Water Top Up Valve", "home/esp32/Power_Topping", "home/esp32/Power_Topping/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"switch", "Activation_Heat", "🔥 Контроль нагрева", "home/esp32/Activation_Heat", "home/esp32/Activation_Heat/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"switch", "Activation_Water_Level", "✅ Контроль уровня воды", "home/esp32/Activation_Water_Level", "home/esp32/Activation_Water_Level/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"switch", "Power_Topping", "🚰 Включить/Отключить соленоид долива воды", "home/esp32/Power_Topping", "home/esp32/Power_Topping/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"switch", "Pow_Ul_light", "🚏 Свет улицы (ручной)", "home/esp32/Pow_Ul_light", "home/esp32/Pow_Ul_light/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"switch", "Ul_light_Time", "01 ⏱️ Активация таймера улицы", "home/esp32/Ul_light_Time", "home/esp32/Ul_light_Time/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"text", "UlLightTimer_ON", "02 🟢 Время вкл. улицы по таймеру", "home/esp32/UlLightTimer_ON", "home/esp32/UlLightTimer_ON/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"text", "UlLightTimer_OFF", "03 🔴 Время откл. улицы по таймеру", "home/esp32/UlLightTimer_OFF", "home/esp32/UlLightTimer_OFF/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
-    {"switch", "PH_Control_ACO", "pH Control (ACO)", "home/esp32/PH_Control_ACO", "home/esp32/PH_Control_ACO/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
-    {"switch", "NaOCl_H2O2_Control", "Chlorine Control (NaOCl)", "home/esp32/NaOCl_H2O2_Control", "home/esp32/NaOCl_H2O2_Control/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
-    {"switch", "RoomTemper", "Room Temperature Control", "home/esp32/RoomTemper", "home/esp32/RoomTemper/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
-    {"switch", "Power_H2O2_Button", "NaOCl Manual Pump", "home/esp32/Power_H2O2_Button", "home/esp32/Power_H2O2_Button/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
-    {"switch", "Power_ACO_Button", "ACO Manual Pump", "home/esp32/Power_ACO_Button", "home/esp32/Power_ACO_Button/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+     {"switch", "PH_Control_ACO", "🧪 Контроль pH (ACO)", "home/esp32/PH_Control_ACO", "home/esp32/PH_Control_ACO/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"switch", "NaOCl_H2O2_Control", "🧪 Контроль хлора (NaOCl)", "home/esp32/NaOCl_H2O2_Control", "home/esp32/NaOCl_H2O2_Control/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"switch", "RoomTemper", "Контроль температуры в помещении", "home/esp32/RoomTemper", "home/esp32/RoomTemper/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+     {"switch", "Power_H2O2_Button", "🧪 Проверка работы перельстатического насоса подачи кислоты (вручную)", "home/esp32/Power_H2O2_Button", "home/esp32/Power_H2O2_Button/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"switch", "Power_ACO_Button", "🧴 Проверка работы перельстатического насоса подачи хлора (вручную)", "home/esp32/Power_ACO_Button", "home/esp32/Power_ACO_Button/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
      {"number", "Sider_heat", "🎯 Уставка нагрева", "home/esp32/Sider_heat", "home/esp32/Sider_heat/set", nullptr, "°C", nullptr, nullptr, nullptr, nullptr, nullptr, "5", "30", "1"},
     {"number", "PH_setting", "pH Upper Limit", "home/esp32/PH_setting", "home/esp32/PH_setting/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"number", "ORP_setting", "ORP Lower Limit", "home/esp32/ORP_setting", "home/esp32/ORP_setting/set", nullptr, "mV", nullptr, nullptr, nullptr, nullptr},
       {"number", "LedBrightness", "🔆 Яркость", "home/esp32/LedBrightness", "home/esp32/LedBrightness/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, "10", "255", "1"},
     {"number", "LedAutoplayDuration", "⏳ Смена режима (сек)", "home/esp32/LedAutoplayDuration", "home/esp32/LedAutoplayDuration/set", nullptr, "s", nullptr, nullptr, nullptr, nullptr, nullptr, "5", "180", "5"},
-    {"number", "PH1_CAL", "pH1 ADC", "home/esp32/PH1_CAL", "home/esp32/PH1_CAL/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
-    {"number", "PH2_CAL", "pH2 ADC", "home/esp32/PH2_CAL", "home/esp32/PH2_CAL/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
-    {"number", "Temper_Reference", "Reference Temperature", "home/esp32/Temper_Reference", "home/esp32/Temper_Reference/set", nullptr, "°C", nullptr, nullptr, nullptr, nullptr},
-    {"number", "Temper_PH", "pH Temperature", "home/esp32/Temper_PH", "home/esp32/Temper_PH/set", nullptr, "°C", nullptr, nullptr, nullptr, nullptr},
-    {"number", "CalRastvor256mV", "ORP Cal Solution", "home/esp32/CalRastvor256mV", "home/esp32/CalRastvor256mV/set", nullptr, "mV", nullptr, nullptr, nullptr, nullptr},
-    {"number", "Calibration_ORP_mV", "ORP Calibration", "home/esp32/Calibration_ORP_mV", "home/esp32/Calibration_ORP_mV/set", nullptr, "mV", nullptr, nullptr, nullptr, nullptr},
+      {"number", "PH1_CAL", "📉 АЦП_mV для PH1 (Примерно 3500)", "home/esp32/PH1_CAL", "home/esp32/PH1_CAL/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"number", "PH2_CAL", "📉 АЦП_mV для PH2 (Примерно 2900)", "home/esp32/PH2_CAL", "home/esp32/PH2_CAL/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"number", "Temper_Reference", "🌡 Температура референсная", "home/esp32/Temper_Reference", "home/esp32/Temper_Reference/set", nullptr, "°C", nullptr, nullptr, nullptr, nullptr},
+    {"number", "Temper_PH", "🌡 Измеренная тепература для компенасации измерения PH", "home/esp32/Temper_PH", "home/esp32/Temper_PH/set", nullptr, "°C", nullptr, nullptr, nullptr, nullptr},
+    {"number", "CalRastvor256mV", "🧪 ОВП калибровочного раствора - мВ", "home/esp32/CalRastvor256mV", "home/esp32/CalRastvor256mV/set", nullptr, "mV", nullptr, nullptr, nullptr, nullptr},
+    {"number", "Calibration_ORP_mV", "📏 Калибровочный коэффициент - мВ", "home/esp32/Calibration_ORP_mV", "home/esp32/Calibration_ORP_mV/set", nullptr, "mV", nullptr, nullptr, nullptr, nullptr},
     {"text", "LEDColor", "LED Color", "home/esp32/LEDColor", "home/esp32/LEDColor/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
-    {"text", "RoomTempRange", "Room Temp Range", "home/esp32/RoomTempRange", "home/esp32/RoomTempRange/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
-    {"text", "Float_PH_Slider", "pH Range", "home/esp32/Float_PH_Slider", "home/esp32/Float_PH_Slider/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+      {"text", "RoomTempRange", "🎚️ Включение/выключение обогрева, °C", "home/esp32/RoomTempRange", "home/esp32/RoomTempRange/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"text", "Float_PH_Slider", "🎚️ Range PH Min-Max", "home/esp32/Float_PH_Slider", "home/esp32/Float_PH_Slider/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
   };
 
   static const char* const selectOptions[] = {"off", "on", "auto", "timer"}; // варианты для select
@@ -1069,21 +1069,21 @@ if(mqttDiscoveryStage == DISCOVERY_MAIN_ENTITIES){
       if(mqttDiscoveryIndex < baseCount){
         result = publishMqttDiscoveryEntity(baseEntities[mqttDiscoveryIndex], deviceId, deviceName, true);
       } else if(mqttDiscoveryIndex == baseCount){
-         result = publishMqttDiscoverySelect("SetLamp", "01 ⏱️ Активация таймера лампы", "home/esp32/SetLamp", "home/esp32/SetLamp/set", selectOptions, 4, deviceId, deviceName, true, true);
+          result = publishMqttDiscoverySelect("SetLamp", "💡 Режим света", "home/esp32/SetLamp", "home/esp32/SetLamp/set", selectOptions, 4, deviceId, deviceName, true, true);
       } else if(mqttDiscoveryIndex == baseCount + 1){
-         result = publishMqttDiscoverySelect("SetRGB", "00 🎛️ Режим RGB", "home/esp32/SetRGB", "home/esp32/SetRGB/set", selectOptions, 4, deviceId, deviceName, true, true);
+          result = publishMqttDiscoverySelect("SetRGB", "🎛️ Режим управления RGB подсветкой", "home/esp32/SetRGB", "home/esp32/SetRGB/set", selectOptions, 4, deviceId, deviceName, true, true);
         } else if(mqttDiscoveryIndex == baseCount + 2){
-        result = publishMqttDiscoverySelect("LedColorMode", "🎨 Режим цвета RGB", "home/esp32/LedColorMode", "home/esp32/LedColorMode/set", ledColorModeOptions, 2, deviceId, deviceName, true, true);
+         result = publishMqttDiscoverySelect("LedColorMode", "🎨 Режим цвета", "home/esp32/LedColorMode", "home/esp32/LedColorMode/set", ledColorModeOptions, 2, deviceId, deviceName, true, true);
       } else if(mqttDiscoveryIndex == baseCount + 3){
-         result = publishMqttDiscoverySelect("LedPattern", "✨ Эффект RGB", "home/esp32/LedPattern", "home/esp32/LedPattern/set", ledPatternOptions, 24, deviceId, deviceName, true, true);
+          result = publishMqttDiscoverySelect("LedPattern", "✨ Режим подсветки", "home/esp32/LedPattern", "home/esp32/LedPattern/set", ledPatternOptions, 24, deviceId, deviceName, true, true);
       } else if(mqttDiscoveryIndex == baseCount + 4){
-        result = publishMqttDiscoverySelect("LedAutoplay", "🔁 Автосмена RGB", "home/esp32/LedAutoplay", "home/esp32/LedAutoplay/set", ledAutoplayOptions, 2, deviceId, deviceName, true, true);
+         result = publishMqttDiscoverySelect("LedAutoplay", "🔁 Автосмена", "home/esp32/LedAutoplay", "home/esp32/LedAutoplay/set", ledAutoplayOptions, 2, deviceId, deviceName, true, true);
       } else if(mqttDiscoveryIndex == baseCount + 5){
-        result = publishMqttDiscoverySelect("LedColorOrder", "🎚️ Порядок цветов", "home/esp32/LedColorOrder", "home/esp32/LedColorOrder/set", ledColorOrderOptions, 6, deviceId, deviceName, true, true);
+          result = publishMqttDiscoverySelect("LedColorOrder", "🎚️ Порядок цветов ленты", "home/esp32/LedColorOrder", "home/esp32/LedColorOrder/set", ledColorOrderOptions, 6, deviceId, deviceName, true, true);
       } else if(mqttDiscoveryIndex == baseCount + 6){
-         result = publishMqttDiscoverySelect("ACO_Work", "🧴 Период дозирования ACO", "home/esp32/ACO_Work", "home/esp32/ACO_Work/set", dosingOptions, 13, deviceId, deviceName, true, true);
+          result = publishMqttDiscoverySelect("ACO_Work", "⏳ Период дозирования ACO", "home/esp32/ACO_Work", "home/esp32/ACO_Work/set", dosingOptions, 13, deviceId, deviceName, true, true);
       } else if(mqttDiscoveryIndex == baseCount + 7){
-        result = publishMqttDiscoverySelect("H2O2_Work", "🧪 Период дозирования NaOCl", "home/esp32/H2O2_Work", "home/esp32/H2O2_Work/set", dosingOptions, 13, deviceId, deviceName, true, true);
+         result = publishMqttDiscoverySelect("H2O2_Work", "⏳ Период дозирования NaOCl", "home/esp32/H2O2_Work", "home/esp32/H2O2_Work/set", dosingOptions, 13, deviceId, deviceName, true, true);
       }
 
  if(!result.published){
