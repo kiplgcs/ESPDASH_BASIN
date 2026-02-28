@@ -651,8 +651,8 @@ if (RoomTemper && !roomTempInRange && DS1 < RoomTempOn) {             // есл�
 
 
 if (AktualReadInput) {
-    WaterLevelSensorUpper = ReadInputArray[0]; // Датчик верхнего уровня (вход №1)
-    WaterLevelSensorLower = ReadInputArray[1]; // Датчик нижнего уровня (вход №2)
+    WaterLevelSensorLower = ReadInputArray[0]; // Датчик нижнего уровня (вход №1)
+    WaterLevelSensorUpper = ReadInputArray[1]; // Датчик верхнего уровня (вход №2)
   }
 
   if (AktualReadRelay) {
@@ -662,7 +662,7 @@ if (AktualReadInput) {
   }
 
   if (Activation_Water_Level) {
-    if (!WaterLevelSensorLower) {
+    if (WaterLevelSensorLower) {
       Power_Topping = true;
     }
     if (WaterLevelSensorUpper) {

@@ -768,13 +768,14 @@ if(entityId == "OverlayPoolTemp" || entityId == "OverlayHeaterTemp" ||
      entityId == "PH_setting" || entityId == "analogValuePH" ||
      entityId == "Float_PH_Slider" || entityId == "PH2_CAL" ||
      entityId == "Temper_Reference" || entityId == "Temper_PH" ||
-     entityId == "Power_H2O2_Button") return DISCOVERY_GROUP_PH_NAOCL;
+     entityId == "Power_H2O2_Button" || entityId == "Power_ACO" ||
+     entityId == "ACO_Work") return DISCOVERY_GROUP_PH_NAOCL;
 
   if(entityId == "ppmCl" || entityId == "corrected_ORP_Eh_mV" ||
-     entityId == "Power_H2O2" || entityId == "Power_ACO" ||
+     entityId == "Power_H2O2" ||
      entityId == "NaOCl_H2O2_Control" || entityId == "ORP_setting" ||
      entityId == "CalRastvor256mV" || entityId == "Calibration_ORP_mV" ||
-     entityId == "Power_ACO_Button" || entityId == "ACO_Work" ||
+     entityId == "Power_ACO_Button" ||
      entityId == "H2O2_Work") return DISCOVERY_GROUP_CHLORINE_ACO;
 
   if(entityId == "RoomTemp" || entityId == "RoomTempRange" ||
