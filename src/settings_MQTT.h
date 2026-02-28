@@ -766,9 +766,9 @@ if(entityId == "OverlayPoolTemp" || entityId == "OverlayHeaterTemp" ||
 
   if(entityId == "PH" || entityId == "PH_Control_ACO" ||
      entityId == "PH_setting" || entityId == "analogValuePH" ||
-     entityId == "Float_PH_Slider" || entityId == "PH1_CAL" ||
-     entityId == "PH2_CAL" || entityId == "Temper_Reference" ||
-     entityId == "Temper_PH" || entityId == "Power_H2O2_Button") return DISCOVERY_GROUP_PH_NAOCL;
+     entityId == "Float_PH_Slider" || entityId == "PH2_CAL" ||
+     entityId == "Temper_Reference" || entityId == "Temper_PH" ||
+     entityId == "Power_H2O2_Button") return DISCOVERY_GROUP_PH_NAOCL;
 
   if(entityId == "ppmCl" || entityId == "corrected_ORP_Eh_mV" ||
      entityId == "Power_H2O2" || entityId == "Power_ACO" ||
@@ -1035,7 +1035,6 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
     {"number", "PH_setting", "pH Upper Limit", "home/esp32/PH_setting", "home/esp32/PH_setting/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
       {"number", "LedBrightness", "🔆 Яркость", "home/esp32/LedBrightness", "home/esp32/LedBrightness/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, "10", "255", "1"},
     {"number", "LedAutoplayDuration", "⏳ Смена режима (сек)", "home/esp32/LedAutoplayDuration", "home/esp32/LedAutoplayDuration/set", nullptr, "s", nullptr, nullptr, nullptr, nullptr, nullptr, "5", "180", "5"},
-      {"number", "PH1_CAL", "📉 АЦП_mV для PH1 (Примерно 3500)", "home/esp32/PH1_CAL", "home/esp32/PH1_CAL/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"text", "LEDColor", "LED Color", "home/esp32/LEDColor", "home/esp32/LEDColor/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
       {"text", "RoomTempRange", "🎚️ Включение/выключение обогрева, °C", "home/esp32/RoomTempRange", "home/esp32/RoomTempRange/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
   };
@@ -1463,7 +1462,6 @@ inline void handleMqttLoop(){ // основной цикл MQTT
       publishMqttStateFloat("home/esp32/PH_setting", PH_setting);
       publishMqttStateInt("home/esp32/ACO_Work", ACO_Work);
       publishMqttStateInt("home/esp32/H2O2_Work", H2O2_Work);
-      publishMqttStateFloat("home/esp32/PH1_CAL", PH1_CAL);
       publishMqttStateString("home/esp32/DaysSelect", DaysSelect);
       publishMqttStateBool("home/esp32/DaysMonToggle", mqttDaysSelectContains("Mon"));
       publishMqttStateBool("home/esp32/DaysTueToggle", mqttDaysSelectContains("Tue"));
