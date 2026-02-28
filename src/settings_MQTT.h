@@ -469,10 +469,8 @@ inline void handleMqttCommandMessage(char* topic, byte* payload, unsigned int le
     return;
   }
 
-  if(topicStr == "home/esp32/Float_PH_Slider/set"){
-    if(mqttApplyDualRangeFloat(message, PH1, PH2, "PH1_MIN", "PH2_MAX")){
-      publishMqttStateString("home/esp32/Float_PH_Slider", String(PH1, 2) + "-" + String(PH2, 2));
-    }
+  if(topicStr == "home/esp32/Float_PH_Slider/set") {
+    mqttApplyDualRangeFloat(message, PH1, PH2, "PH1_MIN", "PH2_MAX");
     return;
   }
 
@@ -484,10 +482,8 @@ inline void handleMqttCommandMessage(char* topic, byte* payload, unsigned int le
     return;
   }
 
-  if(topicStr == "home/esp32/FiltrTimer1_OFF/set"){
-    if(mqttApplyTimerField("FiltrTimer1_OFF", message)){
-      publishMqttStateString("home/esp32/FiltrTimer1_OFF", formatMinutesToTime(mqttTimerOffMinutes("FiltrTimer1")));
-    }
+  if(topicStr == "home/esp32/Float_PH_Slider/set") {
+    mqttApplyDualRangeFloat(message, PH1, PH2, "PH1_MIN", "PH2_MAX");
     return;
   }
 
@@ -632,6 +628,15 @@ inline void handleMqttCommandMessage(char* topic, byte* payload, unsigned int le
          id == "IntInput" || id == "FloatInput" || id == "RangeSlider"){
         return;
       }
+
+            if(id == "Temper_PH" || id == "Temper_Reference" ||
+         id == "Float_PH_Slider" || id == "PH2_CAL" ||
+         id == "Power_H2O2_Button" || id == "Calibration_ORP_mV" ||
+         id == "CalRastvor256mV" || id == "Power_ACO_Button" ||
+         id == "ORP_setting"){
+        return;
+      }
+
       if(uiApplyValueForId(id, message)){
         publishMqttStateString((basePrefix + id).c_str(), uiValueForId(id));
       }
@@ -1026,22 +1031,13 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
      {"switch", "PH_Control_ACO", "🧪 Контроль pH (ACO)", "home/esp32/PH_Control_ACO", "home/esp32/PH_Control_ACO/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"switch", "NaOCl_H2O2_Control", "🧪 Контроль хлора (NaOCl)", "home/esp32/NaOCl_H2O2_Control", "home/esp32/NaOCl_H2O2_Control/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"switch", "RoomTemper", "Контроль температуры в помещении", "home/esp32/RoomTemper", "home/esp32/RoomTemper/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
-     {"switch", "Power_H2O2_Button", "🧪 Проверка работы перельстатического насоса подачи кислоты (вручную)", "home/esp32/Power_H2O2_Button", "home/esp32/Power_H2O2_Button/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
-    {"switch", "Power_ACO_Button", "🧴 Проверка работы перельстатического насоса подачи хлора (вручную)", "home/esp32/Power_ACO_Button", "home/esp32/Power_ACO_Button/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
      {"number", "Sider_heat", "🎯 Уставка нагрева", "home/esp32/Sider_heat", "home/esp32/Sider_heat/set", nullptr, "°C", nullptr, nullptr, nullptr, nullptr, nullptr, "5", "30", "1"},
     {"number", "PH_setting", "pH Upper Limit", "home/esp32/PH_setting", "home/esp32/PH_setting/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
-    {"number", "ORP_setting", "ORP Lower Limit", "home/esp32/ORP_setting", "home/esp32/ORP_setting/set", nullptr, "mV", nullptr, nullptr, nullptr, nullptr},
       {"number", "LedBrightness", "🔆 Яркость", "home/esp32/LedBrightness", "home/esp32/LedBrightness/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, "10", "255", "1"},
     {"number", "LedAutoplayDuration", "⏳ Смена режима (сек)", "home/esp32/LedAutoplayDuration", "home/esp32/LedAutoplayDuration/set", nullptr, "s", nullptr, nullptr, nullptr, nullptr, nullptr, "5", "180", "5"},
       {"number", "PH1_CAL", "📉 АЦП_mV для PH1 (Примерно 3500)", "home/esp32/PH1_CAL", "home/esp32/PH1_CAL/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
-    {"number", "PH2_CAL", "📉 АЦП_mV для PH2 (Примерно 2900)", "home/esp32/PH2_CAL", "home/esp32/PH2_CAL/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
-    {"number", "Temper_Reference", "🌡 Температура референсная", "home/esp32/Temper_Reference", "home/esp32/Temper_Reference/set", nullptr, "°C", nullptr, nullptr, nullptr, nullptr},
-    {"number", "Temper_PH", "🌡 Измеренная тепература для компенасации измерения PH", "home/esp32/Temper_PH", "home/esp32/Temper_PH/set", nullptr, "°C", nullptr, nullptr, nullptr, nullptr},
-    {"number", "CalRastvor256mV", "🧪 ОВП калибровочного раствора - мВ", "home/esp32/CalRastvor256mV", "home/esp32/CalRastvor256mV/set", nullptr, "mV", nullptr, nullptr, nullptr, nullptr},
-    {"number", "Calibration_ORP_mV", "📏 Калибровочный коэффициент - мВ", "home/esp32/Calibration_ORP_mV", "home/esp32/Calibration_ORP_mV/set", nullptr, "mV", nullptr, nullptr, nullptr, nullptr},
     {"text", "LEDColor", "LED Color", "home/esp32/LEDColor", "home/esp32/LEDColor/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
       {"text", "RoomTempRange", "🎚️ Включение/выключение обогрева, °C", "home/esp32/RoomTempRange", "home/esp32/RoomTempRange/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
-    {"text", "Float_PH_Slider", "🎚️ Range PH Min-Max", "home/esp32/Float_PH_Slider", "home/esp32/Float_PH_Slider/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
   };
 
   static const char* const selectOptions[] = {"off", "on", "auto", "timer"}; // варианты для select
@@ -1454,10 +1450,7 @@ inline void handleMqttLoop(){ // основной цикл MQTT
       publishMqttStateBool("home/esp32/NaOCl_H2O2_Control", NaOCl_H2O2_Control);
       publishMqttStateBool("home/esp32/RoomTemper", RoomTemper);
       publishMqttStateBool("home/esp32/Ul_light_Time", Ul_light_Time);
-      publishMqttStateString("home/esp32/Power_H2O2_Button", uiValueForId("Power_H2O2_Button"));
-      publishMqttStateString("home/esp32/Power_ACO_Button", uiValueForId("Power_ACO_Button"));
       publishMqttStateString("home/esp32/RoomTempRange", String(RoomTempOn, 1) + "-" + String(RoomTempOff, 1));
-      publishMqttStateString("home/esp32/Float_PH_Slider", String(PH1, 2) + "-" + String(PH2, 2));
       publishMqttStateString("home/esp32/Timer1", Timer1);
       publishMqttStateString("home/esp32/LEDColor", LEDColor);
       publishMqttStateString("home/esp32/LedColorMode", LedColorMode);
@@ -1468,15 +1461,9 @@ inline void handleMqttLoop(){ // основной цикл MQTT
       publishMqttStateString("home/esp32/LedColorOrder", LedColorOrder);
       publishMqttStateInt("home/esp32/Sider_heat", Sider_heat);
       publishMqttStateFloat("home/esp32/PH_setting", PH_setting);
-      publishMqttStateInt("home/esp32/ORP_setting", ORP_setting);
       publishMqttStateInt("home/esp32/ACO_Work", ACO_Work);
       publishMqttStateInt("home/esp32/H2O2_Work", H2O2_Work);
       publishMqttStateFloat("home/esp32/PH1_CAL", PH1_CAL);
-      publishMqttStateFloat("home/esp32/PH2_CAL", PH2_CAL);
-      publishMqttStateFloat("home/esp32/Temper_Reference", Temper_Reference);
-      publishMqttStateFloat("home/esp32/Temper_PH", Temper_PH);
-      publishMqttStateInt("home/esp32/CalRastvor256mV", CalRastvor256mV);
-      publishMqttStateInt("home/esp32/Calibration_ORP_mV", Calibration_ORP_mV);
       publishMqttStateString("home/esp32/DaysSelect", DaysSelect);
       publishMqttStateBool("home/esp32/DaysMonToggle", mqttDaysSelectContains("Mon"));
       publishMqttStateBool("home/esp32/DaysTueToggle", mqttDaysSelectContains("Tue"));
