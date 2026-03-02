@@ -191,8 +191,13 @@ String Ul_light_timeON, Ul_light_timeOFF; // Утавки времени вкл�
 bool Activation_Water_Level = false;
 bool WaterLevelSensorUpper = false;
 bool WaterLevelSensorLower = false;
+bool WaterLevelSensorDrain = false;
 bool Power_Topping, Power_Topping1; // Долив воды по уровню
 bool Power_Topping_State = false;
+bool Power_Drain = false;
+bool Power_Drain_State = false;
+bool DrainRestoreFiltrationState = false; // Состояние насоса до запуска режима слива
+bool DrainModeLatched = false; // Признак активного цикла слива для корректного восстановления насоса
 
 bool Saved_Power_H2O, Power_H2O2 = false; //Дозация перекеси водорода
 bool Saved_Power_ACO, Power_ACO = false; 	//Дозация Активное Каталитическое Окисление «Active Catalytic Oxidation» ACO
@@ -2766,6 +2771,7 @@ window.addEventListener('resize', ()=>{
     syncDashButton('Power_H2O2_Button', j.Power_H2O2_Button);
     syncDashButton('Power_ACO_Button', j.Power_ACO_Button);
     syncDashButton('Power_Topping', j.Power_Topping);
+        syncDashButton('Power_Drain', j.Power_Drain);
     syncDashButton('AirPump', j.AirPump);
     syncDashButton('SolValveFilBack', j.SolValveFilBack);
     syncDashButton('SolValveFiltration', j.SolValveFiltration);
@@ -2821,7 +2827,9 @@ window.addEventListener('resize', ()=>{
     if(typeof j.Power_Warm_floor_heating !== 'undefined') updateStat('Power_Warm_floor_heating', j.Power_Warm_floor_heating);
     if(typeof j.WaterLevelSensorUpper !== 'undefined') updateStat('WaterLevelSensorUpper', j.WaterLevelSensorUpper);
     if(typeof j.WaterLevelSensorLower !== 'undefined') updateStat('WaterLevelSensorLower', j.WaterLevelSensorLower);
+        if(typeof j.WaterLevelSensorDrain !== 'undefined') updateStat('WaterLevelSensorDrain', j.WaterLevelSensorDrain);
     if(typeof j.Power_Topping_State !== 'undefined') updateStat('Power_Topping_State', j.Power_Topping_State);
+        if(typeof j.Power_Drain_State !== 'undefined') updateStat('Power_Drain_State', j.Power_Drain_State);
     if(typeof j.PH !== 'undefined') updateStat('PH', j.PH);
     if(typeof j.analogValuePH !== 'undefined') updateStat('analogValuePH', j.analogValuePH);
     if(typeof j.PH_Control_ACO !== 'undefined') updateCheckboxValue('PH_Control_ACO', j.PH_Control_ACO);

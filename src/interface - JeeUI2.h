@@ -209,8 +209,12 @@ UI_COLOR("LEDColor", LEDColor, "🎨 Цвет подсветки");
     UI_CHECKBOX("Activation_Water_Level", Activation_Water_Level, "✅ Контроль уровня воды");
     UI_DISPLAY_BOOL("WaterLevelSensorUpper", WaterLevelSensorUpper, "🛟🔼 Датчик уровня (верхний)", "сработал уровень", "нет уровня");
     UI_DISPLAY_BOOL("WaterLevelSensorLower", WaterLevelSensorLower, "🛟🔽 Датчик уровня (нижний)", "сработал уровень", "нет уровня");
+    UI_DISPLAY_BOOL("WaterLevelSensorDrain", WaterLevelSensorDrain, "🛟⏬ Датчик уровня в яме слива (вход №3)", "яма заполнена", "яма не заполнена");
     UI_DISPLAY_BOOL("Power_Topping_State", Power_Topping_State, "🚰 Состояние соленоида долива воды", "✅ Включен", "⏹️ Откл.");
     UI_BUTTON("Power_Topping", Power_Topping, "gray", "🚰 Включить/Отключить соленоид долива воды");
+
+    UI_DISPLAY_BOOL("Power_Drain_State", Power_Drain_State, "🧯 Режим слива (насос)", "✅ Активен", "⏹️ Неактивен");
+    UI_BUTTON("Power_Drain", Power_Drain, "gray", "🧯 СЛИВ ВОДЫ ИЗ БАССЕЙНИА");
           
     // UI_TEXT("InfoStringDIN", InfoStringDIN, "x:50%;y:130%;fontSize:14;color:#00ff00;white-space:pre-line");
 

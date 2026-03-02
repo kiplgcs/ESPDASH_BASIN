@@ -94,6 +94,8 @@ extern bool Power_ACO; // состояние насоса ACO
 extern bool Power_Heat; // состояние нагрева
 extern bool Power_Topping_State; // состояние соленоида долива
 extern bool Power_Topping; // ручной долив
+extern bool Power_Drain_State; // состояние режима слива (насос включен)
+extern bool Power_Drain; // ручной слив
 extern bool Power_Filtr; // ручная фильтрация
 extern bool Filtr_Time1; // таймер фильтрации №1
 extern bool Filtr_Time2; // таймер фильтрации №2
@@ -106,6 +108,7 @@ extern bool Activation_Heat; // управление нагревом
 extern bool Activation_Water_Level; // контроль уровня воды
 extern bool WaterLevelSensorUpper; // датчик верхнего уровня
 extern bool WaterLevelSensorLower; // датчик нижнего уровня
+extern bool WaterLevelSensorDrain; // датчик уровня для остановки слива
 extern float PH_setting; // уставка pH
 extern bool PH_Control_ACO; // контроль pH ACO
 extern int ACO_Work; // период дозирования ACO
@@ -391,6 +394,14 @@ inline void handleMqttCommandMessage(char* topic, byte* payload, unsigned int le
     publishMqttStateBool("home/esp32/Power_Clean", Power_Clean); // публикация
     return;
   }
+
+    if(topicStr == "home/esp32/Power_Drain/set"){
+    Power_Drain = mqttPayloadIsOn(message); // обновление состояния
+    saveValue<int>("Power_Drain", Power_Drain ? 1 : 0); // сохранение
+    publishMqttStateBool("home/esp32/Power_Drain", Power_Drain); // публикация
+    return;
+  }
+
 
   if(topicStr == "home/esp32/Clean_Time1/set"){
     Clean_Time1 = mqttPayloadIsOn(message); // обновление состояния
@@ -758,8 +769,8 @@ if(entityId == "OverlayPoolTemp" || entityId == "OverlayHeaterTemp" ||
      entityId == "RgbTimer_OFF") return DISCOVERY_GROUP_RGB;
 
   if(entityId == "Activation_Water_Level" || entityId == "WaterLevelSensorUpper" ||
-     entityId == "WaterLevelSensorLower" || entityId == "Power_Topping_State" ||
-     entityId == "Power_Topping" || entityId == "InfoStringDIN") return DISCOVERY_GROUP_WATER_LEVEL;
+     entityId == "WaterLevelSensorLower" || entityId == "WaterLevelSensorDrain" || entityId == "Power_Topping_State" ||
+     entityId == "Power_Topping" || entityId == "Power_Drain_State" || entityId == "Power_Drain" || entityId == "InfoStringDIN") return DISCOVERY_GROUP_WATER_LEVEL;
 
   if(entityId == "DS1" || entityId == "Sider_heat" ||
      entityId == "Activation_Heat" || entityId == "Power_Heat") return DISCOVERY_GROUP_POOL_TEMPERATURE;
@@ -993,6 +1004,8 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
     {"binary_sensor", "Power_Topping_State", "Water Top Up State", "home/esp32/Power_Topping_State", nullptr, "power", nullptr, nullptr, nullptr, "1", "0"},
     {"binary_sensor", "WaterLevelSensorUpper", "Water Level Upper", "home/esp32/WaterLevelSensorUpper", nullptr, "moisture", nullptr, nullptr, nullptr, "1", "0"},
     {"binary_sensor", "WaterLevelSensorLower", "Water Level Lower", "home/esp32/WaterLevelSensorLower", nullptr, "moisture", nullptr, nullptr, nullptr, "1", "0"},
+      {"binary_sensor", "WaterLevelSensorDrain", "Drain Pit Level (Input 3)", "home/esp32/WaterLevelSensorDrain", nullptr, "moisture", nullptr, nullptr, nullptr, "1", "0"},
+    {"binary_sensor", "Power_Drain_State", "Water Drain Mode State", "home/esp32/Power_Drain_State", nullptr, "power", nullptr, nullptr, nullptr, "1", "0"},
     {"binary_sensor", "Power_Warm_floor_heating", "Floor Heating State", "home/esp32/Power_Warm_floor_heating", nullptr, "heat", nullptr, nullptr, nullptr, "1", "0"},
     {"switch", "Power_Filtr", "01 🧽 Фильтрация (вручную)", "home/esp32/Power_Filtr", "home/esp32/Power_Filtr/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"switch", "Filtr_Time1", "02 ⏱️ Таймер включения №1", "home/esp32/Filtr_Time1", "home/esp32/Filtr_Time1/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
@@ -1025,6 +1038,7 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
     {"switch", "Activation_Heat", "🔥 Контроль нагрева", "home/esp32/Activation_Heat", "home/esp32/Activation_Heat/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"switch", "Activation_Water_Level", "✅ Контроль уровня воды", "home/esp32/Activation_Water_Level", "home/esp32/Activation_Water_Level/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"switch", "Power_Topping", "🚰 Включить/Отключить соленоид долива воды", "home/esp32/Power_Topping", "home/esp32/Power_Topping/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+       {"switch", "Power_Drain", "🧯 СЛИВ ВОДЫ ИЗ БАССЕЙНИА", "home/esp32/Power_Drain", "home/esp32/Power_Drain/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"switch", "Pow_Ul_light", "🚏 Свет улицы (ручной)", "home/esp32/Pow_Ul_light", "home/esp32/Pow_Ul_light/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"switch", "Ul_light_Time", "01 ⏱️ Активация таймера улицы", "home/esp32/Ul_light_Time", "home/esp32/Ul_light_Time/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"text", "UlLightTimer_ON", "02 🟢 Время вкл. улицы по таймеру", "home/esp32/UlLightTimer_ON", "home/esp32/UlLightTimer_ON/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
@@ -1337,6 +1351,7 @@ bool connected = mqttClient.connect( // подключение с логином
       mqttClient.subscribe("home/esp32/Filtr_Time2/set", 0); // таймер фильтрации №2
       mqttClient.subscribe("home/esp32/Filtr_Time3/set", 0); // таймер фильтрации №3
       mqttClient.subscribe("home/esp32/Power_Clean/set", 0); // промывка фильтра
+            mqttClient.subscribe("home/esp32/Power_Drain/set", 0); // слив воды из бассейна
       mqttClient.subscribe("home/esp32/Clean_Time1/set", 0); // таймер промывки
       mqttClient.subscribe("home/esp32/DaysSelect/set", 0); // дни промывки
       mqttClient.subscribe("home/esp32/DaysMonToggle/set", 0); // понедельник промывки
@@ -1434,6 +1449,8 @@ inline void handleMqttLoop(){ // основной цикл MQTT
       publishMqttStateBool("home/esp32/Power_Topping_State", Power_Topping_State);
       publishMqttStateBool("home/esp32/WaterLevelSensorUpper", WaterLevelSensorUpper);
       publishMqttStateBool("home/esp32/WaterLevelSensorLower", WaterLevelSensorLower);
+            publishMqttStateBool("home/esp32/WaterLevelSensorDrain", WaterLevelSensorDrain);
+      publishMqttStateBool("home/esp32/Power_Drain_State", Power_Drain_State);
       publishMqttStateBool("home/esp32/Power_Warm_floor_heating", Power_Warm_floor_heating);
 
       publishMqttStateBool("home/esp32/Power_Filtr", Power_Filtr);
@@ -1446,6 +1463,7 @@ inline void handleMqttLoop(){ // основной цикл MQTT
       publishMqttStateBool("home/esp32/WS2815_Time1", WS2815_Time1);
       publishMqttStateBool("home/esp32/Activation_Water_Level", Activation_Water_Level);
       publishMqttStateBool("home/esp32/Power_Topping", Power_Topping);
+           publishMqttStateBool("home/esp32/Power_Drain", Power_Drain);
       publishMqttStateBool("home/esp32/PH_Control_ACO", PH_Control_ACO);
       publishMqttStateBool("home/esp32/NaOCl_H2O2_Control", NaOCl_H2O2_Control);
       publishMqttStateBool("home/esp32/RoomTemper", RoomTemper);

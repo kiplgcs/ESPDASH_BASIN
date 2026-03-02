@@ -653,12 +653,16 @@ if (RoomTemper && !roomTempInRange && DS1 < RoomTempOn) {             // есл�
 if (AktualReadInput) {
     WaterLevelSensorLower = ReadInputArray[0]; // Датчик нижнего уровня (вход №1)
     WaterLevelSensorUpper = ReadInputArray[1]; // Датчик верхнего уровня (вход №2)
+    WaterLevelSensorDrain = ReadInputArray[2]; // Датчик уровня для слива (вход №3)
   }
 
   if (AktualReadRelay) {
     Power_Topping_State = ReadRelayArray[13]; // Состояние реле №14 (соленоид долива воды)
+    const bool filtrationRelayActive = ReadRelayArray[8]; // Реле насоса фильтрации (реле №3)
+    Power_Drain_State = Power_Drain && filtrationRelayActive; // Слив активен только при включенном насосе
   } else {
     Power_Topping_State = Power_Topping;
+    Power_Drain_State = Power_Drain && Power_Filtr;
   }
 
   if (Activation_Water_Level) {
@@ -668,6 +672,24 @@ if (AktualReadInput) {
     if (WaterLevelSensorUpper) {
       Power_Topping = false;
     }
+  }
+
+
+  if (Power_Drain && !DrainModeLatched) {
+    DrainRestoreFiltrationState = Power_Filtr; // Запоминаем состояние насоса до запуска слива
+    DrainModeLatched = true;
+  }
+
+  if (WaterLevelSensorDrain) {
+    Power_Drain = false; // Яма слива заполнена: прекращаем слив
+  }
+
+  if (Power_Drain) {
+    Power_Topping = false; // Защита: во время слива запрещаем долив воды
+    Power_Filtr = true; // В режиме слива насос должен быть включен
+  } else if (DrainModeLatched) {
+    Power_Filtr = DrainRestoreFiltrationState; // По завершению слива возвращаем состояние насоса как было
+    DrainModeLatched = false;
   }
 
 
