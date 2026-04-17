@@ -198,6 +198,8 @@ bool Power_Drain = false;
 bool Power_Drain_State = false;
 bool DrainRestoreFiltrationState = false; // Состояние насоса до запуска режима слива
 bool DrainModeLatched = false; // Признак активного цикла слива для корректного восстановления насоса
+unsigned long DrainModeStartedAt = 0; // Время старта активного цикла слива
+const unsigned long DrainModeMaxDurationMs = 20UL * 60UL * 1000UL; // Максимальная длительность слива: 20 минут
 
 bool Saved_Power_H2O, Power_H2O2 = false; //Дозация перекеси водорода
 bool Saved_Power_ACO, Power_ACO = false; 	//Дозация Активное Каталитическое Окисление «Active Catalytic Oxidation» ACO

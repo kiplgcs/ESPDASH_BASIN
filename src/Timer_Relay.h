@@ -677,10 +677,13 @@ if (AktualReadInput) {
 
   if (Power_Drain && !DrainModeLatched) {
     DrainRestoreFiltrationState = Power_Filtr; // Запоминаем состояние насоса до запуска слива
+        DrainModeStartedAt = millis(); // Старт таймера аварийного отключения слива
     DrainModeLatched = true;
   }
 
-  if (WaterLevelSensorDrain) {
+  const bool drainTimeoutReached = DrainModeLatched && (millis() - DrainModeStartedAt >= DrainModeMaxDurationMs);
+
+  if (WaterLevelSensorDrain || drainTimeoutReached) {
     Power_Drain = false; // Яма слива заполнена: прекращаем слив
   }
 
@@ -690,6 +693,7 @@ if (AktualReadInput) {
   } else if (DrainModeLatched) {
     Power_Filtr = DrainRestoreFiltrationState; // По завершению слива возвращаем состояние насоса как было
     DrainModeLatched = false;
+        DrainModeStartedAt = 0;
   }
 
 
