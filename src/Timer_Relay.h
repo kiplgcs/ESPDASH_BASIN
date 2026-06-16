@@ -641,13 +641,20 @@ void ControlModbusRelay(int interval) {
   //   Power_Warm_floor_heating = false;
   // }
 
-const bool roomTempInRange = DS1 >= RoomTempOn && DS1 <= RoomTempOff; // true, если текущая температура DS1 находится в зоне гистерезиса между порогом включения и порогом выключения
+// Локальный контур термостата для помещения:
+  // включаем обогрев при температуре ниже порога включения,
+  // выключаем при достижении порога выключения,
+  // внутри гистерезиса оставляем предыдущее состояние.
+  const float roomHeatOnThreshold = min(RoomTempOn, RoomTempOff);
+  const float roomHeatOffThreshold = max(RoomTempOn, RoomTempOff);
 
-if (RoomTemper && !roomTempInRange && DS1 < RoomTempOn) {             // если режим температурного контроля включён, температура вышла из допустимого диапазона и опустилась ниже порога включения
-    // здесь должно происходить включение тёплого пола (условие "холодно, нужно греть")
-} else {
-    Power_Warm_floor_heating = false;                                 // во всех остальных случаях подогрев принудительно выключается, чтобы исключить перегрев и ложные включения
-}
+  if (!RoomTemper) {
+    Power_Warm_floor_heating = false; // Режим выключен пользователем.
+  } else if (DS1 <= roomHeatOnThreshold) {
+    Power_Warm_floor_heating = true; // Холодно: включаем обогрев.
+  } else if (DS1 >= roomHeatOffThreshold) {
+    Power_Warm_floor_heating = false; // Достаточно тепло: выключаем обогрев.
+  }
 
 
 if (AktualReadInput) {
