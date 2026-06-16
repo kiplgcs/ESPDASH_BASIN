@@ -84,6 +84,17 @@ bool checkTimeInInterval(int currentHour, int currentMinute, uint16_t startMinut
 //       timerDuration = 0;
 //       break;
 //   }
+inline void formatDosingTimerInfo(char* info, size_t infoSize, unsigned long remainingMillis) {
+  unsigned long seconds = (remainingMillis + 999UL) / 1000UL;
+  if (seconds < 60UL) {
+    snprintf(info, infoSize, "%lus", seconds);
+    return;
+  }
+  unsigned long minutes = (seconds + 59UL) / 60UL;
+  if (minutes > 9999UL) minutes = 9999UL;
+  snprintf(info, infoSize, "%lum", minutes);
+}
+
 void manageTimer(int& mode,                 // Входной параметр: режим работы таймера (1,2,3,4,5,6,7)
                  bool& power,               // Входной/выходной параметр: флаг, указывающий, включен ли таймер (true - включен, false - выключен)
                  bool activation,           // Входной параметр: флаг, указывающий, активирован ли таймер (true - активирован, false - неактивирован)
@@ -159,9 +170,13 @@ unsigned long timerDuration;
     
 // }
   if (power && activation) {
-    snprintf(info, 50, "Work");
+    const unsigned long phaseElapsed = currentMillis - lastMillis;
+    const unsigned long remainingMillis = timerWorkDuration > phaseElapsed ? (timerWorkDuration - phaseElapsed) : 0UL;
+    formatDosingTimerInfo(info, 50, remainingMillis);
   } else if (!power && activation) {
-    snprintf(info, 50, "Start");
+    const unsigned long phaseElapsed = currentMillis - lastMillis;
+    const unsigned long remainingMillis = timerDuration > phaseElapsed ? (timerDuration - phaseElapsed) : 0UL;
+    formatDosingTimerInfo(info, 50, remainingMillis);
   }
 }
 
@@ -454,7 +469,8 @@ void TimerControlRelay(int interval) {
 //     }
     bool chk_Array[] = {chk1, chk2, chk3, chk4, chk5, chk6, chk7};
     bool cleanDayEnabled = (DayOfWeek >= 1 && DayOfWeek <= 7) ? chk_Array[DayOfWeek - 1] : false;
-    uint16_t scheduleMinutes = parseTimeToMinutes(Timer1); // Время запуска промывки
+    UITimerEntry &cleanScheduleTimer = ui.timer("CleanTimer1");
+    uint16_t scheduleMinutes = cleanScheduleTimer.on; // Время запуска промывки
     uint16_t currentMinutes = static_cast<uint16_t>(currentHour * 60 + currentMinute); // Текущее время в минутах
     bool cleanScheduleMatch = Clean_Time1 && cleanDayEnabled && (currentMinutes == scheduleMinutes); // Сравнение с расписанием
 
@@ -580,18 +596,53 @@ void TimerControlRelay(int interval) {
         //     } else if (corrected_ORP_Eh_mV > ORP_setting || PH > PH_setting  || !NaOCl_H2O2_Control || !Power_Filtr){
         //       manageTimer(H2O2_Work, Power_H2O2 = false, false, lastMillisH2O2, Info_H2O2);
         //     }
+    if (PH_Lower < 0.0f) PH_Lower = 0.0f;
+    if (PH_Upper > 14.0f) PH_Upper = 14.0f;
+    if (PH_Lower > PH_Upper) {
+      float tmp = PH_Lower;
+      PH_Lower = PH_Upper;
+      PH_Upper = tmp;
+    }
+    if (CL_Lower < 0.0f) CL_Lower = 0.0f;
+    if (CL_Upper < 0.0f) CL_Upper = 0.0f;
+    if (CL_Lower > CL_Upper) {
+      float tmp = CL_Lower;
+      CL_Lower = CL_Upper;
+      CL_Upper = tmp;
+    }
+    PH_setting = PH_Upper; // Keep legacy Web/MQTT value aligned with the upper pH limit.
+
+    const bool filtrationModeActive = FiltrationTimerActive && Power_Filtr && !Power_Drain && !DrainModeLatched && !CleanSequenceActive;
+
     // Активация дозации ACO - кислоты по датчику PH
+    static bool phDosingDemand = false;
     static unsigned long lastMillisACO = 0;
-    if (PH > PH_setting && PH_Control_ACO && Power_Filtr) {
-      manageTimer(ACO_Work, Power_ACO, PH_Control_ACO, lastMillisACO, Info_ACO);
+    if (!PH_Control_ACO || !filtrationModeActive) {
+      phDosingDemand = false;
+    } else if (!phDosingDemand && PH > PH_Upper) {
+      phDosingDemand = true;
+    } else if (phDosingDemand && PH <= PH_Lower) {
+      phDosingDemand = false;
+    }
+    if (phDosingDemand) {
+      manageTimer(ACO_Work, Power_ACO, true, lastMillisACO, Info_ACO);
     } else {
       manageTimer(ACO_Work, Power_ACO = false, false, lastMillisACO, Info_ACO);
     }
 
     // Активация дозации NaOCl по датчику хлора
+    static bool clDosingDemand = false;
     static unsigned long lastMillisH2O2 = 0;
-    if (corrected_ORP_Eh_mV < ORP_setting && PH <= PH_setting + 0.1 && NaOCl_H2O2_Control && Power_Filtr) {
-      manageTimer(H2O2_Work, Power_H2O2, NaOCl_H2O2_Control, lastMillisH2O2, Info_H2O2);
+    if (!NaOCl_H2O2_Control || !filtrationModeActive) {
+      clDosingDemand = false;
+    } else if (!clDosingDemand && ppmCl < CL_Lower) {
+      clDosingDemand = true;
+    } else if (clDosingDemand && ppmCl >= CL_Upper) {
+      clDosingDemand = false;
+    }
+    const bool phAllowsChlorine = PH <= (PH_Upper + 0.1f);
+    if (clDosingDemand && phAllowsChlorine) {
+      manageTimer(H2O2_Work, Power_H2O2, true, lastMillisH2O2, Info_H2O2);
     } else {
       manageTimer(H2O2_Work, Power_H2O2 = false, false, lastMillisH2O2, Info_H2O2);
     }
@@ -663,53 +714,145 @@ if (AktualReadInput) {
     WaterLevelSensorDrain = ReadInputArray[2]; // Датчик уровня для слива (вход №3)
   }
 
+  bool filtrationRelayActive = Power_Filtr;
   if (AktualReadRelay) {
     Power_Topping_State = ReadRelayArray[13]; // Состояние реле №14 (соленоид долива воды)
-    const bool filtrationRelayActive = ReadRelayArray[8]; // Реле насоса фильтрации (реле №3)
+    filtrationRelayActive = ReadRelayArray[8]; // Реле насоса фильтрации (реле №3)
     Power_Drain_State = Power_Drain && filtrationRelayActive; // Слив активен только при включенном насосе
   } else {
     Power_Topping_State = Power_Topping;
     Power_Drain_State = Power_Drain && Power_Filtr;
   }
 
-  if (Activation_Water_Level) {
-    if (WaterLevelSensorLower) {
-      Power_Topping = true;
-    }
-    if (WaterLevelSensorUpper) {
-      Power_Topping = false;
-    }
+  // Water level and drain automation is handled below as a single state block.
+
+
+  DrainPumpMinutes = constrain(DrainPumpMinutes, 1, 240);
+  DrainPauseMinutes = constrain(DrainPauseMinutes, 1, 240);
+  DrainCycleCount = constrain(DrainCycleCount, 1, 20);
+
+  const unsigned long nowMs = millis();
+  static unsigned long toppingStartedAt = 0;
+  static unsigned long toppingUsedMs = 0;
+  static int toppingUsageDay = -1;
+  static bool toppingAutoActive = false;
+  static bool lastActivationWaterLevel = false;
+  static unsigned long drainStatusHoldUntil = 0;
+
+  if (DayOfWeek != toppingUsageDay) {
+    toppingUsageDay = DayOfWeek;
+    toppingUsedMs = 0;
+    toppingStartedAt = toppingAutoActive ? nowMs : 0;
   }
 
+  auto stopAutoTopping = [&]() {
+    if (toppingAutoActive && toppingStartedAt != 0) {
+      toppingUsedMs += nowMs - toppingStartedAt;
+    }
+    toppingAutoActive = false;
+    toppingStartedAt = 0;
+    Power_Topping = false;
+  };
+
+  if (!lastActivationWaterLevel && Activation_Water_Level) {
+    toppingUsedMs = 0;
+    toppingStartedAt = 0;
+    toppingAutoActive = false;
+  }
+  if (lastActivationWaterLevel && !Activation_Water_Level) {
+    stopAutoTopping();
+  }
+  lastActivationWaterLevel = Activation_Water_Level;
 
   if (Power_Drain && !DrainModeLatched) {
-    DrainRestoreFiltrationState = Power_Filtr; // Запоминаем состояние насоса до запуска слива
-        DrainModeStartedAt = millis(); // Старт таймера аварийного отключения слива
+    DrainRestoreFiltrationState = Power_Filtr;
+    DrainModeStartedAt = nowMs;
     DrainModeLatched = true;
+    DrainCycleDone = 0;
+    Activation_Water_Level = false;
+    drainStatusHoldUntil = 0;
+    saveValue<int>("Activation_Water_Level", 0);
   }
 
-  const bool drainTimeoutReached = DrainModeLatched && (millis() - DrainModeStartedAt >= DrainModeMaxDurationMs);
+  if (DrainModeLatched) {
+    stopAutoTopping();
+    const unsigned long drainRunMs = static_cast<unsigned long>(DrainPumpMinutes) * 60UL * 1000UL;
+    const unsigned long drainPauseMs = static_cast<unsigned long>(DrainPauseMinutes) * 60UL * 1000UL;
+    const unsigned long drainCycleMs = drainRunMs + drainPauseMs;
+    const unsigned long elapsedMs = nowMs - DrainModeStartedAt;
 
-  if (WaterLevelSensorDrain || drainTimeoutReached) {
-    Power_Drain = false; // Яма слива заполнена: прекращаем слив
+    if (WaterLevelSensorDrain) {
+      Power_Drain = false;
+      saveValue<int>("Power_Drain", 0);
+      WaterLevelStatus = "Drain stopped: pit sensor";
+      drainStatusHoldUntil = nowMs + 60000UL;
+    } else if (elapsedMs >= drainCycleMs * static_cast<unsigned long>(DrainCycleCount)) {
+      DrainCycleDone = DrainCycleCount;
+      Power_Drain = false;
+      saveValue<int>("Power_Drain", 0);
+      WaterLevelStatus = "Drain done: all cycles";
+      drainStatusHoldUntil = nowMs + 60000UL;
+    } else if (Power_Drain) {
+      const int cycleIndex = static_cast<int>(elapsedMs / drainCycleMs);
+      const unsigned long cyclePhaseMs = elapsedMs % drainCycleMs;
+      DrainCycleDone = cycleIndex;
+      Power_Topping = false;
+      if (cyclePhaseMs < drainRunMs) {
+        Power_Filtr = true;
+        Power_Drain_State = true;
+        WaterLevelStatus = "Drain cycle " + String(cycleIndex + 1) + "/" + String(DrainCycleCount);
+      } else {
+        Power_Filtr = false;
+        Power_Drain_State = false;
+        WaterLevelStatus = "Drain pause " + String(cycleIndex + 1) + "/" + String(DrainCycleCount);
+      }
+    }
   }
 
-  if (Power_Drain) {
-    Power_Topping = false; // Защита: во время слива запрещаем долив воды
-    Power_Filtr = true; // В режиме слива насос должен быть включен
-  } else if (DrainModeLatched) {
-    Power_Filtr = DrainRestoreFiltrationState; // По завершению слива возвращаем состояние насоса как было
+  if (!Power_Drain && DrainModeLatched) {
+    Power_Filtr = DrainRestoreFiltrationState;
+    Power_Drain_State = false;
     DrainModeLatched = false;
-        DrainModeStartedAt = 0;
+    DrainModeStartedAt = 0;
   }
 
+  if (!DrainModeLatched && Activation_Water_Level) {
+    const unsigned long maxToppingMs = 60UL * 60UL * 1000UL;
+    unsigned long currentUsedMs = toppingUsedMs;
+    if (toppingAutoActive && toppingStartedAt != 0) {
+      currentUsedMs += nowMs - toppingStartedAt;
+    }
+
+    if (WaterLevelSensorUpper) {
+      stopAutoTopping();
+      WaterLevelStatus = "Top-up stopped: upper level";
+    } else if (currentUsedMs >= maxToppingMs) {
+      stopAutoTopping();
+      WaterLevelStatus = "Top-up blocked: 1h limit";
+    } else if (WaterLevelSensorLower || toppingAutoActive) {
+      if (!toppingAutoActive) {
+        toppingAutoActive = true;
+        toppingStartedAt = nowMs;
+      }
+      Power_Topping = true;
+      const unsigned long remainingMs = maxToppingMs > currentUsedMs ? (maxToppingMs - currentUsedMs) : 0UL;
+      WaterLevelStatus = "Top-up ON, limit left " + String((remainingMs + 59999UL) / 60000UL) + " min";
+    } else {
+      WaterLevelStatus = "Level control ON: wait lower";
+    }
+  } else if (!DrainModeLatched && !Activation_Water_Level && nowMs >= drainStatusHoldUntil) {
+    WaterLevelStatus = Power_Topping ? "Manual top-up ON" : "Level control OFF";
+  }
+
+  Power_Topping_State = Power_Topping;
 
   Error err = RS485.addRequest(40001, 1, 0x05, 0, Lamp ? devices[0].value : devices[1].value); // реле№1 для Lamp
   err = RS485.addRequest(40001, 1, 0x05, 1, Pow_WS2815 ? devices[0].value : devices[1].value); //реле№2 для Pow_WS2815
   err = RS485.addRequest(40001, 1, 0x05, 8, Power_Filtr ? devices[0].value : devices[1].value); //реле№3 для Power_Filtr
   //err = RS485.addRequest(40001, 1, 0x05, 3, Power_Clean ? devices[0].value : devices[1].value); //реле№4 для Power_Clean - служит не для реле а только о факте начала и окончания промывки для передачи в Nextion
 
-  const bool heatInterlockPumpActive = Power_Filtr || ReadRelayArray[8]; // Защитная блокировка: нагрев разрешён только при работающем насосе воды.
+  const bool filtrationModeForChemAndHeat = FiltrationTimerActive && Power_Filtr && !Power_Drain && !DrainModeLatched && !CleanSequenceActive;
+  const bool heatInterlockPumpActive = filtrationModeForChemAndHeat; // Нагрев разрешён только при насосе в режиме фильтрации.
   
   if (!Activation_Heat || !heatInterlockPumpActive) {
     Power_Heat = false; // Принудительно снимаем команду нагрева, чтобы исключить включение без протока воды.
@@ -734,8 +877,8 @@ if (AktualReadInput) {
   //   Error err = RS485.addRequest(40001,1,0x05,5, Power_H2O2 ? devices[0].value : devices[1].value); //реле№6 для Power_H2O2
   // err = RS485.addRequest(40001, 1, 0x05, 5, Power_H2O2 ? devices[0].value : devices[1].value); //реле№6 для Power_H2O2
   // err = RS485.addRequest(40001, 1, 0x05, 6, Power_ACO ? devices[0].value : devices[1].value); //реле№7 для Power_ACO
-  const bool powerH2O2Active = Power_H2O2 || ManualPulse_H2O2_Active; //Переменная powerH2O2Active будет равна true, если хотя бы одно из условий -  true
-  const bool powerAcoActive = Power_ACO || ManualPulse_ACO_Active;
+  const bool powerH2O2Active = filtrationModeForChemAndHeat && (Power_H2O2 || ManualPulse_H2O2_Active);
+  const bool powerAcoActive = filtrationModeForChemAndHeat && (Power_ACO || ManualPulse_ACO_Active);
   err = RS485.addRequest(40001, 1, 0x05, 5, powerH2O2Active ? devices[0].value : devices[1].value); //реле№6 для Power_H2O2
   err = RS485.addRequest(40001, 1, 0x05, 6, powerAcoActive ? devices[0].value : devices[1].value); //реле№7 для Power_ACO
 //   err = RS485.addRequest(40001,1,0x05,6, Power_ACO ? devices[0].value : devices[1].value);//реле№7 для Power_ACO
