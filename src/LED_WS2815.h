@@ -47,6 +47,22 @@ static uint8_t ledFrame = 0;
 static String ledLastPatternName = "";
 static bool ledAutoplayState = false;
 static bool ledLastPowerState = false;
+static int ledAppliedBrightness = -1;
+static String ledLastManualColor = "";
+static String ledLastManualOrder = "";
+static bool ledManualFrameRendered = false;
+
+static inline void setLedBrightnessIfChanged(uint8_t brightness){
+    if(ledAppliedBrightness == brightness) return;
+    ledStrip.SetBrightness(brightness); // Яркость меняем только при реальном изменении, чтобы не помечать кадр грязным без причины.
+    ledAppliedBrightness = brightness;
+}
+
+static inline bool showLedStripIfReady(){
+    if(!ledStrip.CanShow()) return false; // На ESP32-S3 RMT должен успеть освободиться между кадрами.
+    ledStrip.Show();
+    return true;
+}
 
 static inline RgbColor wheelColor(uint8_t pos){
     if(pos < 85) return RgbColor(pos * 3, 255 - pos * 3, 0);
@@ -374,6 +390,10 @@ void setup_WS2815(){
     ledStrip.Begin();
     clearToOrdered(RgbColor(0, 0, 0));
     ledStrip.Show();
+    ledAppliedBrightness = 255;
+    ledLastManualColor = "";
+    ledLastManualOrder = "";
+    ledManualFrameRendered = false;
     ledLastUpdate = millis();
     ledFrame = 0;
     ledLastPatternName = "";
@@ -383,12 +403,19 @@ void setup_WS2815(){
 }
 
 void loop_WS2815(){
+    const uint8_t desiredBrightness = constrain(new_bright, 0, 255);
+
     if(!Pow_WS2815){
-        if(ledLastPowerState){
-            ledStrip.SetBrightness(0);
+        if(ledLastPowerState || ledAppliedBrightness != 0){
+            if(!ledStrip.CanShow()) return;
+            setLedBrightnessIfChanged(0);
             clearToOrdered(RgbColor(0, 0, 0));
-            ledStrip.Show();
-            ledLastPowerState = false;
+            if(showLedStripIfReady()){
+                ledLastPowerState = false;
+                ledManualFrameRendered = false;
+                ledLastManualColor = "";
+                ledLastManualOrder = "";
+            }
         }
         ledFrame = 0;
         ledLastUpdate = millis();
@@ -397,21 +424,37 @@ void loop_WS2815(){
     }
 
     if(!ledLastPowerState){
-        ledStrip.SetBrightness(constrain(new_bright, 0, 255));
+        if(!ledStrip.CanShow()) return;
+        setLedBrightnessIfChanged(desiredBrightness);
         clearToOrdered(RgbColor(0, 0, 0));
-        ledStrip.Show();
-        ledLastPowerState = true;
+        if(showLedStripIfReady()){
+            ledLastPowerState = true;
+            ledManualFrameRendered = false;
+        }
         return;
     }
 
     updatePatternFromName();
 
     if(ColorRGB){
-        ledStrip.SetBrightness(constrain(new_bright, 0, 255));
-        clearToOrdered(parseHexColor(LEDColor));
-        ledStrip.Show();
+        String manualColor = LEDColor;
+        manualColor.trim();
+        String manualOrder = LedColorOrder;
+        manualOrder.toUpperCase();
+        bool manualChanged = !ledManualFrameRendered || ledLastManualColor != manualColor || ledLastManualOrder != manualOrder || ledAppliedBrightness != desiredBrightness;
+        if(!manualChanged) return;
+        if(!ledStrip.CanShow()) return;
+        setLedBrightnessIfChanged(desiredBrightness);
+        clearToOrdered(parseHexColor(manualColor));
+        if(showLedStripIfReady()){
+            ledLastManualColor = manualColor;
+            ledLastManualOrder = manualOrder;
+            ledManualFrameRendered = true;
+        }
         return;
     }
+
+    ledManualFrameRendered = false;
 
     if(LedAutoplay != ledAutoplayState){
         ledAutoplayState = LedAutoplay;
@@ -430,10 +473,12 @@ void loop_WS2815(){
         return;
     }
 
+    if(!ledStrip.CanShow()) return;
+
     ledLastUpdate = now;
     ledFrame++;
 
-    ledStrip.SetBrightness(constrain(new_bright, 0, 255));
+    setLedBrightnessIfChanged(desiredBrightness);
     renderPattern(ledFrame);
-    ledStrip.Show();
+    showLedStripIfReady();
 }

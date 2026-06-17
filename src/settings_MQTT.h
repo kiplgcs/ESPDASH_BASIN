@@ -45,6 +45,9 @@ inline bool mqttDiscoveryLegacyCleanupDone = false; // очистка удалё
 
 inline unsigned long mqttLastConnectAttempt = 0; // время последней попытки подключения
 inline const unsigned long mqttConnectInterval = 5000; // интервал попыток подключения
+inline unsigned long mqttReconnectBlockedUntil = 0; // После ошибок держим паузу, чтобы MQTT не подвешивал сетевую задачу частыми connect().
+inline uint8_t mqttConsecutiveFailures = 0; // Счетчик подряд идущих ошибок подключения для увеличения паузы.
+inline int mqttLastConnectState = MQTT_DISCONNECTED; // Последний код PubSubClient::state() для диагностики отказов MQTT.
 inline unsigned long mqttLastResolveAttempt = 0; // время последней попытки DNS
 inline const unsigned long mqttResolveInterval = 30000; // интервал резолва хоста
 inline bool mqttHasResolvedIp = false; // флаг успешного резолва
@@ -1279,7 +1282,7 @@ inline void configureMqttServer(){ // настройка сервера MQTT
   if(!mqttClient.setBufferSize(4096)){ // увеличиваем буфер для крупных MQTT Discovery payload
     mqttClient.setBufferSize(2048); // fallback, не ниже 2048
   }
-  mqttClient.setSocketTimeout(2); // быстрый таймаут сетевых операций
+  mqttClient.setSocketTimeout(1); // Короткий таймаут: не даем MQTT connect()/loop() надолго занять сетевую задачу.
   mqttClient.setKeepAlive(30); // keep-alive для снижения задержек
 }
 
@@ -1314,23 +1317,34 @@ inline void connectMqtt(){ // подключение к MQTT
   if(WiFi.status() != WL_CONNECTED) return; // выход если нет Wi-Fi
 if(!resolveMqttHost()) return; // хост не резолвится
   const unsigned long now = millis(); // текущее время
+  if(mqttReconnectBlockedUntil != 0 && static_cast<long>(now - mqttReconnectBlockedUntil) < 0) return; // После отказа брокера ждем backoff-окно.
   if(now - mqttLastConnectAttempt < mqttConnectInterval) return; // защита от частых попыток
   mqttLastConnectAttempt = now; // фиксация попытки подключения
 
   if(!mqttClient.connected()){ // если не подключены
     String clientId = "espdash-" + WiFi.macAddress(); // уникальный clientId
-bool connected = mqttClient.connect( // подключение с логином и LWT
-      clientId.c_str(),
-      mqttUsername.c_str(),
-      mqttPassword.c_str(),
-      mqttAvailabilityTopic,
-      0,
-      true,
-      "offline"
-    );
+    const bool useMqttCredentials = mqttUsername.length() > 0 || mqttPassword.length() > 0; // Пустые логин/пароль не отправляем как credentials.
+    bool connected = useMqttCredentials
+      ? mqttClient.connect(
+          clientId.c_str(),
+          mqttUsername.c_str(),
+          mqttPassword.c_str(),
+          mqttAvailabilityTopic,
+          0,
+          true,
+          "offline")
+      : mqttClient.connect(
+          clientId.c_str(),
+          mqttAvailabilityTopic,
+          0,
+          true,
+          "offline");
 
     if(connected){ // если подключение успешно
       mqttIsConnected = true; // обновление флага
+      mqttConsecutiveFailures = 0; // Успешное подключение сбрасывает счетчик ошибок.
+      mqttReconnectBlockedUntil = 0; // Снимаем MQTT backoff после успешного подключения.
+      mqttLastConnectState = MQTT_CONNECTED; // Фиксируем успешное состояние клиента.
        publishMqttAvailability("online", true); // публикация доступности
  #if 1 // MQTT Discovery отключен
       mqttDiscoveryStage = DISCOVERY_NONE; // сброс этапа discovery
@@ -1377,6 +1391,20 @@ bool connected = mqttClient.connect( // подключение с логином
     
     } else { // если не удалось подключиться
       mqttIsConnected = false; // сброс флага
+      mqttLastConnectState = mqttClient.state(); // Запоминаем код отказа PubSubClient для выбора паузы.
+      if(mqttConsecutiveFailures < 10) mqttConsecutiveFailures++; // Ограничиваем счетчик, чтобы backoff не переполнился.
+
+      unsigned long retryDelay = mqttConnectInterval; // Базовая пауза между попытками MQTT.
+      if(mqttLastConnectState == MQTT_CONNECT_BAD_CREDENTIALS || mqttLastConnectState == MQTT_CONNECT_UNAUTHORIZED){
+        retryDelay = 60000UL; // Ошибка логина/пароля: не дергаем брокер и сетевую задачу каждые 5 секунд.
+      } else {
+        uint8_t shift = mqttConsecutiveFailures > 1 ? mqttConsecutiveFailures - 1 : 0;
+        if(shift > 3) shift = 3;
+        retryDelay = mqttConnectInterval * (1UL << shift);
+        if(retryDelay > 30000UL) retryDelay = 30000UL;
+      }
+      mqttReconnectBlockedUntil = now + retryDelay; // Следующая попытка будет только после backoff-окна.
+      mqttClient.disconnect(); // Закрываем неудачную попытку, чтобы не держать зависший socket.
     }
   }
 }
@@ -1387,6 +1415,9 @@ inline void stopMqttService(){ // остановка MQTT
   mqttIsConnected = false; // сброс флага подключения
   mqttLastPublish = 0; // сброс таймера публикаций
   mqttLastConnectAttempt = 0; // сброс таймера подключений
+  mqttReconnectBlockedUntil = 0; // При ручном применении настроек снимаем паузу повторного подключения.
+  mqttConsecutiveFailures = 0; // Новые настройки должны стартовать без старого счетчика ошибок.
+  mqttLastConnectState = MQTT_DISCONNECTED; // Сбрасываем диагностический код MQTT.
   mqttLastResolveAttempt = 0; // сброс таймера резолва
 
   #if 1 // MQTT Discovery отключен

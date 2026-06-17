@@ -181,7 +181,7 @@ void setup_ds18(String &sensor0Label, String &sensor1Label) { // Начало ф
   if (DS1Assigned) sensors.setResolution(sensor0, 12); // Проверяем условие корректности данных/состояния.
   if (DS2Assigned) sensors.setResolution(sensor1, 12); // Проверяем условие корректности данных/состояния.
 
-  sensors.setWaitForConversion(true); // Выполняем действие библиотеки DallasTemperature для DS18B20.
+  sensors.setWaitForConversion(false); // Температуру читаем неблокирующе, чтобы DS18B20 не задерживал RS485 и web/MQTT.
 }
 
 inline void onDs18Sensor0Select(const int &value) { // Обрабатываем назначение датчика на температуру бассейна.
@@ -222,13 +222,7 @@ inline void handleDs18ScanButton() { // Отрабатываем нажатие 
   } // Завершаем проверку события по кнопке поиска.
 }
 
-void Temp_DS18B20(int interval_Temp_DS18B20) { // Начало функции инициализации/чтения DS18B20.
-  static unsigned long timer; // Служебная строка логики DS18B20.
-  if (millis() - timer < interval_Temp_DS18B20) return; // Проверяем условие корректности данных/состояния.
-  timer = millis(); // Служебная строка логики DS18B20.
-
-  sensors.requestTemperatures(); // Выполняем действие библиотеки DallasTemperature для DS18B20.
-
+inline void readDs18TemperaturesAfterConversion() { // Читаем уже готовый результат DS18B20 без ожидания на шине OneWire.
   DS1Assigned = !deviceAddressIsZero(sensor0); // Служебная строка логики DS18B20.
   DS1Available = false; // Служебная строка логики DS18B20.
   if (DS1Assigned) { // Проверяем условие корректности данных/состояния.
@@ -256,4 +250,25 @@ void Temp_DS18B20(int interval_Temp_DS18B20) { // Начало функции и
   } else { // Служебная строка логики DS18B20.
     DS2 = 0.0f; // Служебная строка логики DS18B20.
   }
+}
+
+void Temp_DS18B20(int interval_Temp_DS18B20) { // Запрашиваем DS18B20 без блокировки основного loop.
+  static unsigned long lastRequestAt = 0; // Время последнего запуска конверсии DS18B20.
+  static unsigned long conversionReadyAt = 0; // Момент, когда 12-битная конверсия должна быть готова.
+  static bool conversionPending = false; // Флаг ожидания результата после requestTemperatures().
+  constexpr unsigned long ds18ConversionMs = 750; // Максимальное время конверсии DS18B20 при 12 битах.
+
+  unsigned long now = millis();
+  if (conversionPending) {
+    if (static_cast<long>(now - conversionReadyAt) < 0) return; // Еще ждем готовность, но не блокируем loop.
+    conversionPending = false;
+    readDs18TemperaturesAfterConversion();
+    return;
+  }
+
+  if (now - lastRequestAt < static_cast<unsigned long>(interval_Temp_DS18B20)) return;
+  lastRequestAt = now;
+  sensors.requestTemperatures(); // Только запускаем конверсию; ожидание отключено через setWaitForConversion(false).
+  conversionReadyAt = now + ds18ConversionMs;
+  conversionPending = true;
 }

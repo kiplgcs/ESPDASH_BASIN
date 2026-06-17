@@ -19,6 +19,49 @@ bool checkTimeInInterval(int currentHour, int currentMinute, uint16_t startMinut
   return (current >= startMinutes) && (current < endMinutes);
 }
 
+constexpr uint32_t kModbusRelayMaxPending = 4; // Лимит очереди для команд реле: команда не теряется, а повторится в следующем проходе.
+constexpr uint32_t kModbusPollMaxPending = 2; // Опрос входов запускаем только при почти пустой очереди, чтобы не подвесить RS485.
+constexpr unsigned long kModbusInputPollMs = 100; // Входы платы реле опрашиваем быстро, намного чаще 1 секунды.
+constexpr unsigned long kModbusRelayPollMs = 500; // Состояние реле сверяем отдельно, без постоянной пачки записей.
+constexpr uint8_t kMaxRelayWritesPerPass = 2; // Ограничиваем всплеск записей за один проход loop, чтобы входы читались без задержки.
+
+inline bool ModbusRelaySentState[16] = {false}; // Последнее состояние реле, которое уже поставлено в очередь RS485.
+inline bool ModbusRelaySentKnown[16] = {false}; // Флаг известности состояния, чтобы при старте один раз синхронизировать все реле.
+inline bool ModbusRelayNeedReadback = true; // После записей просим свежую сверку реле.
+
+inline bool queueRelayWriteIfNeeded(uint8_t relay, bool desired, uint8_t &writesThisPass) {
+  if (relay >= 16) return false;
+  if (ModbusRelaySentKnown[relay] && ModbusRelaySentState[relay] == desired) return true;
+  if (writesThisPass >= kMaxRelayWritesPerPass) return false;
+  if (!modbusQueueHasRoom(kModbusRelayMaxPending)) return false;
+
+  Error err = modbusWriteRelay(relay, desired);
+  if (err == SUCCESS) {
+    ModbusRelaySentState[relay] = desired;
+    ModbusRelaySentKnown[relay] = true;
+    ModbusRelayNeedReadback = true;
+    writesThisPass++;
+    return true;
+  }
+  return false;
+}
+
+inline void pollModbusInputsAndRelays() {
+  static unsigned long lastInputPoll = 0;
+  static unsigned long lastRelayPoll = 0;
+  unsigned long now = millis();
+
+  if (!AktualReadInput && now - lastInputPoll >= kModbusInputPollMs && modbusQueueHasRoom(kModbusPollMaxPending)) {
+    if (modbusReadInputs() == SUCCESS) lastInputPoll = now;
+  }
+
+  if (!AktualReadRelay && (ModbusRelayNeedReadback || now - lastRelayPoll >= kModbusRelayPollMs) && modbusQueueHasRoom(kModbusPollMaxPending)) {
+    if (modbusReadRelays() == SUCCESS) {
+      lastRelayPoll = now;
+    }
+  }
+}
+
   
 /**************************************************************************************/
 /**************************************************************************************/
@@ -625,9 +668,11 @@ void TimerControlRelay(int interval) {
 
 //   if (!Activation_Heat) {Error err = RS485.addRequest(40001,1,0x05,4, devices[1].value );} //реле№5 для PowerHeat
 void ControlModbusRelay(int interval) {
+  pollModbusInputsAndRelays();
   static unsigned long timer;
-  if (interval + timer > millis()) return;
-  timer = millis();
+  unsigned long now = millis();
+  if (now - timer < static_cast<unsigned long>(interval)) return;
+  timer = now;
 //---------------------------------------------------------------------------------
 //---------------------------------------------------------------------------------
 //---------------------------------------------------------------------------------
@@ -661,12 +706,20 @@ if (AktualReadInput) {
     WaterLevelSensorLower = ReadInputArray[0]; // Датчик нижнего уровня (вход №1)
     WaterLevelSensorUpper = ReadInputArray[1]; // Датчик верхнего уровня (вход №2)
     WaterLevelSensorDrain = ReadInputArray[2]; // Датчик уровня для слива (вход №3)
+    AktualReadInput = false;
   }
 
   if (AktualReadRelay) {
     Power_Topping_State = ReadRelayArray[13]; // Состояние реле №14 (соленоид долива воды)
     const bool filtrationRelayActive = ReadRelayArray[8]; // Реле насоса фильтрации (реле №3)
     Power_Drain_State = Power_Drain && filtrationRelayActive; // Слив активен только при включенном насосе
+    for (uint8_t relay = 0; relay < 16; relay++) {
+      if (ModbusRelaySentKnown[relay] && ReadRelayArray[relay] != ModbusRelaySentState[relay]) {
+        ModbusRelaySentKnown[relay] = false; // Фактическое реле не совпало с командой, повторим запись.
+      }
+    }
+    ModbusRelayNeedReadback = false;
+    AktualReadRelay = false;
   } else {
     Power_Topping_State = Power_Topping;
     Power_Drain_State = Power_Drain && Power_Filtr;
@@ -703,6 +756,40 @@ if (AktualReadInput) {
         DrainModeStartedAt = 0;
   }
 
+  uint8_t relayWritesThisPass = 0; // За один проход пишем ограниченное число реле, чтобы опрос входов не ждал длинную пачку.
+  queueRelayWriteIfNeeded(0, Lamp, relayWritesThisPass); // Реле 1: лампа.
+  queueRelayWriteIfNeeded(1, Pow_WS2815, relayWritesThisPass); // Реле 2: питание WS2815.
+  queueRelayWriteIfNeeded(8, Power_Filtr, relayWritesThisPass); // Реле 3: насос фильтрации.
+
+  const bool modbusHeatInterlockActive = Power_Filtr || ReadRelayArray[8]; // Нагрев разрешен только при работающем насосе.
+  if (!Activation_Heat || !modbusHeatInterlockActive) {
+    Power_Heat = false; // Снимаем нагрев до записи реле, если нет разрешения по протоку.
+  }
+  queueRelayWriteIfNeeded(4, Power_Heat, relayWritesThisPass); // Реле 5: нагреватель.
+
+  queueRelayWriteIfNeeded(14, Power_Warm_floor_heating, relayWritesThisPass); // Реле 15: теплый пол.
+  queueRelayWriteIfNeeded(15, Pow_Ul_light, relayWritesThisPass); // Реле 16: уличное освещение.
+  queueRelayWriteIfNeeded(13, Power_Topping, relayWritesThisPass); // Реле 14: долив воды.
+
+  const bool modbusAirPumpActive = AirPump || AirPumpAuto; // Компрессор с учетом ручного и автоматического режима.
+  const bool modbusValveBackwashActive = SolValveFilBack || ValveBackwashAuto; // Клапан BACKWASH с учетом автоматики.
+  const bool modbusValveFiltrationActive = SolValveFiltration || ValveFiltrationAuto; // Клапан FILTRATION с учетом автоматики.
+  const bool modbusSandDumpActive = SolSandDump || SolSandDumpAuto; // Сброс песка с учетом ручного и автоматического режима.
+  queueRelayWriteIfNeeded(9, modbusAirPumpActive, relayWritesThisPass); // Реле 10: компрессор воздуха.
+  queueRelayWriteIfNeeded(10, modbusValveFiltrationActive, relayWritesThisPass); // Реле 11: клапан FILTRATION.
+  queueRelayWriteIfNeeded(11, modbusValveBackwashActive, relayWritesThisPass); // Реле 12: клапан BACKWASH.
+  queueRelayWriteIfNeeded(12, modbusSandDumpActive, relayWritesThisPass); // Реле 13: сброс песка.
+
+  const bool modbusH2O2Active = Power_H2O2 || ManualPulse_H2O2_Active; // H2O2 активен от постоянной команды или ручного импульса.
+  const bool modbusAcoActive = Power_ACO || ManualPulse_ACO_Active; // ACO активен от постоянной команды или ручного импульса.
+  queueRelayWriteIfNeeded(5, modbusH2O2Active, relayWritesThisPass); // Реле 6: H2O2.
+  queueRelayWriteIfNeeded(6, modbusAcoActive, relayWritesThisPass); // Реле 7: ACO.
+
+  pollModbusInputsAndRelays(); // После возможных записей сразу даем шанс быстрому опросу входов/состояний.
+  return;
+
+#if 0
+  // Старый режим оставлен выключенным для сравнения: он каждую секунду писал все реле и забивал очередь RS485.
 
   Error err = RS485.addRequest(40001, 1, 0x05, 0, Lamp ? devices[0].value : devices[1].value); // реле№1 для Lamp
   err = RS485.addRequest(40001, 1, 0x05, 1, Pow_WS2815 ? devices[0].value : devices[1].value); //реле№2 для Pow_WS2815
@@ -752,6 +839,7 @@ if (AktualReadInput) {
 //   if(Lamp_autosvet && Lumen_Ul_percent < 20){Lamp=true;}  else if (Lamp_autosvet && Lumen_Ul_percent > 30) {Lamp=false;} 
   AktualReadRelay = false;
   AktualReadInput = false;
+#endif
 }
 //   err = RS485.addRequest(40001,1,0x05,15, Pow_Ul_light ? devices[0].value : devices[1].value); //Уличное освещение на столбе
  

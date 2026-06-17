@@ -7,6 +7,7 @@
   bool AktualReadInput = false; // Флаг актульных данных после прочтенния после перезагрузки или передаче данных.
   String InStr = ""; //Строка полученных данных из Modbus RTU
   char CharArray[16]; // Текстовый массив Char
+  constexpr bool kModbusDebugSerial = false; // Отладочный вывод Modbus держим выключенным, чтобы Serial не тормозил RS485 и Wi-Fi.
 
 
   // Создаем экземпляр клиента ModbusRTU
@@ -35,7 +36,9 @@
 //Определим функцию обратного вызова для поступающих ответов данных. 
 void handleData(ModbusMessage msg, uint32_t token) 
   {
-    Serial.printf("Response: serverID=%d, FC=%d, Token=%08X, length=%d:\n", msg.getServerID(), msg.getFunctionCode(), token, msg.size());
+    if (kModbusDebugSerial) {
+      Serial.printf("Response: serverID=%d, FC=%d, Token=%08X, length=%d:\n", msg.getServerID(), msg.getFunctionCode(), token, msg.size());
+    }
 
     byte InArray[8]; 
   
@@ -44,12 +47,16 @@ void handleData(ModbusMessage msg, uint32_t token)
     memset(CharArray, '\0', 16); //  16 символов так как дабавляем нули для HEX представления
 
     int Index=0;
-  for (auto& byte : msg) {InArray[Index++] = byte;}
+  for (auto& byte : msg) {
+    if (Index < 8) InArray[Index++] = byte;
+  }
 
     //Временная функция для видуального отображения в Serial.print:
     sprintf(CharArray, "%02X%02X%02X%02X%02X%02X%02X%02X\n", InArray[0], InArray[1], InArray[2], InArray[3], InArray[4], InArray[5], InArray[6], InArray[7]);   
-    Serial.print("Token: "); Serial.println(token);
-    Serial.println(CharArray);
+    if (kModbusDebugSerial) {
+      Serial.print("Token: "); Serial.println(token);
+      Serial.println(CharArray);
+    }
 
   
     //Периодически читаем для обратной сосояния входов и реле и записываем в массивы
@@ -83,9 +90,27 @@ void setup_Modbus() {
   RS485.onDataHandler(&handleData);
   //RS485.onErrorHandler(&handleError);
 
-  RS485.setTimeout(500);//Запустить фоновую задачу ModbusRTU
+  RS485.setTimeout(200);//Короткий таймаут не дает зависшему ответу держать очередь RS485 полсекунды.
   
-  RS485.begin();//Запускаем  фоновую задачу ModbusClientRTU
+  RS485.begin(0);//Запускаем фоновую задачу ModbusClientRTU на сетевом ядре с высоким приоритетом библиотеки.
+}
+
+inline bool modbusQueueHasRoom(uint32_t maxPending) {
+  return RS485.pendingRequests() < maxPending; // Не набиваем очередь, чтобы команды реле и опрос входов проходили быстро.
+}
+
+inline Error modbusWriteRelay(uint16_t relay, bool enabled) {
+  return RS485.addRequest(40001, 1, 0x05, relay, enabled ? devices[0].value : devices[1].value);
+}
+
+inline Error modbusReadRelays() {
+  AktualReadRelay = false; // Ждем свежий ответ именно на новый запрос чтения реле.
+  return RS485.addRequest(40050, 1, 0x03, 0, 1);
+}
+
+inline Error modbusReadInputs() {
+  AktualReadInput = false; // Ждем свежий ответ именно на новый запрос чтения входов.
+  return RS485.addRequest(40060, 1, 0x03, 4, 1);
 }
 
 
