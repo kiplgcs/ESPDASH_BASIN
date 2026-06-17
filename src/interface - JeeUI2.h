@@ -23,7 +23,7 @@ inline void interface(){ // Декларатиынве функции интер
     UI_MENU("🚏 Уличное освещение");
     UI_MENU("⏰ Настройка времени");
     UI_MENU("Реле RS485");
-  
+   
     // Общая информация по бассейну
     UI_PAGE();
     UI_IMAGE("Image1", "/Basin.jpg", "width:250%;height:800; x:-80%;y:100%;");
