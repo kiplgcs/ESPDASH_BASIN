@@ -1,6 +1,7 @@
 //*****************************************************************************************************//
 #pragma once
   #include "ModbusClientRTU.h"
+  constexpr bool kModbusDebug = false;
   bool ReadRelayArray[16];// Массив для хранения прочитанных состояний реле - 16 бит - 16 реле в виде false/true
   bool ReadInputArray[16];// Массив для хранения прочитанных состояний входов - 16 бит - 16 входов в виде false/true
   bool AktualReadRelay = false; // Флаг актульных данных после прочтенния после перезагрузки или передаче данных.
@@ -35,7 +36,9 @@
 //Определим функцию обратного вызова для поступающих ответов данных. 
 void handleData(ModbusMessage msg, uint32_t token) 
   {
-    Serial.printf("Response: serverID=%d, FC=%d, Token=%08X, length=%d:\n", msg.getServerID(), msg.getFunctionCode(), token, msg.size());
+    if (kModbusDebug) {
+      Serial.printf("Response: serverID=%d, FC=%d, Token=%08X, length=%d:\n", msg.getServerID(), msg.getFunctionCode(), token, msg.size());
+    }
 
     byte InArray[8]; 
   
@@ -48,8 +51,10 @@ void handleData(ModbusMessage msg, uint32_t token)
 
     //Временная функция для видуального отображения в Serial.print:
     sprintf(CharArray, "%02X%02X%02X%02X%02X%02X%02X%02X\n", InArray[0], InArray[1], InArray[2], InArray[3], InArray[4], InArray[5], InArray[6], InArray[7]);   
-    Serial.print("Token: "); Serial.println(token);
-    Serial.println(CharArray);
+    if (kModbusDebug) {
+      Serial.print("Token: "); Serial.println(token);
+      Serial.println(CharArray);
+    }
 
   
     //Периодически читаем для обратной сосояния входов и реле и записываем в массивы

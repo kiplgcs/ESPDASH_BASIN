@@ -549,7 +549,7 @@ void read_heat_h0(){
 //     } 
 // }
 // void trigger19(){ read_heat_h0();}
-    if(Sider_heat_on < 31 && Sider_heat_on >= 0) {
+    if(Sider_heat_on <= 35 && Sider_heat_on >= 0) {
         Sider_heat1 = Sider_heat = Sider_heat_on;
         saveValue<int>("Sider_heat", Sider_heat);
     }
@@ -659,16 +659,71 @@ void read_Dispensers_cb1(){ // Колбэк-функция обработки з
 }
 
 void trigger25(){read_Dispensers_cb1();}
-// // printh 23 02 54 1A -
-// void trigger26(){
-//     //////////// 
-// } 
 
+uint32_t readNextionNum(const char* component, uint32_t fallback) {
+    uint32_t value = myNex.readNumber(component);
+    return value == 777777 ? fallback : value;
+}
 
-// // printh 23 02 54 1B - 
-// void trigger27(){
-//   //////////// 
-// } 
+void read_Dispensers_limits() {
+    uint32_t phLowInt = readNextionNum("Dispensers.n0.val", static_cast<uint32_t>(PH_Lower));
+    uint32_t phLowDec = readNextionNum("Dispensers.n1.val", static_cast<uint32_t>((PH_Lower - static_cast<int>(PH_Lower)) * 10.0f + 0.5f));
+    uint32_t phHighInt = readNextionNum("Dispensers.n2.val", static_cast<uint32_t>(PH_Upper));
+    uint32_t phHighDec = readNextionNum("Dispensers.n3.val", static_cast<uint32_t>((PH_Upper - static_cast<int>(PH_Upper)) * 10.0f + 0.5f));
+    phLowDec = phLowDec > 9 ? 9 : phLowDec;
+    phHighDec = phHighDec > 9 ? 9 : phHighDec;
+    PH_Lower = static_cast<float>(phLowInt) + static_cast<float>(phLowDec) / 10.0f;
+    PH_Upper = static_cast<float>(phHighInt) + static_cast<float>(phHighDec) / 10.0f;
+    if (PH_Lower > PH_Upper) {
+        float tmp = PH_Lower;
+        PH_Lower = PH_Upper;
+        PH_Upper = tmp;
+    }
+    PH_setting = PH_Upper;
+    saveValue<float>("PH_Lower", PH_Lower);
+    saveValue<float>("PH_Upper", PH_Upper);
+    saveValue<float>("PH_setting", PH_setting);
+
+    uint32_t clLowInt = readNextionNum("Dispensers.n6.val", static_cast<uint32_t>(CL_Lower));
+    uint32_t clLowDec = readNextionNum("Dispensers.n7.val", static_cast<uint32_t>((CL_Lower - static_cast<int>(CL_Lower)) * 100.0f + 0.5f));
+    uint32_t clHighInt = readNextionNum("Dispensers.n4.val", static_cast<uint32_t>(CL_Upper));
+    uint32_t clHighDec = readNextionNum("Dispensers.n5.val", static_cast<uint32_t>((CL_Upper - static_cast<int>(CL_Upper)) * 100.0f + 0.5f));
+    clLowDec = clLowDec > 99 ? 99 : clLowDec;
+    clHighDec = clHighDec > 99 ? 99 : clHighDec;
+    CL_Lower = static_cast<float>(clLowInt) + static_cast<float>(clLowDec) / 100.0f;
+    CL_Upper = static_cast<float>(clHighInt) + static_cast<float>(clHighDec) / 100.0f;
+    if (CL_Lower > CL_Upper) {
+        float tmp = CL_Lower;
+        CL_Lower = CL_Upper;
+        CL_Upper = tmp;
+    }
+    saveValue<float>("CL_Lower", CL_Lower);
+    saveValue<float>("CL_Upper", CL_Upper);
+}
+
+void trigger28(){read_Dispensers_limits();}
+void trigger29(){read_Dispensers_limits();}
+void read_topping_sw0_sw1_sw2(){
+    uint32_t sw0 = myNex.readNumber("set_topping.sw0.val");
+    uint32_t sw1 = myNex.readNumber("set_topping.sw1.val");
+    uint32_t sw2 = myNex.readNumber("set_topping.sw2.val");
+
+    if(sw0 != 777777) {
+        Activation_Water_Level = sw0 ? true : false;
+        saveValue<int>("Activation_Water_Level", Activation_Water_Level ? 1 : 0);
+    }
+    if(sw1 != 777777) {
+        Power_Drain = sw1 ? true : false;
+        saveValue<int>("Power_Drain", Power_Drain ? 1 : 0);
+    }
+    if(sw2 != 777777) {
+        Power_Topping = sw2 ? true : false;
+        saveValue<int>("Power_Topping", Power_Topping ? 1 : 0);
+    }
+}
+
+void trigger26(){read_topping_sw0_sw1_sw2();}
+void trigger27(){read_topping_sw0_sw1_sw2();}
 
 // // printh 23 02 54 1C - Dispensers  свчитываем состояние n10 / n11
 // void trigger28(){

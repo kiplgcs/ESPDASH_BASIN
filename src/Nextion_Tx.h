@@ -68,6 +68,10 @@ void Nextion_Transmit (int interval) {
   static unsigned long timer;
   if (interval + timer > millis()) return; 
   timer = millis();
+  uint32_t currentPage = myNex.readNumber("dp");
+  if (currentPage != 777777) {
+    Nx_page_id = currentPage;
+  }
 // //---------------------------------------------------------------------------------
 // //---------------------------------------------------------------------------------
 // //---------------------------------------------------------------------------------
@@ -79,7 +83,7 @@ void Nextion_Transmit (int interval) {
 if (Lamp != Lamp1 && !triggerRestartNextion){Lamp1 = Lamp;
   myNex.writeStr("dim=50");
   myNex.writeNum("page0.b0.pic", Lamp ? 2 : 1); 
-  myNex.writeStr("page set_lamp");
+  //   myNex.writeStr("page set_lamp");
   myNex.writeNum("set_lamp.sw3.val", Lamp ? 1 : 0);
 
   // Error err = RS485.addRequest(40001,1,0x05,0, Lamp ? devices[0].value : devices[1].value);
@@ -93,19 +97,19 @@ if (Lamp != Lamp1 && !triggerRestartNextion){Lamp1 = Lamp;
 
 if (Saved_Lamp_autosvet != Lamp_autosvet && !triggerRestartNextion){Saved_Lamp_autosvet = Lamp_autosvet;
   myNex.writeStr("dim=50");
-  myNex.writeStr("page set_lamp");
+  //   myNex.writeStr("page set_lamp");
   myNex.writeNum("set_lamp.sw1.val", Lamp_autosvet ? 1 : 0); 
 }
 
 if (Saved_Power_Time1 != Power_Time1 && !triggerRestartNextion){ Saved_Power_Time1 = Power_Time1;
   myNex.writeStr("dim=50");  
-  myNex.writeStr("page set_lamp");
+  //   myNex.writeStr("page set_lamp");
   myNex.writeNum("set_lamp.sw0.val", Power_Time1 ? 1 : 0); 
 }
 
 UITimerEntry &lampTimer = ui.timer("LampTimer");
 if (Saved_Lamp_timeON1 != lampTimer.on && !triggerRestartNextion) {Saved_Lamp_timeON1 = lampTimer.on;  myNex.writeStr("dim=50");
-  myNex.writeStr("page set_lamp");
+  //   myNex.writeStr("page set_lamp");
   String lampOnStr = formatMinutesToTime(lampTimer.on);
   myNex.writeNum("set_lamp.n0.val", getSubstring(lampOnStr, 0, 1));
   myNex.writeNum("set_lamp.n1.val", getSubstring(lampOnStr, 3, 4));
@@ -113,7 +117,7 @@ if (Saved_Lamp_timeON1 != lampTimer.on && !triggerRestartNextion) {Saved_Lamp_ti
 
 if (Saved_Lamp_timeOFF1 != lampTimer.off && !triggerRestartNextion) {Saved_Lamp_timeOFF1 = lampTimer.off;
   myNex.writeStr("dim=50");
-  myNex.writeStr("page set_lamp");
+  //   myNex.writeStr("page set_lamp");
   String lampOffStr = formatMinutesToTime(lampTimer.off);
   myNex.writeNum("set_lamp.n2.val", getSubstring(lampOffStr, 0, 1));
   myNex.writeNum("set_lamp.n3.val", getSubstring(lampOffStr, 3, 4));
@@ -127,7 +131,7 @@ if (Saved_Lamp_timeOFF1 != lampTimer.off && !triggerRestartNextion) {Saved_Lamp_
   if (Pow_WS28151 != Pow_WS2815 && !triggerRestartNextion){Pow_WS28151 = Pow_WS2815;
     myNex.writeStr("dim=50");
     myNex.writeNum("page0.b12.pic", Pow_WS2815 ? 2 : 1);
-    myNex.writeStr("page set_RGB"); 
+    //     myNex.writeStr("page set_RGB"); 
     myNex.writeNum("set_RGB.sw3.val", Pow_WS2815 ? 1 : 0); 
 
   // //if(Pow_WS2815 == true) {/*loop_i2c(String("LED___ON"));} else if  (Pow_WS2815 ==false) {loop_i2c(String("LED__OFF"));*/}
@@ -151,13 +155,13 @@ if (Saved_Lamp_timeOFF1 != lampTimer.off && !triggerRestartNextion) {Saved_Lamp_
 
 if (Saved_Pow_WS2815_autosvet != Pow_WS2815_autosvet && !triggerRestartNextion){Saved_Pow_WS2815_autosvet = Pow_WS2815_autosvet;
   myNex.writeStr("dim=50");
-  myNex.writeStr("page set_RGB"); 
+  //   myNex.writeStr("page set_RGB"); 
   myNex.writeNum("set_RGB.sw2.val", Pow_WS2815_autosvet ? 1 : 0); 
 }
 
 if (Saved_WS2815_Time1 != WS2815_Time1 && !triggerRestartNextion){ Saved_WS2815_Time1 = WS2815_Time1;
   myNex.writeStr("dim=50");
-  myNex.writeStr("page set_RGB"); //отобразить страницу
+  //   myNex.writeStr("page set_RGB"); //отобразить страницу
   myNex.writeNum("set_RGB.sw0.val", WS2815_Time1); 
 }
 
@@ -165,7 +169,7 @@ if (Saved_WS2815_Time1 != WS2815_Time1 && !triggerRestartNextion){ Saved_WS2815_
 UITimerEntry &rgbTimer = ui.timer("RgbTimer");
 if (Saved_timeON_WS2815 != rgbTimer.on && !triggerRestartNextion){Saved_timeON_WS2815 = rgbTimer.on;
   myNex.writeStr("dim=50");
-  myNex.writeStr("page set_RGB"); //отобразить страницу
+  //   myNex.writeStr("page set_RGB"); //отобразить страницу
   String rgbOnStr = formatMinutesToTime(rgbTimer.on);
   myNex.writeNum("set_RGB.n0.val", getSubstring(rgbOnStr, 0, 1));
   myNex.writeNum("set_RGB.n1.val", getSubstring(rgbOnStr, 3, 4));
@@ -173,7 +177,7 @@ if (Saved_timeON_WS2815 != rgbTimer.on && !triggerRestartNextion){Saved_timeON_W
 
 if (Saved_timeOFF_WS2815 != rgbTimer.off && !triggerRestartNextion){Saved_timeOFF_WS2815 = rgbTimer.off;
   myNex.writeStr("dim=50");
-  myNex.writeStr("page set_RGB");//отобразить страницу
+  //   myNex.writeStr("page set_RGB");//отобразить страницу
   String rgbOffStr = formatMinutesToTime(rgbTimer.off);
   myNex.writeNum("set_RGB.n2.val", getSubstring(rgbOffStr, 0, 1));
   myNex.writeNum("set_RGB.n3.val", getSubstring(rgbOffStr, 3, 4));
@@ -197,7 +201,7 @@ if (Saved_timeOFF_WS2815 != rgbTimer.off && !triggerRestartNextion){Saved_timeOF
 if (Power_Filtr1 != Power_Filtr && !triggerRestartNextion) {Power_Filtr1 = Power_Filtr;
     myNex.writeStr("dim=50");
     myNex.writeNum("page0.b1.pic", Power_Filtr ? 4 : 3);
-    myNex.writeStr("page set_filtr");
+    //     myNex.writeStr("page set_filtr");
     myNex.writeNum("set_filtr.sw3.val", Power_Filtr ? 1 : 0);
 }   //pcfRelays.digitalWrite(P2, Power_Filtr ? LOW : HIGH);
 
@@ -209,7 +213,7 @@ if (Power_Filtr1 != Power_Filtr && !triggerRestartNextion) {Power_Filtr1 = Power
 
 if (Saved_Filtr_Time1 != Filtr_Time1 && !triggerRestartNextion){Saved_Filtr_Time1 = Filtr_Time1;
   myNex.writeStr("dim=50");
-  myNex.writeStr("page set_filtr");
+  //   myNex.writeStr("page set_filtr");
   myNex.writeNum("set_filtr.sw0.val", Filtr_Time1 ? 1 : 0); 
 }
 
@@ -221,7 +225,7 @@ if (Saved_Filtr_Time1 != Filtr_Time1 && !triggerRestartNextion){Saved_Filtr_Time
 
 if (Saved_Filtr_Time2 != Filtr_Time2 && !triggerRestartNextion){Saved_Filtr_Time2 = Filtr_Time2;
   myNex.writeStr("dim=50");
-  myNex.writeStr("page set_filtr");
+  //   myNex.writeStr("page set_filtr");
   myNex.writeNum("set_filtr.sw2.val", Filtr_Time2 ? 1 : 0); 
 }
 
@@ -233,7 +237,7 @@ if (Saved_Filtr_Time2 != Filtr_Time2 && !triggerRestartNextion){Saved_Filtr_Time
 
 if (Saved_Filtr_Time3 != Filtr_Time3 && !triggerRestartNextion){Saved_Filtr_Time3 = Filtr_Time3;
   myNex.writeStr("dim=50");
-  myNex.writeStr("page set_filtr");
+  //   myNex.writeStr("page set_filtr");
   myNex.writeNum("set_filtr.sw1.val", Filtr_Time3 ? 1 : 0); 
 }
 
@@ -247,7 +251,7 @@ if (Saved_Filtr_Time3 != Filtr_Time3 && !triggerRestartNextion){Saved_Filtr_Time
 UITimerEntry &filtrTimer1 = ui.timer("FiltrTimer1");
 if (Saved_Filtr_timeON1 != filtrTimer1.on && !triggerRestartNextion) {Saved_Filtr_timeON1 = filtrTimer1.on;
   myNex.writeStr("dim=50");
-  myNex.writeStr("page set_filtr");
+  //   myNex.writeStr("page set_filtr");
   String filtrOn1Str = formatMinutesToTime(filtrTimer1.on);
   myNex.writeNum("set_filtr.n0.val", getSubstring(filtrOn1Str, 0, 1));
   myNex.writeNum("set_filtr.n1.val", getSubstring(filtrOn1Str, 3, 4));
@@ -262,7 +266,7 @@ if (Saved_Filtr_timeON1 != filtrTimer1.on && !triggerRestartNextion) {Saved_Filt
 
 if (Saved_Filtr_timeOFF1 != filtrTimer1.off && !triggerRestartNextion) {Saved_Filtr_timeOFF1 = filtrTimer1.off;
   myNex.writeStr("dim=50");
-  myNex.writeStr("page set_filtr");
+  //   myNex.writeStr("page set_filtr");
   String filtrOff1Str = formatMinutesToTime(filtrTimer1.off);
   myNex.writeNum("set_filtr.n2.val", getSubstring(filtrOff1Str, 0, 1));
   myNex.writeNum("set_filtr.n3.val", getSubstring(filtrOff1Str, 3, 4));
@@ -278,7 +282,7 @@ if (Saved_Filtr_timeOFF1 != filtrTimer1.off && !triggerRestartNextion) {Saved_Fi
 UITimerEntry &filtrTimer2 = ui.timer("FiltrTimer2");
 if (Saved_Filtr_timeON2 != filtrTimer2.on && !triggerRestartNextion) {Saved_Filtr_timeON2 = filtrTimer2.on;
   myNex.writeStr("dim=50");
-  myNex.writeStr("page set_filtr");
+  //   myNex.writeStr("page set_filtr");
   String filtrOn2Str = formatMinutesToTime(filtrTimer2.on);
   myNex.writeNum("set_filtr.n4.val", getSubstring(filtrOn2Str, 0, 1));
   myNex.writeNum("set_filtr.n5.val", getSubstring(filtrOn2Str, 3, 4));
@@ -293,7 +297,7 @@ if (Saved_Filtr_timeON2 != filtrTimer2.on && !triggerRestartNextion) {Saved_Filt
 
 if (Saved_Filtr_timeOFF2 != filtrTimer2.off && !triggerRestartNextion) {Saved_Filtr_timeOFF2 = filtrTimer2.off;
   myNex.writeStr("dim=50");
-  myNex.writeStr("page set_filtr");
+  //   myNex.writeStr("page set_filtr");
   String filtrOff2Str = formatMinutesToTime(filtrTimer2.off);
   myNex.writeNum("set_filtr.n6.val", getSubstring(filtrOff2Str, 0, 1));
   myNex.writeNum("set_filtr.n7.val", getSubstring(filtrOff2Str, 3, 4));
@@ -309,7 +313,7 @@ if (Saved_Filtr_timeOFF2 != filtrTimer2.off && !triggerRestartNextion) {Saved_Fi
 UITimerEntry &filtrTimer3 = ui.timer("FiltrTimer3");
 if (Saved_Filtr_timeON3 != filtrTimer3.on && !triggerRestartNextion) {Saved_Filtr_timeON3 = filtrTimer3.on;
   myNex.writeStr("dim=50");
-  myNex.writeStr("page set_filtr");
+  //   myNex.writeStr("page set_filtr");
   String filtrOn3Str = formatMinutesToTime(filtrTimer3.on);
   myNex.writeNum("set_filtr.n8.val", getSubstring(filtrOn3Str, 0, 1));
   myNex.writeNum("set_filtr.n9.val", getSubstring(filtrOn3Str, 3, 4));
@@ -324,7 +328,7 @@ if (Saved_Filtr_timeON3 != filtrTimer3.on && !triggerRestartNextion) {Saved_Filt
 
 if (Saved_Filtr_timeOFF3 != filtrTimer3.off && !triggerRestartNextion) {Saved_Filtr_timeOFF3 = filtrTimer3.off;
   myNex.writeStr("dim=50");
-  myNex.writeStr("page set_filtr");
+  //   myNex.writeStr("page set_filtr");
   String filtrOff3Str = formatMinutesToTime(filtrTimer3.off);
   myNex.writeNum("set_filtr.n10.val", getSubstring(filtrOff3Str, 0, 1));
   myNex.writeNum("set_filtr.n11.val", getSubstring(filtrOff3Str, 3, 4));
@@ -344,7 +348,7 @@ if (Saved_Filtr_timeOFF3 != filtrTimer3.off && !triggerRestartNextion) {Saved_Fi
 if (Power_Clean1 != Power_Clean && !triggerRestartNextion) {Power_Clean1 = Power_Clean;
     myNex.writeStr("dim=50");
     myNex.writeNum("page0.b2.pic", Power_Clean ? 6 : 5); delay(50);
-    myNex.writeStr("page Clean");
+    //     myNex.writeStr("page Clean");
     myNex.writeNum("Clean.sw1.val", Power_Clean ? 1 : 0);
 }  //pcfRelays.digitalWrite(P3, Power_Clean ? LOW : HIGH);
 
@@ -356,7 +360,7 @@ if (Power_Clean1 != Power_Clean && !triggerRestartNextion) {Power_Clean1 = Power
 
 if (Saved_Clean_Time1 != Clean_Time1 && !triggerRestartNextion) {Saved_Clean_Time1=Clean_Time1;
     myNex.writeStr("dim=50");
-    myNex.writeStr("page Clean");
+    //     myNex.writeStr("page Clean");
     myNex.writeNum("Clean.sw0.val", Clean_Time1 ? 1 : 0);
 }
 
@@ -370,7 +374,7 @@ if (Saved_Clean_Time1 != Clean_Time1 && !triggerRestartNextion) {Saved_Clean_Tim
 UITimerEntry &cleanTimer = ui.timer("CleanTimer1");
 if (Saved_Clean_timeON1 != cleanTimer.on && !triggerRestartNextion) {Saved_Clean_timeON1 = cleanTimer.on;
   myNex.writeStr("dim=50");
-  myNex.writeStr("page Clean");
+  //   myNex.writeStr("page Clean");
   String cleanOnStr = formatMinutesToTime(cleanTimer.on);
   myNex.writeNum("Clean.n0.val", getSubstring(cleanOnStr, 0, 1));
   myNex.writeNum("Clean.n1.val", getSubstring(cleanOnStr, 3, 4));
@@ -384,7 +388,7 @@ if (Saved_Clean_timeON1 != cleanTimer.on && !triggerRestartNextion) {Saved_Clean
 // }
 if (Saved_Clean_timeOFF1 != cleanTimer.off && !triggerRestartNextion) {Saved_Clean_timeOFF1 = cleanTimer.off;
   myNex.writeStr("dim=50");
-  myNex.writeStr("page Clean");
+  //   myNex.writeStr("page Clean");
   String cleanOffStr = formatMinutesToTime(cleanTimer.off);
   myNex.writeNum("Clean.n2.val", getSubstring(cleanOffStr, 0, 1));
   myNex.writeNum("Clean.n3.val", getSubstring(cleanOffStr, 3, 4));
@@ -398,7 +402,7 @@ if (Saved_Clean_timeOFF1 != cleanTimer.off && !triggerRestartNextion) {Saved_Cle
 
 if (Saved_chk1 != chk1 && !triggerRestartNextion) {Saved_chk1 = chk1;
     myNex.writeStr("dim=50");
-    myNex.writeStr("page Clean");
+    //     myNex.writeStr("page Clean");
     myNex.writeNum("Clean.bt0.val", chk1? 1 : 0);
 }
 
@@ -410,7 +414,7 @@ if (Saved_chk1 != chk1 && !triggerRestartNextion) {Saved_chk1 = chk1;
 
 if (Saved_chk2 != chk2 && !triggerRestartNextion) {Saved_chk2 = chk2;
     myNex.writeStr("dim=50");
-    myNex.writeStr("page Clean");
+    //     myNex.writeStr("page Clean");
     myNex.writeNum("Clean.bt1.val", chk2? 1 : 0);
 }
 
@@ -422,7 +426,7 @@ if (Saved_chk2 != chk2 && !triggerRestartNextion) {Saved_chk2 = chk2;
 
 if (Saved_chk3 != chk3 && !triggerRestartNextion) {Saved_chk3 = chk3;
     myNex.writeStr("dim=50");
-    myNex.writeStr("page Clean");
+    //     myNex.writeStr("page Clean");
     myNex.writeNum("Clean.bt2.val", chk3? 1 : 0);
 }
 
@@ -434,7 +438,7 @@ if (Saved_chk3 != chk3 && !triggerRestartNextion) {Saved_chk3 = chk3;
 
 if (Saved_chk4 != chk4 && !triggerRestartNextion) {Saved_chk4 = chk4;
     myNex.writeStr("dim=50");
-    myNex.writeStr("page Clean");
+    //     myNex.writeStr("page Clean");
     myNex.writeNum("Clean.bt3.val", chk4? 1 : 0);
 }
 
@@ -445,7 +449,7 @@ if (Saved_chk4 != chk4 && !triggerRestartNextion) {Saved_chk4 = chk4;
 // }
 if (Saved_chk5 != chk5 && !triggerRestartNextion) {Saved_chk5 = chk5;
     myNex.writeStr("dim=50");
-    myNex.writeStr("page Clean");
+    //     myNex.writeStr("page Clean");
     myNex.writeNum("Clean.bt4.val", chk5? 1 : 0);
 }
 
@@ -457,7 +461,7 @@ if (Saved_chk5 != chk5 && !triggerRestartNextion) {Saved_chk5 = chk5;
 // }
 if (Saved_chk6 != chk6 && !triggerRestartNextion) {Saved_chk6 = chk6;
     myNex.writeStr("dim=50");
-    myNex.writeStr("page Clean");
+    //     myNex.writeStr("page Clean");
     myNex.writeNum("Clean.bt5.val", chk6? 1 : 0);
 }
 
@@ -469,8 +473,18 @@ if (Saved_chk6 != chk6 && !triggerRestartNextion) {Saved_chk6 = chk6;
 
 if (Saved_chk7 != chk7 && !triggerRestartNextion) {Saved_chk7 = chk7;
     myNex.writeStr("dim=50");
-    myNex.writeStr("page Clean");
+    //     myNex.writeStr("page Clean");
     myNex.writeNum("Clean.bt6.val", chk7? 1 : 0);
+}
+
+static bool cleanLabelWritten = false;
+if (Nx_page_id == 4 && !triggerRestartNextion) {
+  if (!cleanLabelWritten) {
+    myNex.writeStr("Clean.t3.txt", "Clean stage");
+    cleanLabelWritten = true;
+  }
+} else {
+  cleanLabelWritten = false;
 }
 
 // /////////////////////////************* page heat  **************/////////////////////////////
@@ -499,7 +513,8 @@ if (Saved_chk7 != chk7 && !triggerRestartNextion) {Saved_chk7 = chk7;
 //   Power_Heat = controlTemperature (DS1, Sider_heat, Activation_Heat); //Контроль температуры и отправка myNex.writeNum("page0.va0.val", Heat_ON_OFF ? 1 : 0);
   if (Sider_heat != Sider_heat1 && !triggerRestartNextion){
     myNex.writeStr("dim=50"); delay(50);
-    myNex.writeStr("page heat"); delay(50);
+    //     myNex.writeStr("page heat"); delay(50);
+    myNex.writeNum("heat.h0.maxval", 35); delay(20);
     myNex.writeNum("heat.h0.val", Sider_heat); delay(50);
     myNex.writeNum("heat.n0.val", Sider_heat); delay(50);
 
@@ -510,7 +525,7 @@ if (Saved_chk7 != chk7 && !triggerRestartNextion) {Saved_chk7 = chk7;
   if (Activation_Heat != Activation_Heat1 && !triggerRestartNextion) {
     Activation_Heat1 = Activation_Heat;
     myNex.writeStr("dim=50");
-    myNex.writeStr("page heat"); delay(150);
+    //     myNex.writeStr("page heat"); delay(150);
     myNex.writeNum("heat.sw0.val", Activation_Heat); delay(150);
   }
 
@@ -522,6 +537,48 @@ if (Saved_chk7 != chk7 && !triggerRestartNextion) {Saved_chk7 = chk7;
 //     myNex.writeStr("dim=50");
 //     myNex.writeNum("page0.b3.pic", Power_Topping ? 8 : 7); 
 // }
+
+static bool setToppingPageWasOpen = false;
+static unsigned long lastSetToppingSyncMs = 0;
+static bool lastNxActivationWaterLevel = false;
+static bool lastNxPowerDrain = false;
+static bool lastNxPowerTopping = false;
+static bool lastNxWaterLevelUpper = false;
+static bool lastNxWaterLevelLower = false;
+static bool lastNxWaterLevelDrain = false;
+static String lastNxWaterLevelStatus;
+if (Nx_page_id == 6 && !triggerRestartNextion) {
+  const unsigned long nowMs = millis();
+  const bool changed =
+    !setToppingPageWasOpen ||
+    Activation_Water_Level != lastNxActivationWaterLevel ||
+    Power_Drain != lastNxPowerDrain ||
+    Power_Topping != lastNxPowerTopping ||
+    WaterLevelSensorUpper != lastNxWaterLevelUpper ||
+    WaterLevelSensorLower != lastNxWaterLevelLower ||
+    WaterLevelSensorDrain != lastNxWaterLevelDrain ||
+    WaterLevelStatus != lastNxWaterLevelStatus;
+  if (changed || nowMs - lastSetToppingSyncMs >= 5000UL) {
+    myNex.writeNum("set_topping.sw0.val", Activation_Water_Level ? 1 : 0);
+    myNex.writeNum("set_topping.sw1.val", Power_Drain ? 1 : 0);
+    myNex.writeNum("set_topping.sw2.val", Power_Topping ? 1 : 0);
+    myNex.writeNum("set_topping.c1.val", WaterLevelSensorUpper ? 1 : 0);
+    myNex.writeNum("set_topping.c2.val", WaterLevelSensorLower ? 1 : 0);
+    myNex.writeNum("set_topping.c3.val", WaterLevelSensorDrain ? 1 : 0);
+    myNex.writeStr("set_topping.t0.txt", WaterLevelStatus);
+    lastNxActivationWaterLevel = Activation_Water_Level;
+    lastNxPowerDrain = Power_Drain;
+    lastNxPowerTopping = Power_Topping;
+    lastNxWaterLevelUpper = WaterLevelSensorUpper;
+    lastNxWaterLevelLower = WaterLevelSensorLower;
+    lastNxWaterLevelDrain = WaterLevelSensorDrain;
+    lastNxWaterLevelStatus = WaterLevelStatus;
+    lastSetToppingSyncMs = nowMs;
+  }
+  setToppingPageWasOpen = true;
+} else {
+  setToppingPageWasOpen = false;
+}
 
 // /////////////////////////************* pageRTC  **************/////////////////////////////
 // ////////////////////////************* pageRTC **************//////////////////////////////
@@ -573,29 +630,74 @@ if (Saved_chk7 != chk7 && !triggerRestartNextion) {Saved_chk7 = chk7;
 // //   myNex.writeStr("page Dispensers");
 // //   myNex.writeNum("Dispensers.cb0.val", ACO_Work-1); 
 // // }
-if (Saved_PHControlACO != PH_Control_ACO && !triggerRestartNextion) {Saved_PHControlACO = PH_Control_ACO;
+if (Saved_PHControlACO != PH_Control_ACO && Nx_page_id == 9 && !triggerRestartNextion) {Saved_PHControlACO = PH_Control_ACO;
     myNex.writeStr("dim=50");
-    myNex.writeStr("page Dispensers");
     myNex.writeNum("Dispensers.sw0.val", PH_Control_ACO ? 1 : 0);
 }
 
-if (ACO_Work != Saved_ACO_Work && !triggerRestartNextion) {Saved_ACO_Work = ACO_Work;
+if (ACO_Work != Saved_ACO_Work && Nx_page_id == 9 && !triggerRestartNextion) {Saved_ACO_Work = ACO_Work;
   myNex.writeStr("dim=50");
-  myNex.writeStr("page Dispensers");
   myNex.writeNum("Dispensers.cb0.val", ACO_Work - 1); 
 }
 
-if (Saved_NaOCl_H2O2_Control != NaOCl_H2O2_Control && !triggerRestartNextion) {
+if (Saved_NaOCl_H2O2_Control != NaOCl_H2O2_Control && Nx_page_id == 9 && !triggerRestartNextion) {
     Saved_NaOCl_H2O2_Control = NaOCl_H2O2_Control;
     myNex.writeStr("dim=50");
-    myNex.writeStr("page Dispensers");
     myNex.writeNum("Dispensers.sw2.val", NaOCl_H2O2_Control ? 1 : 0);
 }
 
-if (H2O2_Work != Saved_H2O2_Work && !triggerRestartNextion) {Saved_H2O2_Work = H2O2_Work;
+if (H2O2_Work != Saved_H2O2_Work && Nx_page_id == 9 && !triggerRestartNextion) {Saved_H2O2_Work = H2O2_Work;
   myNex.writeStr("dim=50");
-  myNex.writeStr("page Dispensers");
   myNex.writeNum("Dispensers.cb1.val", H2O2_Work - 1); 
+}
+
+static float lastNxPhSetting = -1000.0f;
+static float lastNxPhLower = -1000.0f;
+static float lastNxPhUpper = -1000.0f;
+static float lastNxClLower = -1000.0f;
+static float lastNxClUpper = -1000.0f;
+static int lastNxOrpSetting = -100000;
+if (Nx_page_id == 9 && !triggerRestartNextion) {
+  float phSettingDelta = PH_setting - lastNxPhSetting;
+  if (phSettingDelta < 0) phSettingDelta = -phSettingDelta;
+  if (phSettingDelta > 0.001f || abs(PH_Lower - lastNxPhLower) > 0.001f || abs(PH_Upper - lastNxPhUpper) > 0.001f) {
+    myNex.writeStr("Dispensers.t2.txt", "pH " + String(PH_Lower, 1) + "-" + String(PH_Upper, 1));
+    lastNxPhSetting = PH_setting;
+  }
+  if (ORP_setting != lastNxOrpSetting || abs(CL_Lower - lastNxClLower) > 0.001f || abs(CL_Upper - lastNxClUpper) > 0.001f) {
+    myNex.writeStr("Dispensers.t3.txt", "CL " + String(CL_Lower, 2) + "-" + String(CL_Upper, 2));
+    lastNxOrpSetting = ORP_setting;
+  }
+
+  if (abs(PH_Lower - lastNxPhLower) > 0.001f || abs(PH_Upper - lastNxPhUpper) > 0.001f) {
+    int phLowInt = static_cast<int>(PH_Lower);
+    int phLowDec = static_cast<int>((PH_Lower - phLowInt) * 10.0f + 0.5f);
+    if (phLowDec > 9) { phLowInt++; phLowDec = 0; }
+    int phHighInt = static_cast<int>(PH_Upper);
+    int phHighDec = static_cast<int>((PH_Upper - phHighInt) * 10.0f + 0.5f);
+    if (phHighDec > 9) { phHighInt++; phHighDec = 0; }
+    myNex.writeNum("Dispensers.n0.val", phLowInt);
+    myNex.writeNum("Dispensers.n1.val", phLowDec);
+    myNex.writeNum("Dispensers.n2.val", phHighInt);
+    myNex.writeNum("Dispensers.n3.val", phHighDec);
+    lastNxPhLower = PH_Lower;
+    lastNxPhUpper = PH_Upper;
+  }
+
+  if (abs(CL_Lower - lastNxClLower) > 0.001f || abs(CL_Upper - lastNxClUpper) > 0.001f) {
+    int clLowInt = static_cast<int>(CL_Lower);
+    int clLowDec = static_cast<int>((CL_Lower - clLowInt) * 100.0f + 0.5f);
+    if (clLowDec > 99) { clLowInt++; clLowDec = 0; }
+    int clHighInt = static_cast<int>(CL_Upper);
+    int clHighDec = static_cast<int>((CL_Upper - clHighInt) * 100.0f + 0.5f);
+    if (clHighDec > 99) { clHighInt++; clHighDec = 0; }
+    myNex.writeNum("Dispensers.n6.val", clLowInt);
+    myNex.writeNum("Dispensers.n7.val", clLowDec);
+    myNex.writeNum("Dispensers.n4.val", clHighInt);
+    myNex.writeNum("Dispensers.n5.val", clHighDec);
+    lastNxClLower = CL_Lower;
+    lastNxClUpper = CL_Upper;
+  }
 }
 
 

@@ -96,6 +96,11 @@ extern bool Power_Topping_State; // состояние соленоида дол
 extern bool Power_Topping; // ручной долив
 extern bool Power_Drain_State; // состояние режима слива (насос включен)
 extern bool Power_Drain; // ручной слив
+extern String WaterLevelStatus; // текстовый статус контроля уровня/слива
+extern int DrainPumpMinutes; // длительность порции слива
+extern int DrainPauseMinutes; // пауза между порциями слива
+extern int DrainCycleCount; // количество порций слива
+extern int DrainCycleDone; // выполнено порций слива
 extern bool Power_Filtr; // ручная фильтрация
 extern bool Filtr_Time1; // таймер фильтрации №1
 extern bool Filtr_Time2; // таймер фильтрации №2
@@ -110,6 +115,8 @@ extern bool WaterLevelSensorUpper; // датчик верхнего уровня
 extern bool WaterLevelSensorLower; // датчик нижнего уровня
 extern bool WaterLevelSensorDrain; // датчик уровня для остановки слива
 extern float PH_setting; // уставка pH
+extern float PH_Lower; // pH lower control limit
+extern float PH_Upper; // pH upper control limit
 extern bool PH_Control_ACO; // контроль pH ACO
 extern int ACO_Work; // период дозирования ACO
 extern float PH1; // нижняя граница pH
@@ -120,6 +127,8 @@ extern float Temper_Reference; // температура референса
 extern float Temper_PH; // температура компенсации pH
 extern int analogValuePH_Comp; // значение АЦП PH
 extern bool NaOCl_H2O2_Control; // контроль хлора
+extern float CL_Lower; // free chlorine lower control limit
+extern float CL_Upper; // free chlorine upper control limit
 extern int ORP_setting; // уставка ORP
 extern int H2O2_Work; // период дозирования NaOCl
 extern int CalRastvor256mV; // калибровочный раствор
@@ -472,6 +481,41 @@ inline void handleMqttCommandMessage(char* topic, byte* payload, unsigned int le
     return;
   }
 
+  if(topicStr == "home/esp32/Activation_Water_Level/set"){
+    Activation_Water_Level = mqttPayloadIsOn(message);
+    saveValue<int>("Activation_Water_Level", Activation_Water_Level ? 1 : 0);
+    publishMqttStateBool("home/esp32/Activation_Water_Level", Activation_Water_Level);
+    return;
+  }
+
+  if(topicStr == "home/esp32/Power_Topping/set"){
+    Power_Topping = mqttPayloadIsOn(message);
+    saveValue<int>("Power_Topping", Power_Topping ? 1 : 0);
+    publishMqttStateBool("home/esp32/Power_Topping", Power_Topping);
+    return;
+  }
+
+  if(topicStr == "home/esp32/DrainPumpMinutes/set"){
+    DrainPumpMinutes = constrain(message.toInt(), 1, 240);
+    saveValue<int>("DrainPumpMinutes", DrainPumpMinutes);
+    publishMqttStateString("home/esp32/DrainPumpMinutes", String(DrainPumpMinutes));
+    return;
+  }
+
+  if(topicStr == "home/esp32/DrainPauseMinutes/set"){
+    DrainPauseMinutes = constrain(message.toInt(), 1, 240);
+    saveValue<int>("DrainPauseMinutes", DrainPauseMinutes);
+    publishMqttStateString("home/esp32/DrainPauseMinutes", String(DrainPauseMinutes));
+    return;
+  }
+
+  if(topicStr == "home/esp32/DrainCycleCount/set"){
+    DrainCycleCount = constrain(message.toInt(), 1, 20);
+    saveValue<int>("DrainCycleCount", DrainCycleCount);
+    publishMqttStateString("home/esp32/DrainCycleCount", String(DrainCycleCount));
+    return;
+  }
+
 
   if(topicStr == "home/esp32/RoomTempRange/set"){
     if(mqttApplyDualRangeFloat(message, RoomTempOn, RoomTempOff, "RoomTempOn", "RoomTempOff")){
@@ -641,10 +685,10 @@ inline void handleMqttCommandMessage(char* topic, byte* payload, unsigned int le
       }
 
             if(id == "Temper_PH" || id == "Temper_Reference" ||
-         id == "Float_PH_Slider" || id == "PH2_CAL" ||
+         id == "Float_PH_Slider" ||
          id == "Power_H2O2_Button" || id == "Calibration_ORP_mV" ||
          id == "CalRastvor256mV" || id == "Power_ACO_Button" ||
-         id == "ORP_setting"){
+         id == "Cl_Cal"){
         return;
       }
 
@@ -770,21 +814,25 @@ if(entityId == "OverlayPoolTemp" || entityId == "OverlayHeaterTemp" ||
 
   if(entityId == "Activation_Water_Level" || entityId == "WaterLevelSensorUpper" ||
      entityId == "WaterLevelSensorLower" || entityId == "WaterLevelSensorDrain" || entityId == "Power_Topping_State" ||
-     entityId == "Power_Topping" || entityId == "Power_Drain_State" || entityId == "Power_Drain" || entityId == "InfoStringDIN") return DISCOVERY_GROUP_WATER_LEVEL;
+     entityId == "Power_Topping" || entityId == "Power_Drain_State" || entityId == "Power_Drain" ||
+     entityId == "WaterLevelStatus" || entityId == "DrainCycleDone" ||
+     entityId == "DrainPumpMinutes" || entityId == "DrainPauseMinutes" ||
+     entityId == "DrainCycleCount" || entityId == "InfoStringDIN") return DISCOVERY_GROUP_WATER_LEVEL;
 
   if(entityId == "DS1" || entityId == "Sider_heat" ||
      entityId == "Activation_Heat" || entityId == "Power_Heat") return DISCOVERY_GROUP_POOL_TEMPERATURE;
 
   if(entityId == "PH" || entityId == "PH_Control_ACO" ||
-     entityId == "PH_setting" || entityId == "analogValuePH" ||
-     entityId == "Float_PH_Slider" || entityId == "PH2_CAL" ||
+     entityId == "PH_setting" || entityId == "PH_Lower" || entityId == "PH_Upper" || entityId == "analogValuePH" ||
+     entityId == "Float_PH_Slider" || entityId == "PH1" || entityId == "PH2" ||
+     entityId == "PH1_CAL" || entityId == "PH2_CAL" ||
      entityId == "Temper_Reference" || entityId == "Temper_PH" ||
      entityId == "Power_H2O2_Button" || entityId == "Power_ACO" ||
      entityId == "ACO_Work") return DISCOVERY_GROUP_PH_NAOCL;
 
   if(entityId == "ppmCl" || entityId == "corrected_ORP_Eh_mV" ||
      entityId == "Power_H2O2" ||
-     entityId == "NaOCl_H2O2_Control" || entityId == "ORP_setting" ||
+     entityId == "NaOCl_H2O2_Control" || entityId == "CL_Lower" || entityId == "CL_Upper" || entityId == "ORP_setting" ||
      entityId == "CalRastvor256mV" || entityId == "Calibration_ORP_mV" ||
      entityId == "Power_ACO_Button" ||
      entityId == "H2O2_Work") return DISCOVERY_GROUP_CHLORINE_ACO;
@@ -1039,6 +1087,11 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
     {"switch", "Activation_Water_Level", "✅ Контроль уровня воды", "home/esp32/Activation_Water_Level", "home/esp32/Activation_Water_Level/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"switch", "Power_Topping", "🚰 Включить/Отключить соленоид долива воды", "home/esp32/Power_Topping", "home/esp32/Power_Topping/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
        {"switch", "Power_Drain", "🧯 СЛИВ ВОДЫ ИЗ БАССЕЙНИА", "home/esp32/Power_Drain", "home/esp32/Power_Drain/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"sensor", "WaterLevelStatus", "ℹ️ Состояние контроля уровня", "home/esp32/WaterLevelStatus", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"sensor", "DrainCycleDone", "🔢 Выполнено сливов", "home/esp32/DrainCycleDone", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"number", "DrainPumpMinutes", "⏱️ Слив, минут", "home/esp32/DrainPumpMinutes", "home/esp32/DrainPumpMinutes/set", nullptr, "min", nullptr, nullptr, nullptr, nullptr, nullptr, "1", "240", "1"},
+    {"number", "DrainPauseMinutes", "⏸️ Пауза слива, минут", "home/esp32/DrainPauseMinutes", "home/esp32/DrainPauseMinutes/set", nullptr, "min", nullptr, nullptr, nullptr, nullptr, nullptr, "1", "240", "1"},
+    {"number", "DrainCycleCount", "🔁 Количество сливов", "home/esp32/DrainCycleCount", "home/esp32/DrainCycleCount/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, "1", "20", "1"},
     {"switch", "Pow_Ul_light", "🚏 Свет улицы (ручной)", "home/esp32/Pow_Ul_light", "home/esp32/Pow_Ul_light/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"switch", "Ul_light_Time", "01 ⏱️ Активация таймера улицы", "home/esp32/Ul_light_Time", "home/esp32/Ul_light_Time/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"text", "UlLightTimer_ON", "02 🟢 Время вкл. улицы по таймеру", "home/esp32/UlLightTimer_ON", "home/esp32/UlLightTimer_ON/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
@@ -1046,8 +1099,17 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
      {"switch", "PH_Control_ACO", "🧪 Контроль pH (ACO)", "home/esp32/PH_Control_ACO", "home/esp32/PH_Control_ACO/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"switch", "NaOCl_H2O2_Control", "🧪 Контроль хлора (NaOCl)", "home/esp32/NaOCl_H2O2_Control", "home/esp32/NaOCl_H2O2_Control/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"switch", "RoomTemper", "Контроль температуры в помещении", "home/esp32/RoomTemper", "home/esp32/RoomTemper/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
-     {"number", "Sider_heat", "🎯 Уставка нагрева", "home/esp32/Sider_heat", "home/esp32/Sider_heat/set", nullptr, "°C", nullptr, nullptr, nullptr, nullptr, nullptr, "5", "30", "1"},
+     {"number", "Sider_heat", "🎯 Уставка нагрева", "home/esp32/Sider_heat", "home/esp32/Sider_heat/set", nullptr, "°C", nullptr, nullptr, nullptr, nullptr, nullptr, "5", "35", "1"},
     {"number", "PH_setting", "pH Upper Limit", "home/esp32/PH_setting", "home/esp32/PH_setting/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"number", "PH_Lower", "pH Lower Control Limit", "home/esp32/PH_Lower", "home/esp32/PH_Lower/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, "0", "14", "0.01"},
+    {"number", "PH_Upper", "pH Upper Control Limit", "home/esp32/PH_Upper", "home/esp32/PH_Upper/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, "0", "14", "0.01"},
+    {"number", "PH1", "pH calibration low", "home/esp32/PH1", "home/esp32/PH1/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, "0", "14", "0.01"},
+    {"number", "PH2", "pH calibration high", "home/esp32/PH2", "home/esp32/PH2/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, "0", "14", "0.01"},
+    {"number", "PH1_CAL", "pH low mV", "home/esp32/PH1_CAL", "home/esp32/PH1_CAL/set", nullptr, "mV", nullptr, nullptr, nullptr, nullptr, nullptr, "0", "5000", "1"},
+    {"number", "PH2_CAL", "pH high mV", "home/esp32/PH2_CAL", "home/esp32/PH2_CAL/set", nullptr, "mV", nullptr, nullptr, nullptr, nullptr, nullptr, "0", "5000", "1"},
+    {"number", "ORP_setting", "ORP lower limit", "home/esp32/ORP_setting", "home/esp32/ORP_setting/set", nullptr, "mV", nullptr, nullptr, nullptr, nullptr, nullptr, "0", "1000", "1"},
+    {"number", "CL_Lower", "CL Lower Control Limit", "home/esp32/CL_Lower", "home/esp32/CL_Lower/set", nullptr, "mg/L", nullptr, nullptr, nullptr, nullptr, nullptr, "0", "10", "0.01"},
+    {"number", "CL_Upper", "CL Upper Control Limit", "home/esp32/CL_Upper", "home/esp32/CL_Upper/set", nullptr, "mg/L", nullptr, nullptr, nullptr, nullptr, nullptr, "0", "10", "0.01"},
       {"number", "LedBrightness", "🔆 Яркость", "home/esp32/LedBrightness", "home/esp32/LedBrightness/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, "10", "255", "1"},
     {"number", "LedAutoplayDuration", "⏳ Смена режима (сек)", "home/esp32/LedAutoplayDuration", "home/esp32/LedAutoplayDuration/set", nullptr, "s", nullptr, nullptr, nullptr, nullptr, nullptr, "5", "180", "5"},
     {"text", "LEDColor", "LED Color", "home/esp32/LEDColor", "home/esp32/LEDColor/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
@@ -1451,6 +1513,11 @@ inline void handleMqttLoop(){ // основной цикл MQTT
       publishMqttStateBool("home/esp32/WaterLevelSensorLower", WaterLevelSensorLower);
             publishMqttStateBool("home/esp32/WaterLevelSensorDrain", WaterLevelSensorDrain);
       publishMqttStateBool("home/esp32/Power_Drain_State", Power_Drain_State);
+      publishMqttStateString("home/esp32/WaterLevelStatus", WaterLevelStatus);
+      publishMqttStateInt("home/esp32/DrainCycleDone", DrainCycleDone);
+      publishMqttStateInt("home/esp32/DrainPumpMinutes", DrainPumpMinutes);
+      publishMqttStateInt("home/esp32/DrainPauseMinutes", DrainPauseMinutes);
+      publishMqttStateInt("home/esp32/DrainCycleCount", DrainCycleCount);
       publishMqttStateBool("home/esp32/Power_Warm_floor_heating", Power_Warm_floor_heating);
 
       publishMqttStateBool("home/esp32/Power_Filtr", Power_Filtr);
@@ -1479,6 +1546,15 @@ inline void handleMqttLoop(){ // основной цикл MQTT
       publishMqttStateString("home/esp32/LedColorOrder", LedColorOrder);
       publishMqttStateInt("home/esp32/Sider_heat", Sider_heat);
       publishMqttStateFloat("home/esp32/PH_setting", PH_setting);
+      publishMqttStateFloat("home/esp32/PH_Lower", PH_Lower);
+      publishMqttStateFloat("home/esp32/PH_Upper", PH_Upper);
+      publishMqttStateFloat("home/esp32/PH1", PH1);
+      publishMqttStateFloat("home/esp32/PH2", PH2);
+      publishMqttStateFloat("home/esp32/PH1_CAL", PH1_CAL);
+      publishMqttStateFloat("home/esp32/PH2_CAL", PH2_CAL);
+      publishMqttStateInt("home/esp32/ORP_setting", ORP_setting);
+      publishMqttStateFloat("home/esp32/CL_Lower", CL_Lower);
+      publishMqttStateFloat("home/esp32/CL_Upper", CL_Upper);
       publishMqttStateInt("home/esp32/ACO_Work", ACO_Work);
       publishMqttStateInt("home/esp32/H2O2_Work", H2O2_Work);
       publishMqttStateString("home/esp32/DaysSelect", DaysSelect);

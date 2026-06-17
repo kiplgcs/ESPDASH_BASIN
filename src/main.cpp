@@ -184,34 +184,30 @@ Serial.printf(
 }
 
 
-inline void acoServiceLoop(){ // Сервисная обработка кнопки ручного импульса ACO без id-логики
-  static bool lastUiState = false; // Предыдущее состояние UI-кнопки ACO
-  const bool uiState = Power_ACO; // Текущее состояние кнопки из UI
-  const bool actualState = ReadRelayArray[6]; // Фактическое состояние реле ACO из Modbus
-  if(uiState != actualState){ // Если UI изменил состояние относительно фактического
-    if(uiState && !lastUiState){ // Отслеживаем фронт нажатия кнопки
-      ManualPulse_ACO_Active = true; // Активируем ручной импульс ACO
-      ManualPulse_ACO_StartedAt = millis(); // Фиксируем время запуска импульса
-    } // Конец обработки фронта
-    Power_ACO = actualState; // Возвращаем значение к фактическому состоянию
-    saveButtonState("Power_ACO_Button", actualState ? 1 : 0); // Сохраняем корректное состояние кнопки
-  } // Конец обработки расхождения UI и фактического состояния
-  lastUiState = uiState; // Запоминаем состояние кнопки для детекции фронта
+inline void acoServiceLoop(){ // Сервисная обработка кнопки ручного импульса ACO без влияния на автоматику
+  static bool lastRequest = false;
+  if (ManualPulse_ACO_Request && !lastRequest) {
+    ManualPulse_ACO_Active = true;
+    ManualPulse_ACO_StartedAt = millis();
+  }
+  lastRequest = ManualPulse_ACO_Request;
+  if (ManualPulse_ACO_Request) {
+    ManualPulse_ACO_Request = false;
+    saveButtonState("Power_ACO_Button", 0);
+  }
 } // Конец acoServiceLoop
 
-inline void h2o2ServiceLoop(){ // Сервисная обработка кнопки ручного импульса H2O2 без id-логики
-  static bool lastUiState = false; // Предыдущее состояние UI-кнопки H2O2
-  const bool uiState = Power_H2O2; // Текущее состояние кнопки из UI
-  const bool actualState = ReadRelayArray[5]; // Фактическое состояние реле H2O2 из Modbus
-  if(uiState != actualState){ // Если UI изменил состояние относительно фактического
-    if(uiState && !lastUiState){ // Отслеживаем фронт нажатия кнопки
-      ManualPulse_H2O2_Active = true; // Активируем ручной импульс H2O2
-      ManualPulse_H2O2_StartedAt = millis(); // Фиксируем время запуска импульса
-    } // Конец обработки фронта
-    Power_H2O2 = actualState; // Возвращаем значение к фактическому состоянию
-    saveButtonState("Power_H2O2_Button", actualState ? 1 : 0); // Сохраняем корректное состояние кнопки
-  } // Конец обработки расхождения UI и фактического состояния
-  lastUiState = uiState; // Запоминаем состояние кнопки для детекции фронта
+inline void h2o2ServiceLoop(){ // Сервисная обработка кнопки ручного импульса H2O2 без влияния на автоматику
+  static bool lastRequest = false;
+  if (ManualPulse_H2O2_Request && !lastRequest) {
+    ManualPulse_H2O2_Active = true;
+    ManualPulse_H2O2_StartedAt = millis();
+  }
+  lastRequest = ManualPulse_H2O2_Request;
+  if (ManualPulse_H2O2_Request) {
+    ManualPulse_H2O2_Request = false;
+    saveButtonState("Power_H2O2_Button", 0);
+  }
 } // Конец h2o2ServiceLoop
 
 
@@ -233,7 +229,7 @@ void loop() {
   NPT_Time(period_get_NPT_Time);
   CurrentTime = getCurrentDateTime();   // Получение текущего времени
 
-TimerControlRelay(10000);  // TimerControlRelay(600); //Контроль включения реле по таймерам
+TimerControlRelay(1000);  // Контроль таймеров и коротких импульсов дозирования
 updateCleanSequence(); // Обновление последовательности промывки
 updateManualPumpPulses(); // Для прверки перельстатических насосов - счет таймера - 1 сек
 ControlModbusRelay(1000); // Отправка команд на Modbus-реле
@@ -294,46 +290,38 @@ loop_CL2(2100); // Обработка логики хлора
   // Temperatura = random(220, 320) / 10.0f;      // Случайная температура
   Temperatura = DS1;      // Температура в бассейне
   
-  // Формирование информационных строк
-  String dinStatus = "🧩 Плата Modbus RTU RS485 Relay 16CH + DI16\n";
-
-  dinStatus += "\n🔌 РЕЛЕ 1-8  : ";
-  for (int i = 0; i < 8; ++i) {
-    dinStatus += String(i + 1) + (ReadRelayArray[i] ? "🟢" : "⚫");
-    if (i < 7) {
-      dinStatus += " ";
-    }
-  }
-  dinStatus += "\n🔌 РЕЛЕ 9-16 : ";
-  for (int i = 8; i < 16; ++i) {
-    dinStatus += String(i + 1) + (ReadRelayArray[i] ? "🟢" : "⚫");
-    if (i < 15) {
-      dinStatus += " ";
-    }
-  }
-
-  dinStatus += "\n\n📥 ВХОДЫ 1-8 : ";
-  for (int i = 0; i < 8; ++i) {
-    dinStatus += String(i + 1) + (ReadInputArray[i] ? "🔵" : "⚪");
-    if (i < 7) {
-      dinStatus += " ";
-    }
-  }
-
-  dinStatus += "\n📥 ВХОДЫ 9-16: ";
-  for (int i = 8; i < 16; ++i) {
-    dinStatus += String(i + 1) + (ReadInputArray[i] ? "🔵" : "⚪");
-    if (i < 15) {
-      dinStatus += " ";
-    }
-  }
-
-  dinStatus += "\n\n🟢/🔵 = активно   ⚫/⚪ = неактивно";
-
-
   InfoString = "Random value is " + String(RandomVal) + " at " + CurrentTime + "Pow_WS2815 = " + String(Pow_WS2815);
   InfoStringRS485Model = "Waveshare Modbus RTU RS485 Relay 16CH + DI16";
-  InfoStringDIN = dinStatus;
+  static unsigned long lastDinStatusBuildMs = 0;
+  if (millis() - lastDinStatusBuildMs >= 1000UL) {
+    String dinStatus = "Modbus RTU RS485 Relay 16CH + DI16\n";
+
+    dinStatus += "\nRELAYS 1-8  : ";
+    for (int i = 0; i < 8; ++i) {
+      dinStatus += String(i + 1) + (ReadRelayArray[i] ? "=ON" : "=--");
+      if (i < 7) dinStatus += " ";
+    }
+    dinStatus += "\nRELAYS 9-16 : ";
+    for (int i = 8; i < 16; ++i) {
+      dinStatus += String(i + 1) + (ReadRelayArray[i] ? "=ON" : "=--");
+      if (i < 15) dinStatus += " ";
+    }
+
+    dinStatus += "\n\nINPUTS 1-8  : ";
+    for (int i = 0; i < 8; ++i) {
+      dinStatus += String(i + 1) + (ReadInputArray[i] ? "=ON" : "=--");
+      if (i < 7) dinStatus += " ";
+    }
+    dinStatus += "\nINPUTS 9-16 : ";
+    for (int i = 8; i < 16; ++i) {
+      dinStatus += String(i + 1) + (ReadInputArray[i] ? "=ON" : "=--");
+      if (i < 15) dinStatus += " ";
+    }
+
+    dinStatus += "\n\nON = active, -- = inactive";
+    InfoStringDIN = dinStatus;
+    lastDinStatusBuildMs = millis();
+  }
   InfoString1 = /*"Speed " + String(Speed, 1) + " / Temp " + String(Temperatura, 1)*/ + " button1 = " + String(button1)
               + " RangeSlider = " + String(RangeMin) + " / " + String(RangeMax);
   
