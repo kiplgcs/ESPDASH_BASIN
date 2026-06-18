@@ -598,6 +598,27 @@ if (H2O2_Work != Saved_H2O2_Work && !triggerRestartNextion) {Saved_H2O2_Work = H
   myNex.writeNum("Dispensers.cb1.val", H2O2_Work - 1); 
 }
 
+static float Saved_PH_Lower_Nextion = -100.0f;
+static float Saved_PH_Upper_Nextion = -100.0f;
+static float Saved_CL_Lower_Nextion = -100.0f;
+static float Saved_CL_Upper_Nextion = -100.0f;
+if (!triggerRestartNextion && (Saved_PH_Lower_Nextion != PH_Lower || Saved_PH_Upper_Nextion != PH_Upper || Saved_CL_Lower_Nextion != CL_Lower || Saved_CL_Upper_Nextion != CL_Upper)) {
+  Saved_PH_Lower_Nextion = PH_Lower;
+  Saved_PH_Upper_Nextion = PH_Upper;
+  Saved_CL_Lower_Nextion = CL_Lower;
+  Saved_CL_Upper_Nextion = CL_Upper;
+  myNex.writeStr("dim=50");
+  myNex.writeStr("page Dispensers");
+  myNex.writeNum("Dispensers.n0.val", (int)PH_Lower);
+  myNex.writeNum("Dispensers.n1.val", ((int)round(PH_Lower * 10.0f)) % 10);
+  myNex.writeNum("Dispensers.n2.val", (int)PH_Upper);
+  myNex.writeNum("Dispensers.n3.val", ((int)round(PH_Upper * 10.0f)) % 10);
+  myNex.writeNum("Dispensers.n6.val", (int)CL_Lower);
+  myNex.writeNum("Dispensers.n7.val", ((int)round(CL_Lower * 10.0f)) % 10);
+  myNex.writeNum("Dispensers.n4.val", (int)CL_Upper);
+  myNex.writeNum("Dispensers.n5.val", ((int)round(CL_Upper * 10.0f)) % 10);
+}
+
 
 // if (Saved_ppmCl != ppmCl) {Saved_ppmCl = ppmCl;
 //     //myNex.writeStr("dim=50");

@@ -202,9 +202,15 @@ unsigned long timerDuration;
     
 // }
   if (power && activation) {
-    snprintf(info, 50, "Work");
+    snprintf(info, 50, "Работа");
   } else if (!power && activation) {
-    snprintf(info, 50, "Start");
+    unsigned long remainingMillis = (elapsedMillis >= timerDuration) ? 0 : (timerDuration - elapsedMillis);
+    unsigned long remainingSeconds = (remainingMillis + 999UL) / 1000UL;
+    if (remainingSeconds <= 60UL) {
+      snprintf(info, 50, "%lu сек", remainingSeconds);
+    } else {
+      snprintf(info, 50, "%lu мин", (remainingSeconds + 59UL) / 60UL);
+    }
   }
 }
 
@@ -625,18 +631,27 @@ void TimerControlRelay(int interval) {
         //     }
     // Активация дозации ACO - кислоты по датчику PH
     static unsigned long lastMillisACO = 0;
-    if (PH > PH_setting && PH_Control_ACO && Power_Filtr) {
-      manageTimer(ACO_Work, Power_ACO, PH_Control_ACO, lastMillisACO, Info_ACO);
-    } else {
+    static bool phDosingActive = false;
+    PH_setting = PH_Upper; // Совместимость со старым ключом верхней уставки pH
+    if (!PH_Control_ACO || !Power_Filtr) {
+      phDosingActive = false;
       manageTimer(ACO_Work, Power_ACO = false, false, lastMillisACO, Info_ACO);
+          } else {
+      if (!phDosingActive && PH < PH_Lower) phDosingActive = true;
+      if (phDosingActive && PH > PH_Upper) phDosingActive = false;
+      manageTimer(ACO_Work, Power_ACO, phDosingActive, lastMillisACO, Info_ACO);
     }
 
-    // Активация дозации NaOCl по датчику хлора
+    // Активация дозации NaOCl по датчику хлора с гистерезисом CL
     static unsigned long lastMillisH2O2 = 0;
-    if (corrected_ORP_Eh_mV < ORP_setting && PH <= PH_setting + 0.1 && NaOCl_H2O2_Control && Power_Filtr) {
-      manageTimer(H2O2_Work, Power_H2O2, NaOCl_H2O2_Control, lastMillisH2O2, Info_H2O2);
-    } else {
+    static bool clDosingActive = false;
+    if (!NaOCl_H2O2_Control || !Power_Filtr) {
+      clDosingActive = false;
       manageTimer(H2O2_Work, Power_H2O2 = false, false, lastMillisH2O2, Info_H2O2);
+          } else {
+      if (!clDosingActive && ppmCl < CL_Lower) clDosingActive = true;
+      if (clDosingActive && ppmCl > CL_Upper) clDosingActive = false;
+      manageTimer(H2O2_Work, Power_H2O2, clDosingActive, lastMillisH2O2, Info_H2O2);
     }
 
 // } // End TimerControlRelay

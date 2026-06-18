@@ -224,6 +224,7 @@ void loop() {
     mainCoreLogged = true; // Фиксируем флаг, чтобы не засорять UART повторяющимися логами.
   } // Закрываем одноразовый блок диагностики ядра основной логики.
 
+  loop_WS2815(); // Обслуживаем RGB в начале цикла, чтобы лента не ждала тяжелые блоки UI/Nextion/SPIFFS.
 
   handleDs18ScanButton(); // Обрабатываем кнопку поиска датчиков DS18B20.
 
@@ -287,6 +288,10 @@ loop_CL2(2100); // Обработка логики хлора
 
 
 
+
+  static unsigned long lastUiModelUpdate = 0; // Тяжелые строки для web/UI обновляем порциями, а не на каждом обороте loop.
+  if (millis() - lastUiModelUpdate >= 250) {
+    lastUiModelUpdate = millis();
 
   // Генерация случайных значений для демонстрации
   RandomVal = random(0,50);                     // Случайное число
@@ -494,9 +499,12 @@ loop_CL2(2100); // Обработка логики хлора
 
 
   // ---------- Добавление точек в графики с интервалом ----------
+  loop_WS2815(); // Перед возможными SPIFFS-записями даем ленте шанс выдать очередной кадр.
   addGraphPoint(CurrentTime, RandomVal); // Обновление графика RandomVal
   for(auto &entry : graphValueProviders){
     addSeriesPoint(entry.first, CurrentTime, entry.second()); // Обновление всех графиков
+  }
+
   }
 
 

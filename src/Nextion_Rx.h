@@ -659,10 +659,32 @@ void read_Dispensers_cb1(){ // Колбэк-функция обработки з
 }
 
 void trigger25(){read_Dispensers_cb1();}
-// // printh 23 02 54 1A -
-// void trigger26(){
-//     //////////// 
-// } 
+
+inline float readDispensersTenths(const char* wholeComponent, const char* tenthComponent, float fallback){
+    uint32_t wholeRaw = myNex.readNumber(wholeComponent); delay(10);
+    uint32_t tenthRaw = myNex.readNumber(tenthComponent);
+    if(wholeRaw == 777777 || tenthRaw == 777777) return fallback;
+    int whole = static_cast<int>(wholeRaw);
+    int tenth = static_cast<int>(tenthRaw);
+    if(tenth < 0) tenth = 0;
+    if(tenth > 9) tenth = 9;
+    return static_cast<float>(whole) + (static_cast<float>(tenth) / 10.0f);
+}
+
+void read_Dispensers_PH_CL_limits(){
+    PH_Lower = readDispensersTenths("Dispensers.n0.val", "Dispensers.n1.val", PH_Lower); delay(10);
+    PH_Upper = readDispensersTenths("Dispensers.n2.val", "Dispensers.n3.val", PH_Upper); delay(10);
+    CL_Lower = readDispensersTenths("Dispensers.n6.val", "Dispensers.n7.val", CL_Lower); delay(10);
+    CL_Upper = readDispensersTenths("Dispensers.n4.val", "Dispensers.n5.val", CL_Upper);
+    PH_setting = PH_Upper;
+    saveValue<float>("PH_Lower", PH_Lower);
+    saveValue<float>("PH_Upper", PH_Upper);
+    saveValue<float>("PH_setting", PH_setting);
+    saveValue<float>("CL_Lower", CL_Lower);
+    saveValue<float>("CL_Upper", CL_Upper);
+}
+void trigger26(){read_Dispensers_PH_CL_limits();}
+
 
 
 // // printh 23 02 54 1B - 
@@ -862,6 +884,7 @@ read_Dispensers_sw0_sw1();
 read_Dispensers_cb0();
 read_Dispensers_sw2_sw3();
 read_Dispensers_cb1();
+read_Dispensers_PH_CL_limits();
 // // Saved_PHControlACO = PH_Control_ACO = myNex.readNumber("Dispensers.sw0.val"); jee.var("PH_Control_ACO", PH_Control_ACO ? "true" : "false"); delay(10);//Контроль PH  
 // // Saved_Activation_Timer_ACO = Activation_Timer_ACO = myNex.readNumber("Dispensers.sw1.val"); jee.var("Activation_Timer_ACO", String(Activation_Timer_ACO ? "true" : "false" ));  delay(10);  //Работа перельстатического насоса
 // // Saved_ACO_Work = ACO_Work = myNex.readNumber("Dispensers.cb0.val") +1; jee.var("ACO_Work", String(ACO_Work));  delay(10);  // Как часто включается перельстатический насос

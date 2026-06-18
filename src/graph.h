@@ -29,6 +29,7 @@ inline void trimGraphPoints(vector<GraphPoint> &points, size_t limit){ // огр
 }
 
 inline const unsigned long minGraphUpdateInterval = 100; // минимальный интервал обновления графика (мс)
+inline const unsigned long graphSaveIntervalMs = 15000; // SPIFFS сохраняем реже, чтобы flash-записи не рвали плавность RGB.
 inline const int minGraphPoints = 1; // минимальное допустимое количество точек
 inline const int maxGraphPoints = 50; // максимальное допустимое количество точек
 
@@ -88,6 +89,16 @@ inline void saveGraphSeries(const String &series, const vector<GraphPoint> &poin
     f.printf("%s,%.3f\n", p.time.c_str(), p.value); // сохраняем время и значение в CSV-формате
   }
   f.close(); // закрываем файл
+}
+
+inline std::map<String, unsigned long> graphLastSave; // Последняя запись серии в SPIFFS.
+
+inline void saveGraphSeriesThrottled(const String &series, const vector<GraphPoint> &points){ // Сохраняем серию без частых flash-записей.
+  unsigned long now = millis(); // Текущее время для ограничения частоты записи.
+  unsigned long last = graphLastSave[series]; // Последняя запись конкретной серии.
+  if(last != 0 && now - last < graphSaveIntervalMs) return; // В RAM данные уже обновлены, SPIFFS подождет.
+  graphLastSave[series] = now; // Фиксируем время до записи, чтобы не повторять при долгой операции.
+  saveGraphSeries(series, points); // Фактическая запись на SPIFFS.
 }
 
 inline void loadGraphSeries(const String &series, vector<GraphPoint> &points){ // загрузка точек графика из файла
@@ -164,7 +175,7 @@ inline void addGraphPoint(String t, float v){ // добавление новой
   graphPoints.push_back({t, v}); // добавляем новую точку (время + значение)
   trimGraphPoints(graphPoints, maxPoints); // обрезаем массив по глобальному лимиту
   trimGraphPoints(graphPoints, cfg.maxPoints); // дополнительно учитываем лимит серии
-  saveGraphSeries("main", graphPoints); // сохраняем обновлённую серию в SPIFFS
+  saveGraphSeriesThrottled("main", graphPoints); // сохраняем обновлённую серию в SPIFFS без частых блокировок
 }
 
 // Регистрирует источник данных для графика
@@ -221,5 +232,5 @@ inline void addSeriesPoint(const String &series, const String &t, float value){ 
   auto &points = customGraphSeries[series]; // получаем массив точек серии
   points.push_back({t, value}); // добавляем новую точку
   trimGraphPoints(points, cfg.maxPoints); // обрезаем массив по лимиту
-  saveGraphSeries(series, points); // сохраняем серию в файл
+  saveGraphSeriesThrottled(series, points); // сохраняем серию в файл без частых блокировок
 }

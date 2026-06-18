@@ -112,7 +112,9 @@ extern bool Activation_Water_Level; // контроль уровня воды
 extern bool WaterLevelSensorUpper; // датчик верхнего уровня
 extern bool WaterLevelSensorLower; // датчик нижнего уровня
 extern bool WaterLevelSensorDrain; // датчик уровня для остановки слива
-extern float PH_setting; // уставка pH
+extern float PH_Lower; // нижний предел гистерезиса pH
+extern float PH_setting; // верхняя уставка pH
+extern float PH_Upper; // верхний предел гистерезиса pH
 extern bool PH_Control_ACO; // контроль pH ACO
 extern int ACO_Work; // период дозирования ACO
 extern float PH1; // нижняя граница pH
@@ -123,6 +125,8 @@ extern float Temper_Reference; // температура референса
 extern float Temper_PH; // температура компенсации pH
 extern int analogValuePH_Comp; // значение АЦП PH
 extern bool NaOCl_H2O2_Control; // контроль хлора
+extern float CL_Lower; // нижний предел гистерезиса CL
+extern float CL_Upper; // верхний предел гистерезиса CL
 extern int ORP_setting; // уставка ORP
 extern int H2O2_Work; // период дозирования NaOCl
 extern int CalRastvor256mV; // калибровочный раствор

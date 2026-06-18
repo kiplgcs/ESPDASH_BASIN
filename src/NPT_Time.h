@@ -19,7 +19,7 @@ const char *ntpServer2 = "time.google.com";
 const int daylightOffset = 0; // Смещение летнего времени (0 - отключено)
 
 inline int period_get_NPT_Time = 600000; // Период NTP-синхронизации (мс), при ошибках временно уменьшается
-inline int period_get_Nextion_Time = 1000; // Период опроса RTC Nextion для динамической синхронизации
+inline int period_get_Nextion_Time = 60000; // RTC Nextion сверяем редко: локальное время идет от millis(), а частый опрос дергал RGB.
 
 // Внешние зависимости из других модулей
 extern WiFiUDP ntpUDP;
@@ -150,10 +150,10 @@ bool fetchNextionTime(int &readSeconds, int &readMinutes, int &readHours, int &r
     return false;
   }
 
-  int secondsValue = myNex.readNumber("rtc5"); delay(50);
-  int minutesValue = myNex.readNumber("rtc4"); delay(50);
-  int dayValue = myNex.readNumber("rtc2"); delay(50);
-  int monthValue = myNex.readNumber("rtc1"); delay(50);
+  int secondsValue = myNex.readNumber("rtc5"); // readNumber уже ждет ответ, дополнительный delay тормозит основной loop.
+  int minutesValue = myNex.readNumber("rtc4"); // Убираем паузы, чтобы RGB не останавливалась каждые 1-60 секунд.
+  int dayValue = myNex.readNumber("rtc2"); // Чтение RTC выполняется редко и без искусственных задержек.
+  int monthValue = myNex.readNumber("rtc1"); // Держим Nextion вне критического пути анимации.
   int yearValue = myNex.readNumber("rtc0");
   int day_OfWeek = myNex.readNumber("rtc6");
 
@@ -290,7 +290,8 @@ bool checkInternetAvailability() {
   const char* host = "www.google.com";  // Имя хоста для проверки подключения
 
   WiFiClient client;
-  if (client.connect(host, 80)) {  // Попытка подключения к хосту на порт 80
+  client.setTimeout(250); // Короткий сетевой таймаут, чтобы проверка интернета не подвешивала RGB/RS485.
+  if (client.connect(host, 80, 250)) {  // Попытка подключения к хосту на порт 80
     client.stop();  // Закрываем соединение
     return true;  // Интернет доступен
   } else {
@@ -343,7 +344,7 @@ timerNtp = nowMs;
 // 2) Если Интернет доступен — берём NTP и синхронизируем всё
 if (checkInternetAvailability()) { //Если Интерент доступен
 
-    int gmtOffsetNextion = myNex.readNumber("pageRTC.n5.val"); delay(50);
+    int gmtOffsetNextion = myNex.readNumber("pageRTC.n5.val"); // Без задержки: readNumber сам получает ответ от Nextion.
     if (gmtOffsetNextion != kNextionInvalidValue) {
       gmtOffset_correct = normalizeGmtOffset(gmtOffsetNextion);
       Saved_gmtOffset_correct = gmtOffset_correct;

@@ -255,7 +255,8 @@ UI_COLOR("LEDColor", LEDColor, "🎨 Цвет подсветки");
     UI_DISPLAY_FLOAT("PH", PH, "🧪 pH (текущее)");
     UI_DISPLAY_BOOL("Power_ACO", Power_ACO, "🧴 Дозатор ACO", "✅ Работа", "⏹️ Откл.");
     UI_CHECKBOX("PH_Control_ACO", PH_Control_ACO, "🧪 Контроль pH (ACO)");
-    UI_NUMBER("PH_setting", PH_setting, "⬆️ Верхний предел pH", true);
+    UI_NUMBER("PH_Lower", PH_Lower, "⬇️ Нижний предел pH", true);
+    UI_NUMBER("PH_Upper", PH_Upper, "⬆️ Верхний предел pH", true);
 
 
 
@@ -305,9 +306,10 @@ UI_COLOR("LEDColor", LEDColor, "🎨 Цвет подсветки");
                 UI_DISPLAY_INT("analogValuePH", analogValuePH_Comp, "📟 Данные с АЦП от датчика PH");
                 // UI_NUMBER("PH_Min", PH1, "Min CAL PH1 (4.1)", true);
                 // UI_NUMBER("PH_Max", PH2, "Max CAL PH2 (6.86)", true);
-                UI_DUAL_RANGE_KEYS("Float_PH_Slider", PH1, PH2, "PH1_MIN", "PH2_MAX", 4.0, 10.0, 0.1, "🎚️ Range PH Min-Max");
-                UI_NUMBER("PH1_CAL", PH1_CAL, "📉 АЦП_mV для PH1 (Примерно 3500)", false);
-                UI_NUMBER("PH2_CAL", PH2_CAL, "📉 АЦП_mV для PH2 (Примерно 2900)", false);
+                UI_NUMBER("PH1", PH1, "⬇️ Нижний pH", true);
+                UI_NUMBER("PH2", PH2, "⬆️ Верхний pH", true);
+                UI_NUMBER("PH1_CAL", PH1_CAL, "📉 mB нижнего pH", false);
+                UI_NUMBER("PH2_CAL", PH2_CAL, "📈 mB верхнего pH", false);
                 // UI_DUAL_RANGE_KEYS("Int_PH_Slider", PH1_CAL, PH2_CAL, "PH1_CAL", "PH2_CAL", 100.0, 5000.0, 1, "Range АЦП_mV Min-Max");
 
                 UI_NUMBER("Temper_Reference", Temper_Reference, "🌡 Температура референсная", true);
@@ -324,6 +326,8 @@ UI_COLOR("LEDColor", LEDColor, "🎨 Цвет подсветки");
     UI_DISPLAY_INT("corrected_ORP_Eh_mV", corrected_ORP_Eh_mV, "📟 ORP, мВ");
     UI_DISPLAY_BOOL("Power_H2O2", Power_H2O2, "🧴 Дозатор NaOCl", "✅ Работа", "⏹️ Откл.");
     UI_CHECKBOX("NaOCl_H2O2_Control", NaOCl_H2O2_Control, "🧪 Контроль хлора (NaOCl)");
+        UI_NUMBER("CL_Lower", CL_Lower, "⬇️ Нижний предел CL, мг/л", true);
+    UI_NUMBER("CL_Upper", CL_Upper, "⬆️ Верхний предел CL, мг/л", true);
     UI_NUMBER("ORP_setting", ORP_setting, "⬇️ Нижний предел ORP, мВ", false);
     UI_SELECT("H2O2_Work", H2O2_Work, dosingOptions, "⏳ Период дозирования NaOCl");
 

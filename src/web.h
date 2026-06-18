@@ -227,10 +227,14 @@ char Info_H2O2[50]; String Saved_Info_H2O2;
 char Info_ACO[50];  String Saved_Info_ACO;
 
 // ===== Настройки пределов pH =====
-float PH_setting = 7.2; // Верхний предел для включения дозирования
+float PH_Lower = 7.1f; // Нижний предел гистерезиса pH: ниже включается насос кислоты
+float PH_setting = 7.3f; // Верхний предел гистерезиса pH: выше насос кислоты выключается
+float PH_Upper = 7.3f; // Дублирующая понятная переменная верхнего предела pH для Web/Nextion
 
-// ===== Настройки пределов ORP =====
-int ORP_setting = 500; // Нижний предел для включения дозирования
+// ===== Настройки пределов CL/ORP =====
+float CL_Lower = 0.8f; // Нижний предел гистерезиса свободного хлора: ниже включается насос NaOCl
+float CL_Upper = 1.2f; // Верхний предел гистерезиса свободного хлора: выше насос NaOCl выключается
+int ORP_setting = 500; // Нижний предел ORP оставлен для совместимости и контроля по мВ
 
 
 bool Pow_WS2815, Pow_WS28151;		// Включение в ручную
@@ -2835,12 +2839,16 @@ window.addEventListener('resize', ()=>{
     if(typeof j.PH !== 'undefined') updateStat('PH', j.PH);
     if(typeof j.analogValuePH !== 'undefined') updateStat('analogValuePH', j.analogValuePH);
     if(typeof j.PH_Control_ACO !== 'undefined') updateCheckboxValue('PH_Control_ACO', j.PH_Control_ACO);
+        if(typeof j.PH_Lower !== 'undefined') updateInputValue('PH_Lower', j.PH_Lower);
     if(typeof j.PH_setting !== 'undefined') updateInputValue('PH_setting', j.PH_setting);
+        if(typeof j.PH_Upper !== 'undefined') updateInputValue('PH_Upper', j.PH_Upper);
     if(typeof j.ACO_Work !== 'undefined') updateSelectValue('ACO_Work', j.ACO_Work);
     if(typeof j.Power_ACO !== 'undefined') updateStat('Power_ACO', j.Power_ACO);
     if(typeof j.ppmCl !== 'undefined') updateStat('ppmCl', j.ppmCl);
     if(typeof j.corrected_ORP_Eh_mV !== 'undefined') updateStat('corrected_ORP_Eh_mV', j.corrected_ORP_Eh_mV);
     if(typeof j.NaOCl_H2O2_Control !== 'undefined') updateCheckboxValue('NaOCl_H2O2_Control', j.NaOCl_H2O2_Control);
+        if(typeof j.CL_Lower !== 'undefined') updateInputValue('CL_Lower', j.CL_Lower);
+    if(typeof j.CL_Upper !== 'undefined') updateInputValue('CL_Upper', j.CL_Upper);
     if(typeof j.ORP_setting !== 'undefined') updateInputValue('ORP_setting', j.ORP_setting);
     if(typeof j.H2O2_Work !== 'undefined') updateSelectValue('H2O2_Work', j.H2O2_Work);
     if(typeof j.Power_H2O2 !== 'undefined') updateStat('Power_H2O2', j.Power_H2O2);
@@ -3185,11 +3193,7 @@ function setImg(x){
 
     server.on("/live", HTTP_GET, [](AsyncWebServerRequest *r){
           if(!ensureAuthorized(r)) return;
-      // Увеличенный буфер, чтобы сериализация не обрезалась на длинных строках
-      // StaticJsonDocument<4096> doc;
-      // StaticJsonDocument<6144> doc;
-      // StaticJsonDocument<12288> doc;
-      DynamicJsonDocument doc(65536);
+      JsonDocument doc; // ArduinoJson v7 сам расширяет документ: не держим 64 КБ heap на каждый быстрый /live.
 
       doc["CurrentTime"] = CurrentTime; // Временная метка для синхронизации времени страницы
       doc["gmtOffset"] = gmtOffset_correct; // Часовой пояс (GMT offset)

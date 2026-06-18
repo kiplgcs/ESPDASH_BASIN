@@ -140,7 +140,13 @@ void loop_PH(int interval) {
         return;
     }
 
-    totalPH += ads1.readADC_SingleEnded(0); // Читаем значение с канала A0 и добавляем к сумме
+    int16_t rawPH = 0; // Сырые данные ADS1115 для pH, прочитанные с таймаутом.
+    if (!readAdsSingleEndedSafe(ads1, ads1Address, 0, rawPH)) {
+        countPH = 0; // Если АЦП завис или не успел ответить, не держим основной loop.
+        totalPH = 0;
+        return;
+    }
+    totalPH += rawPH; // Читаем значение с канала A0 и добавляем к сумме
     countPH++;                              // Увеличиваем счётчик выборок
 
 
@@ -371,7 +377,13 @@ void loop_CL2(int interval) {
   }
 
 
-    totalCL += ads2.readADC_SingleEnded(1);  // Считываем значение с ADS2 (канал 1)
+    int16_t rawCL = 0; // Сырые данные ADS1115 для ORP/хлора, прочитанные с таймаутом.
+    if (!readAdsSingleEndedSafe(ads2, ads2Address, 1, rawCL)) {
+      countCL = 0; // Если АЦП завис или не успел ответить, не держим основной loop.
+      totalCL = 0;
+      return;
+    }
+    totalCL += rawCL;  // Считываем значение с ADS2 (канал 1)
     countCL++;                              // Увеличиваем счётчик
 
   if (countCL < samples) return;           // Ждём, пока не наберётся 3 выборки

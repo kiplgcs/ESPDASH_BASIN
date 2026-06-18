@@ -120,6 +120,14 @@ if(Nx_page_id == 9){
   //myNex.writeNum("Dispensers.sw3.val", Activation_Timer_H2O2? 1 : 0);//Работа перельстатического насоса
   myNex.writeNum("Dispensers.cb1.val", H2O2_Work-1); // Как часто включается перельстатический насос
 
+    myNex.writeNum("Dispensers.n0.val", (int)PH_Lower);
+  myNex.writeNum("Dispensers.n1.val", ((int)round(PH_Lower * 10.0f)) % 10);
+  myNex.writeNum("Dispensers.n2.val", (int)PH_Upper);
+  myNex.writeNum("Dispensers.n3.val", ((int)round(PH_Upper * 10.0f)) % 10);
+  myNex.writeNum("Dispensers.n6.val", (int)CL_Lower);
+  myNex.writeNum("Dispensers.n7.val", ((int)round(CL_Lower * 10.0f)) % 10);
+  myNex.writeNum("Dispensers.n4.val", (int)CL_Upper);
+  myNex.writeNum("Dispensers.n5.val", ((int)round(CL_Upper * 10.0f)) % 10);
 }
 
 
@@ -265,6 +273,14 @@ switch (sync_step) {
   case 9:
     if (!onDispensersPage) { // Не перезаписываем настройки дозаторов
       myNex.writeNum("Dispensers.sw2.val", NaOCl_H2O2_Control ? 1 : 0);
+            myNex.writeNum("Dispensers.n0.val", (int)PH_Lower);
+      myNex.writeNum("Dispensers.n1.val", ((int)round(PH_Lower * 10.0f)) % 10);
+      myNex.writeNum("Dispensers.n2.val", (int)PH_Upper);
+      myNex.writeNum("Dispensers.n3.val", ((int)round(PH_Upper * 10.0f)) % 10);
+      myNex.writeNum("Dispensers.n6.val", (int)CL_Lower);
+      myNex.writeNum("Dispensers.n7.val", ((int)round(CL_Lower * 10.0f)) % 10);
+      myNex.writeNum("Dispensers.n4.val", (int)CL_Upper);
+      myNex.writeNum("Dispensers.n5.val", ((int)round(CL_Upper * 10.0f)) % 10);
     }
     if (!onSetLampPage) { // Не мешаем редактированию таймера лампы
       myNex.writeNum("set_lamp.sw3.val", Lamp ? 1 : 0);
