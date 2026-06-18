@@ -116,13 +116,13 @@ void setup() {
   Saved_gmtOffset_correct = gmtOffset_correct;
 
  // Загрузка параметров из EEPROM после перезагрузки
-  auto sanitizeDosingPeriod = [](int value) -> int {
-    if(value < 1) return 1;
-    if(value > 13) return 13;
-    return value;
-  };
-  ACO_Work = sanitizeDosingPeriod(loadValue<int>("ACO_Work", ACO_Work));
-  H2O2_Work = sanitizeDosingPeriod(loadValue<int>("H2O2_Work", H2O2_Work));
+  ACO_Work = sanitizeDosingPeriodValue(loadValue<int>("ACO_Work", ACO_Work)); // Загружаем и сразу нормализуем период ACO.
+  H2O2_Work = sanitizeDosingPeriodValue(loadValue<int>("H2O2_Work", H2O2_Work)); // Загружаем и сразу нормализуем период NaOCl.
+  DrainWorkMinutes = clampIntSetting(loadValue<int>("DrainWorkMinutes", DrainWorkMinutes), 1, 30, 15); // Загружаем длительность порции слива.
+  DrainPauseMinutes = clampIntSetting(loadValue<int>("DrainPauseMinutes", DrainPauseMinutes), 1, 30, 15); // Загружаем паузу между порциями слива.
+  DrainCyclesTarget = clampIntSetting(loadValue<int>("DrainCyclesTarget", DrainCyclesTarget), 1, 30, 10); // Загружаем количество порций слива.
+  ToppingWorkMinutes = clampIntSetting(loadValue<int>("ToppingWorkMinutes", ToppingWorkMinutes), 5, 60, 10); // Загружаем длительность долива.
+  ToppingPauseMinutes = clampIntSetting(loadValue<int>("ToppingPauseMinutes", ToppingPauseMinutes), 5, 60, 60); // Загружаем паузу между доливами.
 
   // Загрузка и применение MQTT параметров
   Serial.println("[BOOT] Loading MQTT settings...");
@@ -148,6 +148,11 @@ void setup() {
 
   interface(); // Первичная сборка UI нужна для загрузки/сохранения связанных значений из EEPROM
   dashInterfaceInitialized = true; // Критический фикс: запрещаем повторный вызов interface() в dash.begin(), иначе вкладки/элементы дублируются
+  normalizeChemicalLimits(); // Исправляем сохраненные пределы pH/CL после загрузки из NVS.
+  persistChemicalLimits(); // Сохраняем исправленные пределы, чтобы после следующей перезагрузки не вернулся мусор.
+  if (Power_Drain) Activation_Water_Level = false; // Если из памяти поднялся слив, автоматический контроль уровня запрещаем.
+  if (Power_Drain) Power_Topping = false; // Если из памяти поднялся слив, ручной долив запрещаем.
+  persistWaterControlModes(); // Сохраняем итоговые безопасные режимы уровня воды после загрузки.
   
   syncCleanDaysFromSelection();
 
@@ -234,9 +239,10 @@ void loop() {
   NPT_Time(period_get_NPT_Time);
   CurrentTime = getCurrentDateTime();   // Получение текущего времени
 
-TimerControlRelay(10000);  // TimerControlRelay(600); //Контроль включения реле по таймерам
+TimerControlRelay(1000);  // Контроль дозаторов и таймеров раз в 1 секунду, чтобы импульс насоса не растягивался.
 updateCleanSequence(); // Обновление последовательности промывки
 updateManualPumpPulses(); // Для прверки перельстатических насосов - счет таймера - 1 сек
+enforceDosingHardLimit(); // Дополнительный предохранитель: насосы PH/CL не могут держаться включенными дольше 5 секунд.
 ControlModbusRelay(20); // RS485 проверяем часто, но в очередь пишем только изменившиеся команды реле.
 loop_PH(2000); // Обработка логики PH
 loop_CL2(2100); // Обработка логики хлора

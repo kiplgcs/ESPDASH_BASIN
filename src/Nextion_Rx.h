@@ -120,10 +120,10 @@ void read_lamp_sw0_sw1_sw2(){
     // jee.var("Lamp", Lamp ? "true" : "false");
     // Error err = RS485.addRequest(40001,1,0x05,0, Lamp ? devices[0].value : devices[1].value);
 
-    Power_Time1 = myNex.readNumber("set_lamp.sw0.val"); delay(50);
+    Power_Time1 = myNex.readNumber("set_lamp.sw0.val"); // Читаем таймер лампы без блокирующего delay.
     // jee.var("Power_Time1", Power_Time1 ? "true" : "false"); //jee.var("Power_Time1", String(Power_Time1));
 
-    Lamp_autosvet = myNex.readNumber("set_lamp.sw1.val"); delay(50);
+    Lamp_autosvet = myNex.readNumber("set_lamp.sw1.val"); // Читаем авто-свет лампы без блокирующего delay.
     // jee.var("Lamp_autosvet", Lamp_autosvet ? "true" : "false"); //jee.var("Lamp_autosvet", String(Lamp_autosvet));
 
 
@@ -247,9 +247,9 @@ void trigger6(){read_RGB_n2_n3();}
 //     jee.var("Pow_WS2815", Pow_WS2815 ? "true" : "false");
 //     Error err = RS485.addRequest(40001,1,0x05,1, Pow_WS2815 ? devices[0].value : devices[1].value);
 void read_RGB_sw0_sw2_sw3(){
-    Pow_WS2815 = myNex.readNumber("set_RGB.sw3.val"); delay(50);
-    WS2815_Time1 = myNex.readNumber("set_RGB.sw0.val"); delay(50);
-    Pow_WS2815_autosvet = myNex.readNumber("set_RGB.sw2.val"); delay(50);
+    Pow_WS2815 = myNex.readNumber("set_RGB.sw3.val"); // Читаем питание RGB без блокирующего delay.
+    WS2815_Time1 = myNex.readNumber("set_RGB.sw0.val"); // Читаем таймер RGB без блокирующего delay.
+    Pow_WS2815_autosvet = myNex.readNumber("set_RGB.sw2.val"); // Читаем авто-свет RGB без блокирующего delay.
 
     bool timerChanged = WS2815_Time1 != Saved_WS2815_Time1;
     bool autoChanged = Pow_WS2815_autosvet != Saved_Pow_WS2815_autosvet;
@@ -519,12 +519,12 @@ void trigger17(){read_Clean_sw0_sw1();}
 
 //printh 23 02 54 12 - "Clean" Считываем кнопки ПН,ВТ,СР,ЧТ,ПТ,СБ,ВС для таймера
 void read_Clean_chk(){
-   Saved_chk1=chk1 = myNex.readNumber("Clean.bt0.val"); delay(50);
-   Saved_chk2=chk2 = myNex.readNumber("Clean.bt1.val"); delay(50);
-   Saved_chk3=chk3 = myNex.readNumber("Clean.bt2.val"); delay(50);
-   Saved_chk4=chk4 = myNex.readNumber("Clean.bt3.val"); delay(50);
-   Saved_chk5=chk5 = myNex.readNumber("Clean.bt4.val"); delay(50);
-   Saved_chk6=chk6 = myNex.readNumber("Clean.bt5.val"); delay(50);
+   Saved_chk1=chk1 = myNex.readNumber("Clean.bt0.val"); // Читаем понедельник без delay.
+   Saved_chk2=chk2 = myNex.readNumber("Clean.bt1.val"); // Читаем вторник без delay.
+   Saved_chk3=chk3 = myNex.readNumber("Clean.bt2.val"); // Читаем среду без delay.
+   Saved_chk4=chk4 = myNex.readNumber("Clean.bt3.val"); // Читаем четверг без delay.
+   Saved_chk5=chk5 = myNex.readNumber("Clean.bt4.val"); // Читаем пятницу без delay.
+   Saved_chk6=chk6 = myNex.readNumber("Clean.bt5.val"); // Читаем субботу без delay.
    Saved_chk7=chk7 = myNex.readNumber("Clean.bt6.val");
    syncDaysSelectionFromClean();
    saveValue<String>("DaysSelect", DaysSelect);
@@ -661,8 +661,8 @@ void read_Dispensers_cb1(){ // Колбэк-функция обработки з
 void trigger25(){read_Dispensers_cb1();}
 
 inline float readDispensersTenths(const char* wholeComponent, const char* tenthComponent, float fallback){
-    uint32_t wholeRaw = myNex.readNumber(wholeComponent); delay(10);
-    uint32_t tenthRaw = myNex.readNumber(tenthComponent);
+    uint32_t wholeRaw = myNex.readNumber(wholeComponent); // Читаем целую часть без дополнительного delay.
+    uint32_t tenthRaw = myNex.readNumber(tenthComponent); // Читаем десятые без дополнительного delay.
     if(wholeRaw == 777777 || tenthRaw == 777777) return fallback;
     int whole = static_cast<int>(wholeRaw);
     int tenth = static_cast<int>(tenthRaw);
@@ -672,18 +672,75 @@ inline float readDispensersTenths(const char* wholeComponent, const char* tenthC
 }
 
 void read_Dispensers_PH_CL_limits(){
-    PH_Lower = readDispensersTenths("Dispensers.n0.val", "Dispensers.n1.val", PH_Lower); delay(10);
-    PH_Upper = readDispensersTenths("Dispensers.n2.val", "Dispensers.n3.val", PH_Upper); delay(10);
-    CL_Lower = readDispensersTenths("Dispensers.n6.val", "Dispensers.n7.val", CL_Lower); delay(10);
-    CL_Upper = readDispensersTenths("Dispensers.n4.val", "Dispensers.n5.val", CL_Upper);
-    PH_setting = PH_Upper;
-    saveValue<float>("PH_Lower", PH_Lower);
-    saveValue<float>("PH_Upper", PH_Upper);
-    saveValue<float>("PH_setting", PH_setting);
-    saveValue<float>("CL_Lower", CL_Lower);
-    saveValue<float>("CL_Upper", CL_Upper);
+    PH_Lower = readDispensersTenths("Dispensers.n0.val", "Dispensers.n1.val", PH_Lower); // Читаем нижний предел pH.
+    PH_Upper = readDispensersTenths("Dispensers.n2.val", "Dispensers.n3.val", PH_Upper); // Читаем верхний предел pH.
+    CL_Lower = readDispensersTenths("Dispensers.n6.val", "Dispensers.n7.val", CL_Lower); // Читаем нижний предел CL.
+    CL_Upper = readDispensersTenths("Dispensers.n4.val", "Dispensers.n5.val", CL_Upper); // Читаем верхний предел CL.
+    normalizeChemicalLimits(); // Исправляем диапазоны после ввода с Nextion.
+    persistChemicalLimits(); // Сразу сохраняем пределы pH/CL в энергонезависимую память.
 }
 void trigger26(){read_Dispensers_PH_CL_limits();}
+
+inline bool floatSettingChanged(float oldValue, float newValue) { // Проверяем изменение десятичной настройки с защитой от шума float.
+    float delta = oldValue > newValue ? oldValue - newValue : newValue - oldValue; // Считаем модуль разницы без дополнительной math-библиотеки.
+    return delta >= 0.05f; // Для шагов 0.1 считаем изменением половину шага и больше.
+}
+
+void poll_Dispensers_PH_CL_limits(){ // Периодически читаем pH/CL с открытой страницы Nextion, даже если trigger не пришел.
+    static unsigned long lastPollMs = 0; // Запоминаем время последнего опроса, чтобы не забивать UART.
+    static uint8_t pollStep = 0; // Читаем только одну настройку за проход, чтобы экран не тормозил loop.
+    if(Nx_page_id != 9) return; // Читаем только когда реально открыта страница Dispensers.
+    if(millis() - lastPollMs < 1000UL) return; // Опрос не чаще одного раза в секунду.
+    lastPollMs = millis(); // Обновляем время опроса.
+    bool changed = false; // Флаг нужен, чтобы не писать NVS без реального изменения.
+
+    if(pollStep == 0){ // Первый проход читает нижний предел pH.
+      float nextValue = readDispensersTenths("Dispensers.n0.val", "Dispensers.n1.val", PH_Lower); // Получаем pH lower.
+      changed = floatSettingChanged(PH_Lower, nextValue); // Проверяем изменение с шагом 0.1.
+      if(changed) PH_Lower = nextValue; // Применяем новое значение только если оно реально изменилось.
+    } else if(pollStep == 1){ // Второй проход читает верхний предел pH.
+      float nextValue = readDispensersTenths("Dispensers.n2.val", "Dispensers.n3.val", PH_Upper); // Получаем pH upper.
+      changed = floatSettingChanged(PH_Upper, nextValue); // Проверяем изменение с шагом 0.1.
+      if(changed) PH_Upper = nextValue; // Применяем новое значение только если оно реально изменилось.
+    } else if(pollStep == 2){ // Третий проход читает нижний предел CL.
+      float nextValue = readDispensersTenths("Dispensers.n6.val", "Dispensers.n7.val", CL_Lower); // Получаем CL lower.
+      changed = floatSettingChanged(CL_Lower, nextValue); // Проверяем изменение с шагом 0.1.
+      if(changed) CL_Lower = nextValue; // Применяем новое значение только если оно реально изменилось.
+    } else { // Четвертый проход читает верхний предел CL.
+      float nextValue = readDispensersTenths("Dispensers.n4.val", "Dispensers.n5.val", CL_Upper); // Получаем CL upper.
+      changed = floatSettingChanged(CL_Upper, nextValue); // Проверяем изменение с шагом 0.1.
+      if(changed) CL_Upper = nextValue; // Применяем новое значение только если оно реально изменилось.
+    }
+
+    pollStep = (pollStep + 1) % 4; // Следующий раз читаем следующее поле.
+    if(!changed) return; // Если ничего не изменилось, NVS не трогаем.
+    normalizeChemicalLimits(); // Исправляем перевернутые или выходящие за пределы значения.
+    persistChemicalLimits(); // Сохраняем актуальные пределы, чтобы Web и перезагрузка видели одно и то же.
+}
+
+inline bool readNextionBoolSafe(const char* component, bool fallback) { // Безопасно читаем bool-компонент Nextion.
+    uint32_t rawValue = myNex.readNumber(component); // Получаем числовое значение компонента.
+    if(rawValue == 777777) return fallback; // При ошибке чтения оставляем текущее состояние.
+    return rawValue != 0; // Любое ненулевое значение считаем включенным.
+}
+
+void read_set_topping_controls(){ // Читаем переключатели страницы контроля уровня воды.
+    bool nextLevelControl = readNextionBoolSafe("set_topping.sw0.val", Activation_Water_Level); // sw0: автоматический контроль уровня.
+    bool nextDrain = readNextionBoolSafe("set_topping.sw1.val", Power_Drain); // sw1: режим слива воды.
+    bool nextTopping = readNextionBoolSafe("set_topping.sw2.val", Power_Topping); // sw2: ручной клапан долива.
+
+    if(nextDrain) { // Если пользователь включил слив.
+      applyWaterControlRequest("Power_Drain", true); // Включаем слив через общую защитную логику.
+    } else { // Если слив выключен.
+      applyWaterControlRequest("Power_Drain", false); // Выключаем слив через общую защитную логику.
+      applyWaterControlRequest("Activation_Water_Level", nextLevelControl); // Применяем контроль уровня с учетом запрета при сливе.
+      applyWaterControlRequest("Power_Topping", nextTopping); // Применяем ручной долив с учетом верхнего датчика.
+    }
+}
+
+void trigger32(){read_set_topping_controls();} // Триггер Nextion для sw0 на странице set_topping.
+void trigger33(){read_set_topping_controls();} // Триггер Nextion для sw1 на странице set_topping.
+void trigger34(){read_set_topping_controls();} // Триггер Nextion для sw2 на странице set_topping.
 
 
 
@@ -842,6 +899,7 @@ void RestartNextionDelay(void) {
 //---------------------------------------------------------------------------------
 //---------------------------------------------------------------------------------
 triggerRestartNextion = false;
+return; // При старте не читаем поля Nextion, чтобы дисплей не перетирал сохраненные в ESP32/NVS настройки.
 
 // //////////////////////////***************** set_lamp **********///////////////////////////
 // //////////////////////////******** Управление подсветкой - лампами  *****/////////////////

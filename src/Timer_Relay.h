@@ -19,15 +19,18 @@ bool checkTimeInInterval(int currentHour, int currentMinute, uint16_t startMinut
   return (current >= startMinutes) && (current < endMinutes);
 }
 
-constexpr uint32_t kModbusRelayMaxPending = 4; // Лимит очереди для команд реле: команда не теряется, а повторится в следующем проходе.
+constexpr uint32_t kModbusRelayMaxPending = 6; // Держим короткую очередь команд реле, чтобы OFF дозаторов не ждал длинную пачку.
+constexpr uint32_t kModbusUrgentRelayMaxPending = 12; // Для аварийного OFF дозаторов допускаем более плотную очередь RS485.
 constexpr uint32_t kModbusPollMaxPending = 2; // Опрос входов запускаем только при почти пустой очереди, чтобы не подвесить RS485.
 constexpr unsigned long kModbusInputPollMs = 100; // Входы платы реле опрашиваем быстро, намного чаще 1 секунды.
 constexpr unsigned long kModbusRelayPollMs = 500; // Состояние реле сверяем отдельно, без постоянной пачки записей.
-constexpr uint8_t kMaxRelayWritesPerPass = 2; // Ограничиваем всплеск записей за один проход loop, чтобы входы читались без задержки.
+constexpr uint8_t kMaxRelayWritesPerPass = 4; // Разрешаем несколько срочных записей за проход, чтобы реле дозаторов выключались быстрее.
 
 inline bool ModbusRelaySentState[16] = {false}; // Последнее состояние реле, которое уже поставлено в очередь RS485.
 inline bool ModbusRelaySentKnown[16] = {false}; // Флаг известности состояния, чтобы при старте один раз синхронизировать все реле.
 inline bool ModbusRelayNeedReadback = true; // После записей просим свежую сверку реле.
+inline unsigned long DosingAcoEmergencyHoldUntil = 0; // До этого времени повторный старт PH/ACO запрещен после аварийного среза.
+inline unsigned long DosingH2O2EmergencyHoldUntil = 0; // До этого времени повторный старт CL/NaOCl запрещен после аварийного среза.
 
 inline bool queueRelayWriteIfNeeded(uint8_t relay, bool desired, uint8_t &writesThisPass) {
   if (relay >= 16) return false;
@@ -44,6 +47,22 @@ inline bool queueRelayWriteIfNeeded(uint8_t relay, bool desired, uint8_t &writes
     return true;
   }
   return false;
+}
+
+inline bool queueUrgentDosingRelayWrite(uint8_t relay, bool desired, uint8_t &writesThisPass) { // Срочная запись для реле дозаторов PH/CL.
+  if (relay != 5 && relay != 6) return queueRelayWriteIfNeeded(relay, desired, writesThisPass); // Не даем срочный обход неопасным реле.
+  if (ModbusRelaySentKnown[relay] && ModbusRelaySentState[relay] == desired) return true; // Не плодим одинаковые команды.
+  if (writesThisPass >= kMaxRelayWritesPerPass) return false; // Не забиваем один проход loop бесконечными записями.
+  if (!modbusQueueHasRoom(kModbusUrgentRelayMaxPending)) return false; // Для дозаторов допускаем более длинную очередь, но не бесконечную.
+  Error err = modbusWriteRelay(relay, desired); // Ставим команду реле в RS485.
+  if (err == SUCCESS) { // Если библиотека приняла команду.
+    ModbusRelaySentState[relay] = desired; // Запоминаем желаемое состояние.
+    ModbusRelaySentKnown[relay] = true; // Считаем команду поставленной в очередь.
+    ModbusRelayNeedReadback = true; // Просим последующую сверку фактического реле.
+    writesThisPass++; // Учитываем запись в лимите текущего прохода.
+    return true; // Сообщаем, что команда поставлена.
+  }
+  return false; // Если очередь не приняла команду, повторим на следующем проходе.
 }
 
 inline void pollModbusInputsAndRelays() {
@@ -127,6 +146,7 @@ inline void pollModbusInputsAndRelays() {
 //       timerDuration = 0;
 //       break;
 //   }
+#define manageTimer manageTimerOld // Временно переименовываем старую реализацию, чтобы ниже объявить безопасную новую функцию.
 void manageTimer(int& mode,                 // Входной параметр: режим работы таймера (1,2,3,4,5,6,7)
                  bool& power,               // Входной/выходной параметр: флаг, указывающий, включен ли таймер (true - включен, false - выключен)
                  bool activation,           // Входной параметр: флаг, указывающий, активирован ли таймер (true - активирован, false - неактивирован)
@@ -215,14 +235,114 @@ unsigned long timerDuration;
 }
 
 // Включение перельстатических насосов в ручную кнопкой на 1 сек для проверки
+#undef manageTimer // Возвращаем исходное имя функции, чтобы ниже объявить новую безопасную реализацию.
+
+inline void formatDosingCountdown(char* info, size_t size, unsigned long remainingMs) { // Формируем короткий текст ожидания для Nextion/Web.
+  unsigned long seconds = (remainingMs + 999UL) / 1000UL; // Округляем миллисекунды вверх до секунд, чтобы не показать 0 слишком рано.
+  if (seconds < 60UL) { // Если осталось меньше минуты, показываем секунды.
+    snprintf(info, size, "%lus", seconds); // Записываем компактный формат, например 15s.
+    return; // Выходим, потому что формат уже записан.
+  }
+  unsigned long minutes = (seconds + 59UL) / 60UL; // Округляем секунды вверх до минут для длинных ожиданий.
+  if (minutes < 60UL) { // Если осталось меньше часа, показываем только минуты.
+    snprintf(info, size, "%lum", minutes); // Записываем компактный формат, например 5m.
+    return; // Выходим, потому что формат уже записан.
+  }
+  unsigned long hours = minutes / 60UL; // Вычисляем полные часы.
+  unsigned long mins = minutes % 60UL; // Вычисляем остаток минут.
+  snprintf(info, size, "%luh %02lum", hours, mins); // Записываем формат больше часа, например 1h 05m.
+}
+
+void manageTimer(int& mode,                 // Код периода дозирования из Web/Nextion.
+                 bool& power,               // Команда на физическое включение реле дозатора.
+                 bool activation,           // Разрешение дозирования по химии и фильтрации.
+                 unsigned long& lastMillis, // Время последней смены состояния таймера.
+                 char* info) {              // Короткий статус для Web/Nextion.
+  mode = sanitizeDosingPeriodValue(mode); // Нормализуем режим при каждом вызове, чтобы поврежденное значение не стало опасным.
+  const unsigned long now = millis(); // Считываем текущее время один раз для всей функции.
+  const unsigned long periodMs = dosingPeriodMsFromMode(mode); // Получаем период повторения дозирования в миллисекундах.
+  const unsigned long workMs = 5000UL; // Жесткая защита: реле дозатора может быть включено только 5 секунд.
+  const bool emergencyHold = (info == Info_ACO && DosingAcoEmergencyHoldUntil != 0 && static_cast<long>(now - DosingAcoEmergencyHoldUntil) < 0) ||
+                             (info == Info_H2O2 && DosingH2O2EmergencyHoldUntil != 0 && static_cast<long>(now - DosingH2O2EmergencyHoldUntil) < 0); // Проверяем паузу после аварийного выключения конкретного насоса.
+
+  if (emergencyHold) { // Если аварийная пауза еще активна, насос не имеет права стартовать снова.
+    power = false; // Снимаем команду с реле дозатора.
+    snprintf(info, 50, "OFF"); // Показываем короткое безопасное состояние.
+    return; // Выходим до обычной логики таймера.
+  }
+
+  if (!activation || !Power_Filtr) { // Если химия не требует дозирования или нет фильтрации, насос должен быть выключен.
+    power = false; // Немедленно снимаем команду с реле дозатора.
+    lastMillis = now; // Сбрасываем таймер, чтобы после нового разрешения не было мгновенного старта.
+    snprintf(info, 50, "OFF"); // Показываем понятное короткое состояние.
+    return; // Выходим, потому что дозирование запрещено.
+  }
+
+  unsigned long elapsed = now - lastMillis; // Считаем время с момента последней смены состояния.
+  if (power && elapsed >= workMs) { // Если реле уже отработало свои 5 секунд.
+    power = false; // Выключаем реле дозатора.
+    lastMillis = now; // Запускаем отсчет паузы до следующего импульса.
+    elapsed = 0; // Обнуляем локальный счетчик для корректного текста ожидания.
+  } else if (!power && elapsed >= periodMs) { // Если реле выключено и период ожидания прошел.
+    power = true; // Включаем реле дозатора.
+    lastMillis = now; // Запоминаем момент начала 5-секундного импульса.
+    elapsed = 0; // Обнуляем локальный счетчик для статуса Work.
+  }
+
+  if (power) { // Если команда на реле активна прямо сейчас.
+    snprintf(info, 50, "Work"); // Показываем Work только во время фактического включения реле.
+  } else { // Если реле выключено, но дозирование все еще разрешено.
+    unsigned long waitMs = (elapsed >= periodMs) ? 0UL : (periodMs - elapsed); // Считаем, сколько осталось до следующего импульса.
+    formatDosingCountdown(info, 50, waitMs); // Записываем компактный обратный отсчет.
+  }
+}
+
 inline void updateManualPumpPulses(){
   const unsigned long now = millis();
-  if(ManualPulse_ACO_Active && (now - ManualPulse_ACO_StartedAt >= 1000UL)){
+  if(ManualPulse_ACO_Active && (now - ManualPulse_ACO_StartedAt >= 5000UL)){ // Ручная проверка ACO также длится строго 5 секунд.
     ManualPulse_ACO_Active = false;
   }
-  if(ManualPulse_H2O2_Active && (now - ManualPulse_H2O2_StartedAt >= 1000UL)){
+  if(ManualPulse_H2O2_Active && (now - ManualPulse_H2O2_StartedAt >= 5000UL)){ // Ручная проверка NaOCl также длится строго 5 секунд.
     ManualPulse_H2O2_Active = false;
   }
+}
+
+inline void enforceDosingHardLimit(){ // Аварийный ограничитель дозаторов, который работает независимо от TimerControlRelay и Nextion.
+  const unsigned long now = millis(); // Берем текущее время один раз для всего контроля.
+  static bool acoWasCommanded = false; // Запоминаем, была ли команда на ACO в прошлом проходе.
+  static bool h2o2WasCommanded = false; // Запоминаем, была ли команда на NaOCl в прошлом проходе.
+  static unsigned long acoCommandStartedAt = 0; // Храним момент фактической команды ON для ACO.
+  static unsigned long h2o2CommandStartedAt = 0; // Храним момент фактической команды ON для NaOCl.
+  bool acoCommanded = Power_ACO || ManualPulse_ACO_Active; // ACO считается включенным, если активна автоматика или ручной тест.
+  bool h2o2Commanded = Power_H2O2 || ManualPulse_H2O2_Active; // NaOCl считается включенным, если активна автоматика или ручной тест.
+
+  if (acoCommanded && !acoWasCommanded) acoCommandStartedAt = now; // Фиксируем старт ACO только на фронте ON.
+  if (h2o2Commanded && !h2o2WasCommanded) h2o2CommandStartedAt = now; // Фиксируем старт NaOCl только на фронте ON.
+  if (!acoCommanded) acoCommandStartedAt = now; // Пока ACO выключен, держим старт равным текущему времени.
+  if (!h2o2Commanded) h2o2CommandStartedAt = now; // Пока NaOCl выключен, держим старт равным текущему времени.
+
+  if (acoCommanded && (now - acoCommandStartedAt >= 5000UL)) { // Если ACO держится включенным 5 секунд или дольше.
+    Power_ACO = false; // Принудительно выключаем автоматическую команду ACO.
+    ManualPulse_ACO_Active = false; // Принудительно выключаем ручной тест ACO.
+    DosingAcoEmergencyHoldUntil = now + dosingPeriodMsFromMode(ACO_Work); // Запрещаем мгновенный повторный старт до следующего периода.
+    ModbusRelaySentKnown[6] = false; // Просим RS485 заново отправить OFF на реле 7.
+    ModbusRelayNeedReadback = true; // После аварийного среза нужна свежая сверка реле.
+    snprintf(Info_ACO, 50, "OFF"); // На Web/Nextion сразу показываем безопасное состояние.
+    acoCommanded = false; // Обновляем локальное состояние после принудительного выключения.
+  }
+
+  if (h2o2Commanded && (now - h2o2CommandStartedAt >= 5000UL)) { // Если NaOCl держится включенным 5 секунд или дольше.
+    Power_H2O2 = false; // Принудительно выключаем автоматическую команду NaOCl.
+    ManualPulse_H2O2_Active = false; // Принудительно выключаем ручной тест NaOCl.
+    DosingH2O2EmergencyHoldUntil = now + dosingPeriodMsFromMode(H2O2_Work); // Запрещаем мгновенный повторный старт до следующего периода.
+    ModbusRelaySentKnown[5] = false; // Просим RS485 заново отправить OFF на реле 6.
+    ModbusRelayNeedReadback = true; // После аварийного среза нужна свежая сверка реле.
+    snprintf(Info_H2O2, 50, "OFF"); // На Web/Nextion сразу показываем безопасное состояние.
+    h2o2Commanded = false; // Обновляем локальное состояние после принудительного выключения.
+  }
+
+  acoWasCommanded = acoCommanded; // Запоминаем итоговое состояние ACO для следующего прохода.
+  h2o2WasCommanded = h2o2Commanded; // Запоминаем итоговое состояние NaOCl для следующего прохода.
 }
 
 
@@ -429,9 +549,12 @@ void TimerControlRelay(int interval) {
   timer = millis();
   int currentHour = 0;
   int currentMinute = 0;
-  if (!getCurrentHourMinute(currentHour, currentMinute)) {
-    return;
+  bool timeAvailable = getCurrentHourMinute(currentHour, currentMinute); // Проверяем часы, но не выходим из функции из-за ошибки времени.
+  if (!timeAvailable) { // Если время временно недоступно, расписания пропускаем, а защиту дозаторов продолжаем обслуживать.
+    currentHour = 0; // Ставим безопасную заглушку для часов.
+    currentMinute = 0; // Ставим безопасную заглушку для минут.
   }
+  if (timeAvailable) { // Все расписания работают только когда текущее время реально прочитано.
 // //---------------------------------------------------------------------------------
 // //---------------------------------------------------------------------------------
 // //---------------------------------------------------------------------------------
@@ -630,6 +753,8 @@ void TimerControlRelay(int interval) {
         //       manageTimer(H2O2_Work, Power_H2O2 = false, false, lastMillisH2O2, Info_H2O2);
         //     }
     // Активация дозации ACO - кислоты по датчику PH
+  }
+
     static unsigned long lastMillisACO = 0;
     static bool phDosingActive = false;
     PH_setting = PH_Upper; // Совместимость со старым ключом верхней уставки pH
@@ -637,8 +762,8 @@ void TimerControlRelay(int interval) {
       phDosingActive = false;
       manageTimer(ACO_Work, Power_ACO = false, false, lastMillisACO, Info_ACO);
           } else {
-      if (!phDosingActive && PH < PH_Lower) phDosingActive = true;
-      if (phDosingActive && PH > PH_Upper) phDosingActive = false;
+      if (!phDosingActive && PH > PH_Upper) phDosingActive = true; // Кислота нужна только при pH выше верхнего предела.
+      if (phDosingActive && PH <= PH_Lower) phDosingActive = false; // Дозирование останавливаем после снижения до нижнего предела.
       manageTimer(ACO_Work, Power_ACO, phDosingActive, lastMillisACO, Info_ACO);
     }
 
@@ -649,8 +774,8 @@ void TimerControlRelay(int interval) {
       clDosingActive = false;
       manageTimer(H2O2_Work, Power_H2O2 = false, false, lastMillisH2O2, Info_H2O2);
           } else {
-      if (!clDosingActive && ppmCl < CL_Lower) clDosingActive = true;
-      if (clDosingActive && ppmCl > CL_Upper) clDosingActive = false;
+      if (!clDosingActive && ppmCl < CL_Lower) clDosingActive = true; // Хлор нужен только ниже нижнего предела.
+      if (clDosingActive && ppmCl >= CL_Upper) clDosingActive = false; // Дозирование прекращаем при достижении верхнего предела.
       manageTimer(H2O2_Work, Power_H2O2, clDosingActive, lastMillisH2O2, Info_H2O2);
     }
 
@@ -683,6 +808,7 @@ void TimerControlRelay(int interval) {
 
 //   if (!Activation_Heat) {Error err = RS485.addRequest(40001,1,0x05,4, devices[1].value );} //реле№5 для PowerHeat
 void ControlModbusRelay(int interval) {
+  enforceDosingHardLimit(); // Сначала аварийно снимаем команды с дозаторов, даже если очередь RS485 или Nextion тормозит.
   pollModbusInputsAndRelays();
   static unsigned long timer;
   unsigned long now = millis();
@@ -740,6 +866,7 @@ if (AktualReadInput) {
     Power_Drain_State = Power_Drain && Power_Filtr;
   }
 
+#if 0 // Старую логику держим отключенной: она не делает слив порциями и не умеет паузу между сливами.
   if (Activation_Water_Level) {
     if (WaterLevelSensorLower) {
       Power_Topping = true;
@@ -801,7 +928,150 @@ if (AktualReadInput) {
   queueRelayWriteIfNeeded(6, modbusAcoActive, relayWritesThisPass); // Реле 7: ACO.
 
   pollModbusInputsAndRelays(); // После возможных записей сразу даем шанс быстрому опросу входов/состояний.
-  return;
+  return; // Завершаем ControlModbusRelay после старой стабильной ветки и не заходим в отключенную новую логику.
+#endif // Конец отключенной старой логики уровня/слива и старого блока отправки реле.
+
+#if 1 // Активная безопасная логика уровня: все таймеры неблокирующие, RS485 пишет только изменившиеся реле.
+  DrainWorkMinutes = clampIntSetting(DrainWorkMinutes, 1, 30, 15); // Ограничиваем длительность слива безопасным диапазоном 1-30 минут.
+  DrainPauseMinutes = clampIntSetting(DrainPauseMinutes, 1, 30, 15); // Ограничиваем паузу между сливами диапазоном 1-30 минут.
+  DrainCyclesTarget = clampIntSetting(DrainCyclesTarget, 1, 30, 10); // Ограничиваем количество порций диапазоном 1-30.
+  ToppingWorkMinutes = clampIntSetting(ToppingWorkMinutes, 5, 60, 10); // Ограничиваем длительность долива диапазоном 5-60 минут.
+  ToppingPauseMinutes = clampIntSetting(ToppingPauseMinutes, 5, 60, 60); // Ограничиваем паузу долива диапазоном 5-60 минут.
+
+  const unsigned long drainWorkMs = static_cast<unsigned long>(DrainWorkMinutes) * 60UL * 1000UL; // Переводим работу слива в миллисекунды.
+  const unsigned long drainPauseMs = static_cast<unsigned long>(DrainPauseMinutes) * 60UL * 1000UL; // Переводим паузу слива в миллисекунды.
+  const unsigned long toppingWorkMs = static_cast<unsigned long>(ToppingWorkMinutes) * 60UL * 1000UL; // Переводим работу долива в миллисекунды.
+  const unsigned long toppingPauseMs = static_cast<unsigned long>(ToppingPauseMinutes) * 60UL * 1000UL; // Переводим паузу долива в миллисекунды.
+
+  auto stopDrainMode = [&]() { // Локальная функция штатного завершения или ручного отключения слива.
+    Power_Drain = false; // Сбрасываем кнопку слива.
+    Power_Drain_State = false; // Показываем, что насос слива фактически не работает.
+    DrainModeLatched = false; // Снимаем защелку режима слива.
+    DrainCycleRunning = false; // Останавливаем активную порцию слива.
+    DrainPauseRunning = false; // Останавливаем паузу между порциями.
+    DrainCycleStartedAt = 0; // Сбрасываем время старта порции.
+    DrainPauseStartedAt = 0; // Сбрасываем время старта паузы.
+    Power_Filtr = DrainRestoreFiltrationState; // Возвращаем насос фильтрации в состояние до слива.
+    saveButtonState("Power_Drain", 0); // Сохраняем отключенную кнопку слива в NVS.
+  };
+
+  if (Power_Drain && !DrainModeLatched) { // Если пользователь только что включил слив.
+    DrainRestoreFiltrationState = Power_Filtr; // Запоминаем исходное состояние насоса фильтрации.
+    DrainModeLatched = true; // Фиксируем активный режим слива.
+    DrainCycleRunning = false; // Готовим старт первой порции.
+    DrainPauseRunning = false; // Пауза перед первой порцией не нужна.
+    DrainCyclesDone = 0; // Сбрасываем счетчик выполненных порций.
+    Activation_Water_Level = false; // Слив имеет приоритет и отключает автоматический контроль уровня.
+    Power_Topping = false; // Во время слива запрещаем долив.
+    ToppingCycleRunning = false; // Останавливаем текущий долив, если он был.
+    ToppingPauseRunning = false; // Сбрасываем паузу долива, потому что режим отключен.
+    persistWaterControlModes(); // Сохраняем измененные режимы в NVS.
+  }
+
+  if (!Power_Drain && DrainModeLatched) { // Если слив выключили вручную из Web/Nextion/MQTT.
+    stopDrainMode(); // Немедленно завершаем слив и возвращаем насос.
+  }
+
+  if (Power_Drain) { // Основная логика активного режима слива.
+    Activation_Water_Level = false; // Не разрешаем автоматический долив параллельно сливу.
+    Power_Topping = false; // Не разрешаем открывать клапан долива во время слива.
+    if (!DrainCycleRunning && !DrainPauseRunning && DrainCyclesDone >= DrainCyclesTarget) { // Если выполнено заданное число порций.
+      stopDrainMode(); // Завершаем слив полностью.
+    } else if (!DrainCycleRunning && !DrainPauseRunning && WaterLevelSensorDrain) { // Если яма уже полная до старта порции.
+      DrainPauseRunning = true; // Сразу переходим в паузу ожидания.
+      DrainPauseStartedAt = now; // Запоминаем старт паузы.
+      Power_Filtr = false; // Насос не включаем, пока датчик ямы сработал.
+    } else if (!DrainCycleRunning && !DrainPauseRunning) { // Если можно начинать новую порцию.
+      DrainCycleRunning = true; // Отмечаем активную порцию слива.
+      DrainCycleStartedAt = now; // Запоминаем время старта порции.
+      Power_Filtr = true; // Включаем насос фильтрации как насос слива.
+    }
+
+    if (DrainCycleRunning) { // Если идет активная порция слива.
+      Power_Filtr = true; // Удерживаем насос включенным на время порции.
+      if ((now - DrainCycleStartedAt >= drainWorkMs) || WaterLevelSensorDrain) { // Останавливаемся по времени или по датчику ямы.
+        Power_Filtr = false; // Немедленно выключаем насос слива.
+        DrainCycleRunning = false; // Завершаем текущую порцию.
+        DrainCyclesDone++; // Увеличиваем счетчик выполненных порций.
+        DrainPauseRunning = true; // Переходим в обязательную паузу.
+        DrainPauseStartedAt = now; // Запоминаем старт паузы.
+      }
+    }
+
+    if (DrainPauseRunning) { // Если идет пауза между порциями слива.
+      Power_Filtr = false; // Во время паузы насос обязательно выключен.
+      if (now - DrainPauseStartedAt >= drainPauseMs) { // Если пауза закончилась.
+        DrainPauseRunning = false; // Разрешаем следующую порцию на следующем проходе.
+      }
+    }
+
+    Power_Drain_State = Power_Drain && DrainCycleRunning; // Статус слива показывает фактическую работу насоса.
+  }
+
+  if (!Power_Drain) { // Логика долива работает только когда слив отключен.
+    if (Activation_Water_Level) { // Если включен автоматический контроль уровня.
+      if (WaterLevelSensorUpper) { // Если верхний уровень бассейна уже достигнут.
+        Power_Topping = false; // Закрываем клапан долива.
+        ToppingCycleRunning = false; // Завершаем активный долив.
+        ToppingPauseRunning = false; // Пауза не нужна, потому что уровень нормальный.
+      } else if (ToppingCycleRunning) { // Если клапан уже открыт текущей порцией.
+        Power_Topping = true; // Удерживаем клапан открытым.
+        if ((now - ToppingCycleStartedAt >= toppingWorkMs) || WaterLevelSensorUpper) { // Закрываем по времени или верхнему датчику.
+          Power_Topping = false; // Закрываем клапан долива.
+          ToppingCycleRunning = false; // Завершаем порцию долива.
+          ToppingPauseRunning = true; // Запускаем паузу до следующей попытки.
+          ToppingPauseStartedAt = now; // Запоминаем старт паузы.
+        }
+      } else if (ToppingPauseRunning) { // Если идет пауза после долива.
+        Power_Topping = false; // Во время паузы клапан закрыт.
+        if (now - ToppingPauseStartedAt >= toppingPauseMs) { // Если пауза закончилась.
+          ToppingPauseRunning = false; // Разрешаем новый долив при нижнем уровне.
+        }
+      } else if (WaterLevelSensorLower) { // Если сработал нижний уровень и паузы нет.
+        ToppingCycleRunning = true; // Запускаем новую порцию долива.
+        ToppingCycleStartedAt = now; // Запоминаем старт порции.
+        Power_Topping = true; // Открываем клапан долива.
+      } else { // Если нижний датчик не требует долива.
+        Power_Topping = false; // Клапан держим закрытым.
+      }
+    } else { // Если автоматический контроль уровня выключен.
+      ToppingCycleRunning = false; // Сбрасываем автоматическую порцию долива.
+      ToppingPauseRunning = false; // Сбрасываем автоматическую паузу долива.
+      if (WaterLevelSensorUpper) Power_Topping = false; // Даже ручной долив закрываем по верхнему уровню для защиты от перелива.
+    }
+    Power_Topping_State = Power_Topping; // До чтения обратной связи показываем команду на клапан как ожидаемое состояние.
+  }
+
+  uint8_t relayWritesThisPass = 0; // Считаем записи реле за один проход, чтобы не перегрузить очередь RS485.
+  const bool modbusH2O2Active = Power_H2O2 || ManualPulse_H2O2_Active; // Насос NaOCl включается автоматикой или ручным тестом.
+  const bool modbusAcoActive = Power_ACO || ManualPulse_ACO_Active; // Насос ACO включается автоматикой или ручным тестом.
+  queueUrgentDosingRelayWrite(5, modbusH2O2Active, relayWritesThisPass); // Реле 6 пишем срочно, чтобы OFF NaOCl не ждал остальные нагрузки.
+  queueUrgentDosingRelayWrite(6, modbusAcoActive, relayWritesThisPass); // Реле 7 пишем срочно, чтобы OFF ACO не ждал остальные нагрузки.
+  queueRelayWriteIfNeeded(0, Lamp, relayWritesThisPass); // Реле 1: лампа бассейна.
+  queueRelayWriteIfNeeded(1, Pow_WS2815, relayWritesThisPass); // Реле 2: питание RGB-ленты WS2815.
+  queueRelayWriteIfNeeded(8, Power_Filtr, relayWritesThisPass); // Реле 9: насос фильтрации и слив воды.
+
+  const bool modbusHeatInterlockActive = Power_Filtr || ReadRelayArray[8]; // Нагрев разрешен только при работающем насосе.
+  if (!Activation_Heat || !modbusHeatInterlockActive) { // Если нагрев выключен или нет протока.
+    Power_Heat = false; // Снимаем команду нагрева до записи реле.
+  }
+  queueRelayWriteIfNeeded(4, Power_Heat, relayWritesThisPass); // Реле 5: нагреватель.
+  queueRelayWriteIfNeeded(14, Power_Warm_floor_heating, relayWritesThisPass); // Реле 15: теплый пол помещения.
+  queueRelayWriteIfNeeded(15, Pow_Ul_light, relayWritesThisPass); // Реле 16: уличное освещение.
+  queueRelayWriteIfNeeded(13, Power_Topping, relayWritesThisPass); // Реле 14: соленоидный клапан долива.
+
+  const bool modbusAirPumpActive = AirPump || AirPumpAuto; // Компрессор может включаться вручную или автоматикой промывки.
+  const bool modbusValveBackwashActive = SolValveFilBack || ValveBackwashAuto; // Клапан BACKWASH может включаться вручную или автоматикой.
+  const bool modbusValveFiltrationActive = SolValveFiltration || ValveFiltrationAuto; // Клапан FILTRATION может включаться вручную или автоматикой.
+  const bool modbusSandDumpActive = SolSandDump || SolSandDumpAuto; // Сброс песка может включаться вручную или автоматикой.
+  queueRelayWriteIfNeeded(9, modbusAirPumpActive, relayWritesThisPass); // Реле 10: компрессор воздуха.
+  queueRelayWriteIfNeeded(10, modbusValveFiltrationActive, relayWritesThisPass); // Реле 11: клапан FILTRATION.
+  queueRelayWriteIfNeeded(11, modbusValveBackwashActive, relayWritesThisPass); // Реле 12: клапан BACKWASH.
+  queueRelayWriteIfNeeded(12, modbusSandDumpActive, relayWritesThisPass); // Реле 13: сброс песка.
+
+  pollModbusInputsAndRelays(); // После возможных записей даем шанс быстрому опросу входов и реле.
+  return; // Завершаем новую активную ветку ControlModbusRelay.
+#endif // Конец временно отключенной новой логики уровня воды.
 
 #if 0
   // Старый режим оставлен выключенным для сравнения: он каждую секунду писал все реле и забивал очередь RS485.

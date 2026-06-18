@@ -76,6 +76,7 @@ void Nextion_Transmit (int interval) {
 // ////////////////////////************* page set_lamp  **************//////////////////////////////
 // ///////////////////////************* page set_lamp  **************///////////////////////////////
 
+#if 0 // Старый блок принудительно переключал страницы Nextion и тормозил ввод; синхронизация ниже идет порциями без page.
 if (Lamp != Lamp1 && !triggerRestartNextion){Lamp1 = Lamp;
   myNex.writeStr("dim=50");
   myNex.writeNum("page0.b0.pic", Lamp ? 2 : 1); 
@@ -329,6 +330,7 @@ if (Saved_Filtr_timeOFF3 != filtrTimer3.off && !triggerRestartNextion) {Saved_Fi
   myNex.writeNum("set_filtr.n10.val", getSubstring(filtrOff3Str, 0, 1));
   myNex.writeNum("set_filtr.n11.val", getSubstring(filtrOff3Str, 3, 4));
 }
+#endif // Конец отключенного legacy-блока set_lamp/set_RGB/set_filtr с принудительными переходами страниц.
 // /////////////////////////************* page Clean **************/////////////////////////////
 // ////////////////////////************* page Clean **************//////////////////////////////
 // ///////////////////////************* page Clean **************///////////////////////////////
@@ -341,11 +343,10 @@ if (Saved_Filtr_timeOFF3 != filtrTimer3.off && !triggerRestartNextion) {Saved_Fi
 //   Error err = RS485.addRequest(40001,1,0x05,3, Power_Clean ? devices[0].value : devices[1].value);
 // }  //pcfRelays.digitalWrite(P3, Power_Clean ? LOW : HIGH);
 
-if (Power_Clean1 != Power_Clean && !triggerRestartNextion) {Power_Clean1 = Power_Clean;
-    myNex.writeStr("dim=50");
-    myNex.writeNum("page0.b2.pic", Power_Clean ? 6 : 5); delay(50);
-    myNex.writeStr("page Clean");
-    myNex.writeNum("Clean.sw1.val", Power_Clean ? 1 : 0);
+if (Power_Clean1 != Power_Clean && !triggerRestartNextion) {
+    Power_Clean1 = Power_Clean; // Запоминаем состояние промывки, чтобы не отправлять одно и то же постоянно.
+    myNex.writeNum("page0.b2.pic", Power_Clean ? 6 : 5); // Обновляем кнопку главной страницы без delay.
+    if (Nx_page_id == 4) myNex.writeNum("Clean.sw1.val", Power_Clean ? 1 : 0); // Переключатель Clean обновляем только на открытой странице.
 }  //pcfRelays.digitalWrite(P3, Power_Clean ? LOW : HIGH);
 
 // if (Saved_Clean_Time1 != Clean_Time1 && !triggerRestartNextion) {Saved_Clean_Time1=Clean_Time1;
@@ -354,10 +355,9 @@ if (Power_Clean1 != Power_Clean && !triggerRestartNextion) {Power_Clean1 = Power
 //     myNex.writeNum("Clean.sw0.val", Clean_Time1 ? 1 : 0);
 // }
 
-if (Saved_Clean_Time1 != Clean_Time1 && !triggerRestartNextion) {Saved_Clean_Time1=Clean_Time1;
-    myNex.writeStr("dim=50");
-    myNex.writeStr("page Clean");
-    myNex.writeNum("Clean.sw0.val", Clean_Time1 ? 1 : 0);
+if (Saved_Clean_Time1 != Clean_Time1 && !triggerRestartNextion && Nx_page_id == 4) {
+    Saved_Clean_Time1=Clean_Time1; // Запоминаем состояние таймера промывки после записи на открытую страницу.
+    myNex.writeNum("Clean.sw0.val", Clean_Time1 ? 1 : 0); // Пишем sw0 без принудительного перехода страницы.
 }
 
 // if (Saved_Clean_timeON1 != Clean_timeON1 && !triggerRestartNextion) {Saved_Clean_timeON1 = Clean_timeON1;
@@ -368,12 +368,11 @@ if (Saved_Clean_Time1 != Clean_Time1 && !triggerRestartNextion) {Saved_Clean_Tim
 // }
 
 UITimerEntry &cleanTimer = ui.timer("CleanTimer1");
-if (Saved_Clean_timeON1 != cleanTimer.on && !triggerRestartNextion) {Saved_Clean_timeON1 = cleanTimer.on;
-  myNex.writeStr("dim=50");
-  myNex.writeStr("page Clean");
-  String cleanOnStr = formatMinutesToTime(cleanTimer.on);
-  myNex.writeNum("Clean.n0.val", getSubstring(cleanOnStr, 0, 1));
-  myNex.writeNum("Clean.n1.val", getSubstring(cleanOnStr, 3, 4));
+if (Saved_Clean_timeON1 != cleanTimer.on && !triggerRestartNextion && Nx_page_id == 4) {
+  Saved_Clean_timeON1 = cleanTimer.on; // Запоминаем время старта промывки после записи на открытую страницу.
+  String cleanOnStr = formatMinutesToTime(cleanTimer.on); // Переводим минуты в формат HH:MM.
+  myNex.writeNum("Clean.n0.val", getSubstring(cleanOnStr, 0, 1)); // Пишем часы старта без page Clean.
+  myNex.writeNum("Clean.n1.val", getSubstring(cleanOnStr, 3, 4)); // Пишем минуты старта без page Clean.
 }
 
 // if (Saved_Clean_timeOFF1 != Clean_timeOFF1 && !triggerRestartNextion) {Saved_Clean_timeOFF1 = Clean_timeOFF1;
@@ -382,12 +381,11 @@ if (Saved_Clean_timeON1 != cleanTimer.on && !triggerRestartNextion) {Saved_Clean
 //   myNex.writeNum("Clean.n2.val", getSubstring(Clean_timeOFF1, 0, 1));
 //   myNex.writeNum("Clean.n3.val", getSubstring(Clean_timeOFF1, 3, 4));
 // }
-if (Saved_Clean_timeOFF1 != cleanTimer.off && !triggerRestartNextion) {Saved_Clean_timeOFF1 = cleanTimer.off;
-  myNex.writeStr("dim=50");
-  myNex.writeStr("page Clean");
-  String cleanOffStr = formatMinutesToTime(cleanTimer.off);
-  myNex.writeNum("Clean.n2.val", getSubstring(cleanOffStr, 0, 1));
-  myNex.writeNum("Clean.n3.val", getSubstring(cleanOffStr, 3, 4));
+if (Saved_Clean_timeOFF1 != cleanTimer.off && !triggerRestartNextion && Nx_page_id == 4) {
+  Saved_Clean_timeOFF1 = cleanTimer.off; // Запоминаем время окончания промывки после записи на открытую страницу.
+  String cleanOffStr = formatMinutesToTime(cleanTimer.off); // Переводим минуты в формат HH:MM.
+  myNex.writeNum("Clean.n2.val", getSubstring(cleanOffStr, 0, 1)); // Пишем часы окончания без page Clean.
+  myNex.writeNum("Clean.n3.val", getSubstring(cleanOffStr, 3, 4)); // Пишем минуты окончания без page Clean.
 }
 
 // if (Saved_chk1 != chk1 && !triggerRestartNextion) {Saved_chk1 = chk1;
@@ -396,10 +394,9 @@ if (Saved_Clean_timeOFF1 != cleanTimer.off && !triggerRestartNextion) {Saved_Cle
 //     myNex.writeNum("Clean.bt0.val", chk1? 1 : 0);
 // }
 
-if (Saved_chk1 != chk1 && !triggerRestartNextion) {Saved_chk1 = chk1;
-    myNex.writeStr("dim=50");
-    myNex.writeStr("page Clean");
-    myNex.writeNum("Clean.bt0.val", chk1? 1 : 0);
+if (Saved_chk1 != chk1 && !triggerRestartNextion && Nx_page_id == 4) {
+    Saved_chk1 = chk1; // Запоминаем понедельник после записи на открытую страницу.
+    myNex.writeNum("Clean.bt0.val", chk1? 1 : 0); // Пишем день без переключения страницы.
 }
 
 // if (Saved_chk2 != chk2 && !triggerRestartNextion) {Saved_chk2 = chk2;
@@ -408,10 +405,9 @@ if (Saved_chk1 != chk1 && !triggerRestartNextion) {Saved_chk1 = chk1;
 //     myNex.writeNum("Clean.bt1.val", chk2? 1 : 0);
 // }
 
-if (Saved_chk2 != chk2 && !triggerRestartNextion) {Saved_chk2 = chk2;
-    myNex.writeStr("dim=50");
-    myNex.writeStr("page Clean");
-    myNex.writeNum("Clean.bt1.val", chk2? 1 : 0);
+if (Saved_chk2 != chk2 && !triggerRestartNextion && Nx_page_id == 4) {
+    Saved_chk2 = chk2; // Запоминаем вторник после записи на открытую страницу.
+    myNex.writeNum("Clean.bt1.val", chk2? 1 : 0); // Пишем день без переключения страницы.
 }
 
 // if (Saved_chk3 != chk3 && !triggerRestartNextion) {Saved_chk3 = chk3;
@@ -420,10 +416,9 @@ if (Saved_chk2 != chk2 && !triggerRestartNextion) {Saved_chk2 = chk2;
 //     myNex.writeNum("Clean.bt2.val", chk3? 1 : 0);
 // }
 
-if (Saved_chk3 != chk3 && !triggerRestartNextion) {Saved_chk3 = chk3;
-    myNex.writeStr("dim=50");
-    myNex.writeStr("page Clean");
-    myNex.writeNum("Clean.bt2.val", chk3? 1 : 0);
+if (Saved_chk3 != chk3 && !triggerRestartNextion && Nx_page_id == 4) {
+    Saved_chk3 = chk3; // Запоминаем среду после записи на открытую страницу.
+    myNex.writeNum("Clean.bt2.val", chk3? 1 : 0); // Пишем день без переключения страницы.
 }
 
 // if (Saved_chk4 != chk4 && !triggerRestartNextion) {Saved_chk4 = chk4;
@@ -432,10 +427,9 @@ if (Saved_chk3 != chk3 && !triggerRestartNextion) {Saved_chk3 = chk3;
 //     myNex.writeNum("Clean.bt3.val", chk4? 1 : 0);
 // }
 
-if (Saved_chk4 != chk4 && !triggerRestartNextion) {Saved_chk4 = chk4;
-    myNex.writeStr("dim=50");
-    myNex.writeStr("page Clean");
-    myNex.writeNum("Clean.bt3.val", chk4? 1 : 0);
+if (Saved_chk4 != chk4 && !triggerRestartNextion && Nx_page_id == 4) {
+    Saved_chk4 = chk4; // Запоминаем четверг после записи на открытую страницу.
+    myNex.writeNum("Clean.bt3.val", chk4? 1 : 0); // Пишем день без переключения страницы.
 }
 
 // if (Saved_chk5 != chk5 && !triggerRestartNextion) {Saved_chk5 = chk5;
@@ -443,10 +437,9 @@ if (Saved_chk4 != chk4 && !triggerRestartNextion) {Saved_chk4 = chk4;
 //     myNex.writeStr("page Clean");
 //     myNex.writeNum("Clean.bt4.val", chk5? 1 : 0);
 // }
-if (Saved_chk5 != chk5 && !triggerRestartNextion) {Saved_chk5 = chk5;
-    myNex.writeStr("dim=50");
-    myNex.writeStr("page Clean");
-    myNex.writeNum("Clean.bt4.val", chk5? 1 : 0);
+if (Saved_chk5 != chk5 && !triggerRestartNextion && Nx_page_id == 4) {
+    Saved_chk5 = chk5; // Запоминаем пятницу после записи на открытую страницу.
+    myNex.writeNum("Clean.bt4.val", chk5? 1 : 0); // Пишем день без переключения страницы.
 }
 
 
@@ -455,10 +448,9 @@ if (Saved_chk5 != chk5 && !triggerRestartNextion) {Saved_chk5 = chk5;
 //     myNex.writeStr("page Clean");
 //     myNex.writeNum("Clean.bt5.val", chk6? 1 : 0);
 // }
-if (Saved_chk6 != chk6 && !triggerRestartNextion) {Saved_chk6 = chk6;
-    myNex.writeStr("dim=50");
-    myNex.writeStr("page Clean");
-    myNex.writeNum("Clean.bt5.val", chk6? 1 : 0);
+if (Saved_chk6 != chk6 && !triggerRestartNextion && Nx_page_id == 4) {
+    Saved_chk6 = chk6; // Запоминаем субботу после записи на открытую страницу.
+    myNex.writeNum("Clean.bt5.val", chk6? 1 : 0); // Пишем день без переключения страницы.
 }
 
 // if (Saved_chk7 != chk7 && !triggerRestartNextion) {Saved_chk7 = chk7;
@@ -467,10 +459,9 @@ if (Saved_chk6 != chk6 && !triggerRestartNextion) {Saved_chk6 = chk6;
 //     myNex.writeNum("Clean.bt6.val", chk7? 1 : 0);
 // }
 
-if (Saved_chk7 != chk7 && !triggerRestartNextion) {Saved_chk7 = chk7;
-    myNex.writeStr("dim=50");
-    myNex.writeStr("page Clean");
-    myNex.writeNum("Clean.bt6.val", chk7? 1 : 0);
+if (Saved_chk7 != chk7 && !triggerRestartNextion && Nx_page_id == 4) {
+    Saved_chk7 = chk7; // Запоминаем воскресенье после записи на открытую страницу.
+    myNex.writeNum("Clean.bt6.val", chk7? 1 : 0); // Пишем день без переключения страницы.
 }
 
 // /////////////////////////************* page heat  **************/////////////////////////////
@@ -497,21 +488,15 @@ if (Saved_chk7 != chk7 && !triggerRestartNextion) {Saved_chk7 = chk7;
 //   }
 
 //   Power_Heat = controlTemperature (DS1, Sider_heat, Activation_Heat); //Контроль температуры и отправка myNex.writeNum("page0.va0.val", Heat_ON_OFF ? 1 : 0);
-  if (Sider_heat != Sider_heat1 && !triggerRestartNextion){
-    myNex.writeStr("dim=50"); delay(50);
-    myNex.writeStr("page heat"); delay(50);
-    myNex.writeNum("heat.h0.val", Sider_heat); delay(50);
-    myNex.writeNum("heat.n0.val", Sider_heat); delay(50);
-
-    // Проверяем записалось ли значение:
-    Sider_heat1 = myNex.readNumber("heat.n0.val");
+  if (Sider_heat != Sider_heat1 && !triggerRestartNextion && Nx_page_id == 5){
+    Sider_heat1 = Sider_heat; // Запоминаем уставку после записи на открытую страницу нагрева.
+    myNex.writeNum("heat.h0.val", Sider_heat); // Обновляем слайдер нагрева без delay.
+    myNex.writeNum("heat.n0.val", Sider_heat); // Обновляем число нагрева без обратного чтения.
   }
 
-  if (Activation_Heat != Activation_Heat1 && !triggerRestartNextion) {
-    Activation_Heat1 = Activation_Heat;
-    myNex.writeStr("dim=50");
-    myNex.writeStr("page heat"); delay(150);
-    myNex.writeNum("heat.sw0.val", Activation_Heat); delay(150);
+  if (Activation_Heat != Activation_Heat1 && !triggerRestartNextion && Nx_page_id == 5) {
+    Activation_Heat1 = Activation_Heat; // Запоминаем режим нагрева после записи на открытую страницу.
+    myNex.writeNum("heat.sw0.val", Activation_Heat); // Пишем переключатель нагрева без page heat и delay.
   }
 
 // /////////////////////////************* set_topping  **************/////////////////////////////
@@ -522,6 +507,44 @@ if (Saved_chk7 != chk7 && !triggerRestartNextion) {Saved_chk7 = chk7;
 //     myNex.writeStr("dim=50");
 //     myNex.writeNum("page0.b3.pic", Power_Topping ? 8 : 7); 
 // }
+
+#if 1 // Синхронизация set_topping включена только на открытой странице, без принудительного page set_topping.
+static bool SavedNxActivationWaterLevel = false; // Запоминаем последнее отправленное состояние контроля уровня.
+static bool SavedNxPowerDrain = false; // Запоминаем последнее отправленное состояние кнопки слива.
+static bool SavedNxPowerTopping = false; // Запоминаем последнее отправленное состояние клапана долива.
+static bool SavedNxUpperLevel = false; // Запоминаем последний отправленный верхний датчик бассейна.
+static bool SavedNxLowerLevel = false; // Запоминаем последний отправленный нижний датчик бассейна.
+static bool SavedNxDrainLevel = false; // Запоминаем последний отправленный датчик сливной ямы.
+static int SavedNxWaterPageId = -1; // Запоминаем вход на страницу set_topping для принудительной первичной синхронизации.
+static String SavedNxWaterText = ""; // Запоминаем последнюю информационную строку уровня воды.
+String currentWaterText = waterLevelNextionText(); // Формируем текущий короткий статус уровня воды.
+if (Nx_page_id != 6) SavedNxWaterPageId = -1; // При уходе со страницы разрешаем новый полный sync при следующем входе.
+if (Nx_page_id == 6 && !triggerRestartNextion &&
+    (SavedNxWaterPageId != 6 ||
+     SavedNxActivationWaterLevel != Activation_Water_Level ||
+     SavedNxPowerDrain != Power_Drain ||
+     SavedNxPowerTopping != Power_Topping ||
+     SavedNxUpperLevel != WaterLevelSensorUpper ||
+     SavedNxLowerLevel != WaterLevelSensorLower ||
+     SavedNxDrainLevel != WaterLevelSensorDrain ||
+     SavedNxWaterText != currentWaterText)) { // Отправляем в Nextion только при изменениях, чтобы не забивать UART.
+  SavedNxWaterPageId = 6; // Отмечаем, что текущий вход на страницу уже синхронизирован.
+  SavedNxActivationWaterLevel = Activation_Water_Level; // Обновляем сохраненное состояние контроля уровня.
+  SavedNxPowerDrain = Power_Drain; // Обновляем сохраненное состояние слива.
+  SavedNxPowerTopping = Power_Topping; // Обновляем сохраненное состояние долива.
+  SavedNxUpperLevel = WaterLevelSensorUpper; // Обновляем сохраненный верхний датчик.
+  SavedNxLowerLevel = WaterLevelSensorLower; // Обновляем сохраненный нижний датчик.
+  SavedNxDrainLevel = WaterLevelSensorDrain; // Обновляем сохраненный датчик ямы.
+  SavedNxWaterText = currentWaterText; // Обновляем сохраненный текст.
+  myNex.writeNum("set_topping.sw0.val", Activation_Water_Level ? 1 : 0); // sw0: контроль уровня.
+  myNex.writeNum("set_topping.sw1.val", Power_Drain ? 1 : 0); // sw1: слив.
+  myNex.writeNum("set_topping.sw2.val", Power_Topping ? 1 : 0); // sw2: клапан долива.
+  myNex.writeNum("set_topping.c0.val", WaterLevelSensorUpper ? 1 : 0); // c0: верхний уровень бассейна.
+  myNex.writeNum("set_topping.c1.val", WaterLevelSensorLower ? 1 : 0); // c1: нижний уровень бассейна.
+  myNex.writeNum("set_topping.c2.val", WaterLevelSensorDrain ? 1 : 0); // c2: верхний уровень сливной ямы.
+  myNex.writeStr("set_topping.t0.txt", currentWaterText); // t0: понятная строка этапа работы.
+}
+#endif // Конец синхронизации set_topping без фонового переключения страниц.
 
 // /////////////////////////************* pageRTC  **************/////////////////////////////
 // ////////////////////////************* pageRTC **************//////////////////////////////
@@ -573,28 +596,23 @@ if (Saved_chk7 != chk7 && !triggerRestartNextion) {Saved_chk7 = chk7;
 // //   myNex.writeStr("page Dispensers");
 // //   myNex.writeNum("Dispensers.cb0.val", ACO_Work-1); 
 // // }
-if (Saved_PHControlACO != PH_Control_ACO && !triggerRestartNextion) {Saved_PHControlACO = PH_Control_ACO;
-    myNex.writeStr("dim=50");
-    myNex.writeStr("page Dispensers");
+static int SavedNxDispensersPageId = -1; // Запоминаем вход на страницу дозаторов для первичной синхронизации.
+if (Nx_page_id != 9) SavedNxDispensersPageId = -1; // При уходе со страницы разрешаем новый полный sync при следующем входе.
+const bool forceDispensersSync = (Nx_page_id == 9 && SavedNxDispensersPageId != 9); // true только при первом проходе после входа.
+if (Nx_page_id == 9 && (forceDispensersSync || Saved_PHControlACO != PH_Control_ACO) && !triggerRestartNextion) {Saved_PHControlACO = PH_Control_ACO;
     myNex.writeNum("Dispensers.sw0.val", PH_Control_ACO ? 1 : 0);
 }
 
-if (ACO_Work != Saved_ACO_Work && !triggerRestartNextion) {Saved_ACO_Work = ACO_Work;
-  myNex.writeStr("dim=50");
-  myNex.writeStr("page Dispensers");
+if (Nx_page_id == 9 && (forceDispensersSync || ACO_Work != Saved_ACO_Work) && !triggerRestartNextion) {Saved_ACO_Work = ACO_Work;
   myNex.writeNum("Dispensers.cb0.val", ACO_Work - 1); 
 }
 
-if (Saved_NaOCl_H2O2_Control != NaOCl_H2O2_Control && !triggerRestartNextion) {
+if (Nx_page_id == 9 && (forceDispensersSync || Saved_NaOCl_H2O2_Control != NaOCl_H2O2_Control) && !triggerRestartNextion) {
     Saved_NaOCl_H2O2_Control = NaOCl_H2O2_Control;
-    myNex.writeStr("dim=50");
-    myNex.writeStr("page Dispensers");
     myNex.writeNum("Dispensers.sw2.val", NaOCl_H2O2_Control ? 1 : 0);
 }
 
-if (H2O2_Work != Saved_H2O2_Work && !triggerRestartNextion) {Saved_H2O2_Work = H2O2_Work;
-  myNex.writeStr("dim=50");
-  myNex.writeStr("page Dispensers");
+if (Nx_page_id == 9 && (forceDispensersSync || H2O2_Work != Saved_H2O2_Work) && !triggerRestartNextion) {Saved_H2O2_Work = H2O2_Work;
   myNex.writeNum("Dispensers.cb1.val", H2O2_Work - 1); 
 }
 
@@ -602,13 +620,11 @@ static float Saved_PH_Lower_Nextion = -100.0f;
 static float Saved_PH_Upper_Nextion = -100.0f;
 static float Saved_CL_Lower_Nextion = -100.0f;
 static float Saved_CL_Upper_Nextion = -100.0f;
-if (!triggerRestartNextion && (Saved_PH_Lower_Nextion != PH_Lower || Saved_PH_Upper_Nextion != PH_Upper || Saved_CL_Lower_Nextion != CL_Lower || Saved_CL_Upper_Nextion != CL_Upper)) {
+if (Nx_page_id == 9 && !triggerRestartNextion && (forceDispensersSync || Saved_PH_Lower_Nextion != PH_Lower || Saved_PH_Upper_Nextion != PH_Upper || Saved_CL_Lower_Nextion != CL_Lower || Saved_CL_Upper_Nextion != CL_Upper)) {
   Saved_PH_Lower_Nextion = PH_Lower;
   Saved_PH_Upper_Nextion = PH_Upper;
   Saved_CL_Lower_Nextion = CL_Lower;
   Saved_CL_Upper_Nextion = CL_Upper;
-  myNex.writeStr("dim=50");
-  myNex.writeStr("page Dispensers");
   myNex.writeNum("Dispensers.n0.val", (int)PH_Lower);
   myNex.writeNum("Dispensers.n1.val", ((int)round(PH_Lower * 10.0f)) % 10);
   myNex.writeNum("Dispensers.n2.val", (int)PH_Upper);
@@ -618,6 +634,7 @@ if (!triggerRestartNextion && (Saved_PH_Lower_Nextion != PH_Lower || Saved_PH_Up
   myNex.writeNum("Dispensers.n4.val", (int)CL_Upper);
   myNex.writeNum("Dispensers.n5.val", ((int)round(CL_Upper * 10.0f)) % 10);
 }
+if (Nx_page_id == 9 && !triggerRestartNextion) SavedNxDispensersPageId = 9; // После всех записей считаем страницу дозаторов синхронизированной.
 
 
 // if (Saved_ppmCl != ppmCl) {Saved_ppmCl = ppmCl;
