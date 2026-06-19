@@ -252,6 +252,7 @@ loop_CL2(2100); // Обработка логики хлора
     Nextion_Transmit(500); // Отправка в Nextion по очереди
   }
   pollNextionDispensersSettingsAsync();
+  pollNextionFiltrSwitchesAsync();
   //if(Power_Clean){Power_Filtr = false;} //преимущество очистки - отключаем фильтрацию в любом случае (даже если включен по таймерам), если подошло время очистки фильтра
   // Проверяем, активирован ли триггер (без блокирующих delay)
   static unsigned long nextionDelayAt = 0;
@@ -288,6 +289,7 @@ loop_CL2(2100); // Обработка логики хлора
   // Ограничиваем количество чтений за итерацию, чтобы не блокировать основной цикл при шуме на линии
   serviceNextionSerial(32);
   pollNextionDispensersSettingsAsync();
+  pollNextionFiltrSwitchesAsync();
  /**************************** *********************************************************************/
   // Nextion_Transmit(500); // Отправка в Nextion по очереди
   // if(Power_Clean){Power_Filtr = false;} //преимущество очистки - отключаем фильтрацию в любом случае (даже если включен по таймерам), если подошло время очистки фильтра

@@ -434,7 +434,9 @@ switch (sync_step) {
     break;
   }
   case 17:
+    if (!(onSetFiltrPage && nextionFiltrWriteHoldActive())) {
     myNex.writeNum("set_filtr.sw3.val", filtrRelayState ? 1 : 0); // Факт работы насоса фильтрации обновляем даже на открытой странице.
+    }
     if (!onSetFiltrPage) {
     myNex.writeNum("set_filtr.sw0.val", Filtr_Time1 ? 1 : 0); // Синхронизация таймера 1 с Web без пропуска открытой страницы.
     }

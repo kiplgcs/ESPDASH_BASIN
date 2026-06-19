@@ -5,6 +5,7 @@
 #include <SPIFFS.h> // файловая система SPIFFS
 #include <PubSubClient.h> // MQTT клиент
 #include <ArduinoJson.h> // работа с JSON
+#include <map>
 
 #include "wifi_manager.h" // менеджер Wi-Fi
 #include "fs_utils.h" // утилиты файловой системы
@@ -22,6 +23,8 @@ inline bool mqttIsConnected = false; // флаг подключения MQTT
 inline unsigned long mqttPublishInterval = 10000; // интервал публикации
 inline unsigned long mqttLastPublish = 0; // время последней публикации
 inline const char* mqttAvailabilityTopic = "home/esp32/availability"; // топик доступности устройства
+inline std::map<String, String> mqttLastPublishedPayloads; // Последние отправленные payload по topic, чтобы не слать одно и то же.
+inline bool mqttForcePublishAllStates = true; // После старта/переподключения один раз отправляем полный снимок.
 
 #if 1 // MQTT Discovery отключен (слишком много кода и не нужен)
 inline const char* mqttDiscoveryPrefix = "homeassistant"; // префикс MQTT Discovery
@@ -1194,26 +1197,36 @@ if(mqttDiscoveryStage == DISCOVERY_MAIN_ENTITIES){
 }
 #endif
 
+inline bool publishMqttPayloadIfChanged(const char* topic, const String &payload){ // Отправляем MQTT state только при изменении или полном sync.
+  if(!mqttClient.connected()) return false;
+  String topicKey(topic);
+  auto it = mqttLastPublishedPayloads.find(topicKey);
+  if(!mqttForcePublishAllStates && it != mqttLastPublishedPayloads.end() && it->second == payload) return false;
+  bool published = mqttClient.publish(topic, payload.c_str());
+  if(published) mqttLastPublishedPayloads[topicKey] = payload;
+  return published;
+}
+
 inline void publishMqttStateString(const char* topic, const String &value){ // публикация строкового состояния
-  mqttClient.publish(topic, value.c_str()); // публикация значения (retain не используется)
+  publishMqttPayloadIfChanged(topic, value); // повтор одинакового значения не отправляем
 }
 
 inline void publishMqttStateBool(const char* topic, bool value){ // публикация bool состояния
-  mqttClient.publish(topic, value ? "1" : "0"); // публикация 1/0
+  publishMqttPayloadIfChanged(topic, value ? String("1") : String("0")); // публикация 1/0 только при изменении
 }
 
 inline void publishMqttStateFloat(const char* topic, float value){ // публикация float состояния
   if(isnan(value)){
-    mqttClient.publish(topic, "0"); // защита от NaN
+    publishMqttPayloadIfChanged(topic, String("0")); // защита от NaN
     return;
   }
   String payload = String(value); // формирование строки
-  mqttClient.publish(topic, payload.c_str()); // публикация значения
+  publishMqttPayloadIfChanged(topic, payload); // публикация значения только при изменении
 }
 
 inline void publishMqttStateInt(const char* topic, int value){ // публикация int состояния
   String payload = String(value); // формирование строки
-  mqttClient.publish(topic, payload.c_str()); // публикация значения
+  publishMqttPayloadIfChanged(topic, payload); // публикация значения только при изменении
 }
 
 
@@ -1360,6 +1373,8 @@ if(!resolveMqttHost()) return; // хост не резолвится
       mqttConsecutiveFailures = 0; // Успешное подключение сбрасывает счетчик ошибок.
       mqttReconnectBlockedUntil = 0; // Снимаем MQTT backoff после успешного подключения.
       mqttLastConnectState = MQTT_CONNECTED; // Фиксируем успешное состояние клиента.
+      mqttForcePublishAllStates = true; // После подключения один периодический проход должен отправить полный снимок.
+      mqttLastPublish = 0; // Не ждем старый интервал перед полным снимком.
        publishMqttAvailability("online", true); // публикация доступности
  #if 1 // MQTT Discovery отключен
       mqttDiscoveryStage = DISCOVERY_NONE; // сброс этапа discovery
@@ -1429,6 +1444,7 @@ inline void stopMqttService(){ // остановка MQTT
   mqttClient.disconnect(); // отключение от брокера
   mqttIsConnected = false; // сброс флага подключения
   mqttLastPublish = 0; // сброс таймера публикаций
+  mqttForcePublishAllStates = true; // Следующее подключение снова отправит полный снимок состояний.
   mqttLastConnectAttempt = 0; // сброс таймера подключений
   mqttReconnectBlockedUntil = 0; // При ручном применении настроек снимаем паузу повторного подключения.
   mqttConsecutiveFailures = 0; // Новые настройки должны стартовать без старого счетчика ошибок.
@@ -1554,6 +1570,7 @@ inline void handleMqttLoop(){ // основной цикл MQTT
 
       publishMqttStateString("home/esp32/SetLamp", SetLamp);
       publishMqttStateString("home/esp32/SetRGB", SetRGB);
+      mqttForcePublishAllStates = false; // Полный снимок отправлен, дальше state-публикации идут только при изменении.
     
     }
   }

@@ -32,8 +32,13 @@ int Nx_page_id = 0; //Текущий номер страницы открыты 
 int Nx_dim_id = 50; //Текущее - считанное значение яркости Nextion экрана для изменеия скорости обновления данных на экране
 int in_hours, in_minutes; char buffer[6];
 
+constexpr uint8_t NX_ASYNC_GROUP_NONE = 0;
+constexpr uint8_t NX_ASYNC_GROUP_DISPENSERS = 1;
+constexpr uint8_t NX_ASYNC_GROUP_FILTR_SWITCHES = 2;
+
 struct NextionAsyncNumberRead {
   bool active = false;
+  uint8_t group = NX_ASYNC_GROUP_NONE;
   uint8_t target = 255;
   uint8_t state = 0;
   uint8_t dataIndex = 0;
@@ -47,6 +52,10 @@ uint32_t NxDispensersRawValues[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 bool NxDispensersRawValid[8] = {false, false, false, false, false, false, false, false};
 unsigned long NxLastDispensersAsyncPollMs = 0;
 uint8_t NxDispensersAsyncPollIndex = 0;
+unsigned long NxFiltrSwitchPollRequestUntil = 0;
+unsigned long NxFiltrWriteHoldUntil = 0;
+unsigned long NxLastFiltrSwitchPollMs = 0;
+uint8_t NxFiltrSwitchPollIndex = 0;
 
 inline bool nextionAsyncReadActive() {
   return NxAsyncNumberReadState.active;
@@ -54,12 +63,32 @@ inline bool nextionAsyncReadActive() {
 
 inline void resetNextionAsyncNumberRead() {
   NxAsyncNumberReadState.active = false;
+  NxAsyncNumberReadState.group = NX_ASYNC_GROUP_NONE;
   NxAsyncNumberReadState.target = 255;
   NxAsyncNumberReadState.state = 0;
   NxAsyncNumberReadState.dataIndex = 0;
   NxAsyncNumberReadState.ffCount = 0;
   NxAsyncNumberReadState.value = 0;
   NxAsyncNumberReadState.sentAt = 0;
+}
+
+inline void holdNextionFiltrWrites(unsigned long holdMs = 1500) {
+  NxFiltrWriteHoldUntil = millis() + holdMs;
+}
+
+inline bool nextionFiltrWriteHoldActive() {
+  return NxFiltrWriteHoldUntil != 0 &&
+         static_cast<long>(millis() - NxFiltrWriteHoldUntil) < 0;
+}
+
+inline void requestNextionFiltrSwitchPoll(unsigned long pollMs = 1800) {
+  NxFiltrSwitchPollRequestUntil = millis() + pollMs;
+  NxFiltrSwitchPollIndex = 0;
+}
+
+inline bool nextionFiltrSwitchPollRequested() {
+  return NxFiltrSwitchPollRequestUntil != 0 &&
+         static_cast<long>(millis() - NxFiltrSwitchPollRequestUntil) < 0;
 }
 
 inline float nextionComposeTenths(uint8_t wholeIndex, uint8_t tenthIndex, float fallback) {
@@ -115,9 +144,35 @@ inline void applyNextionDispensersAsyncValue(uint8_t target, uint32_t value) {
   }
 }
 
-inline void beginNextionAsyncNumberRead(const char* component, uint8_t target) {
+inline void applyNextionFiltrSwitchAsyncValue(uint8_t target, uint32_t value) {
+  const bool nextValue = value != 0;
+  if (target == 0) {
+    const bool changed = Filtr_Time1 != nextValue;
+    Filtr_Time1 = nextValue;
+    Saved_Filtr_Time1 = nextValue;
+    if (changed) saveValue<int>("Filtr_Time1", Filtr_Time1 ? 1 : 0);
+  } else if (target == 1) {
+    const bool changed = Filtr_Time2 != nextValue;
+    Filtr_Time2 = nextValue;
+    Saved_Filtr_Time2 = nextValue;
+    if (changed) saveValue<int>("Filtr_Time2", Filtr_Time2 ? 1 : 0);
+  } else if (target == 2) {
+    const bool changed = Filtr_Time3 != nextValue;
+    Filtr_Time3 = nextValue;
+    Saved_Filtr_Time3 = nextValue;
+    if (changed) saveValue<int>("Filtr_Time3", Filtr_Time3 ? 1 : 0);
+  } else if (target == 3) {
+    const bool changed = Power_Filtr != nextValue;
+    Power_Filtr = nextValue;
+    Power_Filtr1 = nextValue;
+    if (changed) saveValue<int>("Power_Filtr", Power_Filtr ? 1 : 0);
+  }
+}
+
+inline void beginNextionAsyncNumberRead(const char* component, uint8_t target, uint8_t group = NX_ASYNC_GROUP_DISPENSERS) {
   if (NxAsyncNumberReadState.active || MySerial.available() > 0) return;
   NxAsyncNumberReadState.active = true;
+  NxAsyncNumberReadState.group = group;
   NxAsyncNumberReadState.target = target;
   NxAsyncNumberReadState.state = 0;
   NxAsyncNumberReadState.dataIndex = 0;
@@ -157,10 +212,15 @@ inline bool processNextionAsyncNumberByte() {
     if (byteValue == 0xFF) {
       NxAsyncNumberReadState.ffCount++;
       if (NxAsyncNumberReadState.ffCount >= 3) {
+        uint8_t group = NxAsyncNumberReadState.group;
         uint8_t target = NxAsyncNumberReadState.target;
         uint32_t readValue = NxAsyncNumberReadState.value;
         resetNextionAsyncNumberRead();
-        applyNextionDispensersAsyncValue(target, readValue);
+        if (group == NX_ASYNC_GROUP_DISPENSERS) {
+          applyNextionDispensersAsyncValue(target, readValue);
+        } else if (group == NX_ASYNC_GROUP_FILTR_SWITCHES) {
+          applyNextionFiltrSwitchAsyncValue(target, readValue);
+        }
       }
     } else {
       resetNextionAsyncNumberRead();
@@ -207,8 +267,24 @@ inline void pollNextionDispensersSettingsAsync() {
     "Dispensers.n4.val", "Dispensers.n5.val"
   };
   NxLastDispensersAsyncPollMs = millis();
-  beginNextionAsyncNumberRead(components[NxDispensersAsyncPollIndex], NxDispensersAsyncPollIndex);
+  beginNextionAsyncNumberRead(components[NxDispensersAsyncPollIndex], NxDispensersAsyncPollIndex, NX_ASYNC_GROUP_DISPENSERS);
   NxDispensersAsyncPollIndex = (NxDispensersAsyncPollIndex + 1) % 8;
+}
+
+inline void pollNextionFiltrSwitchesAsync() {
+  const bool urgentPoll = nextionFiltrSwitchPollRequested();
+  if ((Nx_page_id != 3 && !urgentPoll) || NxAsyncNumberReadState.active || MySerial.available() > 0) return;
+  const unsigned long pollInterval = urgentPoll ? 120UL : 1000UL;
+  if (static_cast<unsigned long>(millis() - NxLastFiltrSwitchPollMs) < pollInterval) return;
+  static const char* components[] = {
+    "set_filtr.sw0.val",
+    "set_filtr.sw2.val",
+    "set_filtr.sw1.val",
+    "set_filtr.sw3.val"
+  };
+  NxLastFiltrSwitchPollMs = millis();
+  beginNextionAsyncNumberRead(components[NxFiltrSwitchPollIndex], NxFiltrSwitchPollIndex, NX_ASYNC_GROUP_FILTR_SWITCHES);
+  NxFiltrSwitchPollIndex = (NxFiltrSwitchPollIndex + 1) % 4;
 }
 
 // void ActivUARTInterrupt() {//Прерывание по Rx для получения данных от Nextion монитора - отключено потому что и так работает все хорошо.
@@ -601,25 +677,9 @@ void trigger13(){read_filtr_n10_n11();}
 
 //printh 23 02 54 0E - "set-filtr" Присвоить все кнопки SW0, SW1, SW2
 void read_filtr_sw0_sw1_sw2(){
-    uint32_t rawFiltrTime1 = myNex.readNumber("set_filtr.sw0.val");
-    uint32_t rawFiltrTime2 = myNex.readNumber("set_filtr.sw2.val");
-    uint32_t rawFiltrTime3 = myNex.readNumber("set_filtr.sw1.val");
-    uint32_t rawPowerFiltr = myNex.readNumber("set_filtr.sw3.val");
-    if(rawFiltrTime1 != 777777) Saved_Filtr_Time1=Filtr_Time1 = rawFiltrTime1 != 0;
-    if(rawFiltrTime2 != 777777) Saved_Filtr_Time2=Filtr_Time2 = rawFiltrTime2 != 0;
-    if(rawFiltrTime3 != 777777) Saved_Filtr_Time3=Filtr_Time3 = rawFiltrTime3 != 0;
-    if(rawPowerFiltr != 777777) Power_Filtr1=Power_Filtr = rawPowerFiltr != 0;
-
-//     Error err = RS485.addRequest(40001,1,0x05,8, Power_Filtr ? devices[0].value : devices[1].value);
-// }
-// void trigger14(){read_filtr_sw0_sw1_sw2();}
-
-    saveValue<int>("Filtr_Time1", Filtr_Time1 ? 1 : 0);
-    saveValue<int>("Filtr_Time2", Filtr_Time2 ? 1 : 0);
-    saveValue<int>("Filtr_Time3", Filtr_Time3 ? 1 : 0);
-    saveValue<int>("Power_Filtr", Power_Filtr ? 1 : 0);
+    requestNextionFiltrSwitchPoll();
 }
-void trigger14(){read_filtr_sw0_sw1_sw2();}
+void trigger14(){holdNextionFiltrWrites(2500); requestNextionFiltrSwitchPoll(2500);}
 
 // /////////////////////////************* page Clean **************/////////////////////////////
 // ////////////////////////************* page Clean **************//////////////////////////////

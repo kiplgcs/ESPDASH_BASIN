@@ -337,12 +337,12 @@ if (Saved_Filtr_timeOFF3 != filtrTimer3.off && !triggerRestartNextion) {Saved_Fi
 const bool nextionFiltrActualState = Power_Filtr || ReadRelayArray[8];
 static bool savedNextionFiltrActualState = false;
 static int savedNextionFiltrPageId = -1;
-if (Power_Filtr1 != nextionFiltrActualState && !triggerRestartNextion) {
+if (Power_Filtr1 != nextionFiltrActualState && !triggerRestartNextion && !nextionFiltrWriteHoldActive()) {
   Power_Filtr1 = nextionFiltrActualState;
   myNex.writeNum("page0.b1.pic", nextionFiltrActualState ? 4 : 3);
 }
 if (Nx_page_id != 3) savedNextionFiltrPageId = -1;
-if (Nx_page_id == 3 && !triggerRestartNextion &&
+if (Nx_page_id == 3 && !triggerRestartNextion && !nextionFiltrWriteHoldActive() &&
     (savedNextionFiltrPageId != 3 || savedNextionFiltrActualState != nextionFiltrActualState)) {
   savedNextionFiltrPageId = 3;
   savedNextionFiltrActualState = nextionFiltrActualState;
