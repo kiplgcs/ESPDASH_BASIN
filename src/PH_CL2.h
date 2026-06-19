@@ -1,35 +1,3 @@
-// // Функция для усреднения значений АЦП
-// int readAnalog(int pin, int samples = 10) {
-//     int sum = 0;
-//     for (int i = 0; i < samples; i++) {
-//         sum += analogRead(pin);
-//         delay(5); // Небольшая задержка между измерениями
-//     }
-//     return sum / samples;
-// }
-
-
-
-// // Функция для усреднения значений АЦП
-// int readAnalog_DS1x15(int ads_num, int adc) {
-// // int16_t adcx;
-// int32_t adcx = 0; int samples = 3;
-// //int16_t adcx = ads.readADC_SingleEnded(adc); 
-// for(uint8_t i = 0; i < samples; i++) {
-
-// if(ads_num==1) {adcx += ads1.readADC_SingleEnded(adc);}
-// else if ((ads_num==2)) {adcx += ads2.readADC_SingleEnded(adc);}
-
-// delay(50); // Небольшая задержка между измерениями
-// } 
-// adcx = adcx / samples; // Вычисляем средние значения АЦП напряжения и тока
-
-// //float voltage = adcx * (6.144 / 2048.0); //voltage = adc0*(6.144 / 32767.5); //16-бит от -32768 до +32767; 12-бит от 0 до 4095. 
-// int mV = adcx * 0.1875; // / 1000.0; // или voltage = adc0*(6.144 / 32767.5); - 16-бит от -32768 до +32767;
-
-// return mV;
-// }
-
 const uint8_t samples = 3;           // Количество выборок для усреднения аналоговых измерений
 const uint8_t ads1Address = 0x48;     // I2C-адрес первого ADS1115 (pH)
 const uint8_t ads2Address = 0x49;     // I2C-адрес второго ADS1115 (Cl2)

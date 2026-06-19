@@ -32,12 +32,192 @@ int Nx_page_id = 0; //Текущий номер страницы открыты 
 int Nx_dim_id = 50; //Текущее - считанное значение яркости Nextion экрана для изменеия скорости обновления данных на экране
 int in_hours, in_minutes; char buffer[6];
 
+struct NextionAsyncNumberRead {
+  bool active = false;
+  uint8_t target = 255;
+  uint8_t state = 0;
+  uint8_t dataIndex = 0;
+  uint8_t ffCount = 0;
+  uint32_t value = 0;
+  unsigned long sentAt = 0;
+};
+
+NextionAsyncNumberRead NxAsyncNumberReadState;
+uint32_t NxDispensersRawValues[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+bool NxDispensersRawValid[8] = {false, false, false, false, false, false, false, false};
+unsigned long NxLastDispensersAsyncPollMs = 0;
+uint8_t NxDispensersAsyncPollIndex = 0;
+
+inline bool nextionAsyncReadActive() {
+  return NxAsyncNumberReadState.active;
+}
+
+inline void resetNextionAsyncNumberRead() {
+  NxAsyncNumberReadState.active = false;
+  NxAsyncNumberReadState.target = 255;
+  NxAsyncNumberReadState.state = 0;
+  NxAsyncNumberReadState.dataIndex = 0;
+  NxAsyncNumberReadState.ffCount = 0;
+  NxAsyncNumberReadState.value = 0;
+  NxAsyncNumberReadState.sentAt = 0;
+}
+
+inline float nextionComposeTenths(uint8_t wholeIndex, uint8_t tenthIndex, float fallback) {
+  if (!NxDispensersRawValid[wholeIndex] || !NxDispensersRawValid[tenthIndex]) return fallback;
+  int whole = static_cast<int>(NxDispensersRawValues[wholeIndex]);
+  int tenth = static_cast<int>(NxDispensersRawValues[tenthIndex]);
+  if (tenth < 0) tenth = 0;
+  if (tenth > 9) tenth = 9;
+  return static_cast<float>(whole) + static_cast<float>(tenth) / 10.0f;
+}
+
+inline bool nextionFloatChangedLocal(float oldValue, float newValue) {
+  float delta = oldValue > newValue ? oldValue - newValue : newValue - oldValue;
+  return delta >= 0.05f;
+}
+
+inline void applyNextionDispensersAsyncValue(uint8_t target, uint32_t value) {
+  if (target >= 8) return;
+  const float oldPHLower = PH_Lower;
+  const float oldPHUpper = PH_Upper;
+  const float oldCLLower = CL_Lower;
+  const float oldCLUpper = CL_Upper;
+  NxDispensersRawValues[target] = value;
+  NxDispensersRawValid[target] = true;
+
+  bool changed = false;
+  float nextPHLower = nextionComposeTenths(0, 1, PH_Lower);
+  float nextPHUpper = nextionComposeTenths(2, 3, PH_Upper);
+  float nextCLLower = nextionComposeTenths(4, 5, CL_Lower);
+  float nextCLUpper = nextionComposeTenths(6, 7, CL_Upper);
+
+  if ((target == 0 || target == 1) && nextionFloatChangedLocal(PH_Lower, nextPHLower)) {
+    PH_Lower = nextPHLower;
+    changed = true;
+  }
+  if ((target == 2 || target == 3) && nextionFloatChangedLocal(PH_Upper, nextPHUpper)) {
+    PH_Upper = nextPHUpper;
+    changed = true;
+  }
+  if ((target == 4 || target == 5) && nextionFloatChangedLocal(CL_Lower, nextCLLower)) {
+    CL_Lower = nextCLLower;
+    changed = true;
+  }
+  if ((target == 6 || target == 7) && nextionFloatChangedLocal(CL_Upper, nextCLUpper)) {
+    CL_Upper = nextCLUpper;
+    changed = true;
+  }
+
+  if (changed) {
+    normalizeChemicalLimits();
+    persistChangedChemicalLimits(oldPHLower, oldPHUpper, oldCLLower, oldCLUpper);
+    holdNextionDispensersWrites(4000);
+  }
+}
+
+inline void beginNextionAsyncNumberRead(const char* component, uint8_t target) {
+  if (NxAsyncNumberReadState.active || MySerial.available() > 0) return;
+  NxAsyncNumberReadState.active = true;
+  NxAsyncNumberReadState.target = target;
+  NxAsyncNumberReadState.state = 0;
+  NxAsyncNumberReadState.dataIndex = 0;
+  NxAsyncNumberReadState.ffCount = 0;
+  NxAsyncNumberReadState.value = 0;
+  NxAsyncNumberReadState.sentAt = millis();
+  MySerial.print("get ");
+  MySerial.print(component);
+  MySerial.print("\xFF\xFF\xFF");
+}
+
+inline bool processNextionAsyncNumberByte() {
+  if (!NxAsyncNumberReadState.active || !MySerial.available()) return false;
+  if (static_cast<uint8_t>(MySerial.peek()) == '#') return false;
+  uint8_t byteValue = static_cast<uint8_t>(MySerial.read());
+
+  if (NxAsyncNumberReadState.state == 0) {
+    if (byteValue == 0x71) {
+      NxAsyncNumberReadState.state = 1;
+      NxAsyncNumberReadState.dataIndex = 0;
+      NxAsyncNumberReadState.value = 0;
+    }
+    return true;
+  }
+
+  if (NxAsyncNumberReadState.state == 1) {
+    NxAsyncNumberReadState.value |= static_cast<uint32_t>(byteValue) << (8 * NxAsyncNumberReadState.dataIndex);
+    NxAsyncNumberReadState.dataIndex++;
+    if (NxAsyncNumberReadState.dataIndex >= 4) {
+      NxAsyncNumberReadState.state = 2;
+      NxAsyncNumberReadState.ffCount = 0;
+    }
+    return true;
+  }
+
+  if (NxAsyncNumberReadState.state == 2) {
+    if (byteValue == 0xFF) {
+      NxAsyncNumberReadState.ffCount++;
+      if (NxAsyncNumberReadState.ffCount >= 3) {
+        uint8_t target = NxAsyncNumberReadState.target;
+        uint32_t readValue = NxAsyncNumberReadState.value;
+        resetNextionAsyncNumberRead();
+        applyNextionDispensersAsyncValue(target, readValue);
+      }
+    } else {
+      resetNextionAsyncNumberRead();
+    }
+    return true;
+  }
+
+  return true;
+}
+
+inline void serviceNextionSerial(uint8_t maxOperations = 24) {
+  if (NxAsyncNumberReadState.active &&
+      static_cast<unsigned long>(millis() - NxAsyncNumberReadState.sentAt) > 250UL) {
+    resetNextionAsyncNumberRead();
+  }
+
+  for (uint8_t i = 0; i < maxOperations && MySerial.available(); ++i) {
+    if (NxAsyncNumberReadState.active && static_cast<uint8_t>(MySerial.peek()) != '#') {
+      processNextionAsyncNumberByte();
+      continue;
+    }
+
+    if (static_cast<uint8_t>(MySerial.peek()) == '#') {
+      if (MySerial.available() <= 2) break;
+      if (NxAsyncNumberReadState.active) resetNextionAsyncNumberRead();
+      myNex.NextionListen();
+    } else {
+      MySerial.read();
+    }
+  }
+
+  if (myNex.currentPageId >= 0 && myNex.currentPageId < 50) {
+    Nx_page_id = myNex.currentPageId;
+  }
+}
+
+inline void pollNextionDispensersSettingsAsync() {
+  if (Nx_page_id != 9 || nextionDispensersReadHoldActive() || NxAsyncNumberReadState.active || MySerial.available() > 0) return;
+  if (static_cast<unsigned long>(millis() - NxLastDispensersAsyncPollMs) < 250UL) return;
+  static const char* components[] = {
+    "Dispensers.n0.val", "Dispensers.n1.val",
+    "Dispensers.n2.val", "Dispensers.n3.val",
+    "Dispensers.n6.val", "Dispensers.n7.val",
+    "Dispensers.n4.val", "Dispensers.n5.val"
+  };
+  NxLastDispensersAsyncPollMs = millis();
+  beginNextionAsyncNumberRead(components[NxDispensersAsyncPollIndex], NxDispensersAsyncPollIndex);
+  NxDispensersAsyncPollIndex = (NxDispensersAsyncPollIndex + 1) % 8;
+}
+
 // void ActivUARTInterrupt() {//Прерывание по Rx для получения данных от Nextion монитора - отключено потому что и так работает все хорошо.
 //   myNex.NextionListen(); // Обработка данных при прерывании
 // }
 
   /************************* инициализируем монитор Nextion*********************************/
 void setup_Nextion(){
+  myNex.currentPageId = 0;
 
   MySerial.begin(115200, SERIAL_8N1, RXD1, TXD1); // Инициализируем порт со своими пинами
 
@@ -421,10 +601,14 @@ void trigger13(){read_filtr_n10_n11();}
 
 //printh 23 02 54 0E - "set-filtr" Присвоить все кнопки SW0, SW1, SW2
 void read_filtr_sw0_sw1_sw2(){
-    Saved_Filtr_Time1=Filtr_Time1 = myNex.readNumber("set_filtr.sw0.val");
-    Saved_Filtr_Time2=Filtr_Time2 = myNex.readNumber("set_filtr.sw2.val");
-    Saved_Filtr_Time3=Filtr_Time3 = myNex.readNumber("set_filtr.sw1.val");
-    Power_Filtr1=Power_Filtr = myNex.readNumber("set_filtr.sw3.val");
+    uint32_t rawFiltrTime1 = myNex.readNumber("set_filtr.sw0.val");
+    uint32_t rawFiltrTime2 = myNex.readNumber("set_filtr.sw2.val");
+    uint32_t rawFiltrTime3 = myNex.readNumber("set_filtr.sw1.val");
+    uint32_t rawPowerFiltr = myNex.readNumber("set_filtr.sw3.val");
+    if(rawFiltrTime1 != 777777) Saved_Filtr_Time1=Filtr_Time1 = rawFiltrTime1 != 0;
+    if(rawFiltrTime2 != 777777) Saved_Filtr_Time2=Filtr_Time2 = rawFiltrTime2 != 0;
+    if(rawFiltrTime3 != 777777) Saved_Filtr_Time3=Filtr_Time3 = rawFiltrTime3 != 0;
+    if(rawPowerFiltr != 777777) Power_Filtr1=Power_Filtr = rawPowerFiltr != 0;
 
 //     Error err = RS485.addRequest(40001,1,0x05,8, Power_Filtr ? devices[0].value : devices[1].value);
 // }
@@ -596,10 +780,13 @@ void trigger20(){read_heat_sw0();}
 // }
 // void trigger22(){read_Dispensers_sw0_sw1();} 
 void read_Dispensers_sw0_sw1(){
-    Saved_PHControlACO = PH_Control_ACO = myNex.readNumber("Dispensers.sw0.val");
+    uint32_t rawValue = myNex.readNumber("Dispensers.sw0.val");
+    if(rawValue == 777777) return;
+    Saved_PHControlACO = PH_Control_ACO = rawValue != 0;
+    holdNextionDispensersWrites();
     saveValue<int>("PH_Control_ACO", PH_Control_ACO ? 1 : 0);
 }
-void trigger22(){read_Dispensers_sw0_sw1();}
+void trigger22(){holdNextionDispensersWrites(); read_Dispensers_sw0_sw1();}
 // // printh 23 02 54 17  - Dispensers  свчитываем состояние ComboBox cb0.txt
 // void read_Dispensers_cb0(){
 //     //Отложенное повторное выполнение через 2 секунды - выполняем NextionDelay();
@@ -619,7 +806,7 @@ void read_Dispensers_cb0(){ // Колбэк-функция обработки з
     Saved_ACO_Work = ACO_Work = nextValue; // Сохраняем итоговое корректное значение
     saveValue<int>("ACO_Work", ACO_Work); // Записываем значение в энергонезависимую память
 }
-void trigger23(){read_Dispensers_cb0();}
+void trigger23(){holdNextionDispensersWrites(); read_Dispensers_cb0();}
 // // printh 23 02 54 18 - Dispensers  свчитываем состояние n4 / n5
 // void read_Dispensers_sw2_sw3(){
 //     Saved_NaOCl_H2O2_Control = NaOCl_H2O2_Control = myNex.readNumber("Dispensers.sw2.val"); delay(10);
@@ -631,10 +818,13 @@ void trigger23(){read_Dispensers_cb0();}
 // }
 // void trigger24(){read_Dispensers_sw2_sw3();} 
 void read_Dispensers_sw2_sw3(){
-    Saved_NaOCl_H2O2_Control = NaOCl_H2O2_Control = myNex.readNumber("Dispensers.sw2.val");
+    uint32_t rawValue = myNex.readNumber("Dispensers.sw2.val");
+    if(rawValue == 777777) return;
+    Saved_NaOCl_H2O2_Control = NaOCl_H2O2_Control = rawValue != 0;
+    holdNextionDispensersWrites();
     saveValue<int>("NaOCl_H2O2_Control", NaOCl_H2O2_Control ? 1 : 0);
 }
-void trigger24(){read_Dispensers_sw2_sw3();}
+void trigger24(){holdNextionDispensersWrites(); read_Dispensers_sw2_sw3();}
 
 // // printh 23 02 54 19 - Dispensers  свчитываем состояние n4 / n5
 // void read_Dispensers_cb1(){
@@ -658,7 +848,7 @@ void read_Dispensers_cb1(){ // Колбэк-функция обработки з
     saveValue<int>("H2O2_Work", H2O2_Work); // Записываем значение в энергонезависимую память
 }
 
-void trigger25(){read_Dispensers_cb1();}
+void trigger25(){holdNextionDispensersWrites(); read_Dispensers_cb1();}
 
 inline float readDispensersTenths(const char* wholeComponent, const char* tenthComponent, float fallback){
     uint32_t wholeRaw = myNex.readNumber(wholeComponent); // Читаем целую часть без дополнительного delay.
@@ -672,14 +862,19 @@ inline float readDispensersTenths(const char* wholeComponent, const char* tenthC
 }
 
 void read_Dispensers_PH_CL_limits(){
+    holdNextionDispensersWrites(4000);
+    const float oldPHLower = PH_Lower;
+    const float oldPHUpper = PH_Upper;
+    const float oldCLLower = CL_Lower;
+    const float oldCLUpper = CL_Upper;
     PH_Lower = readDispensersTenths("Dispensers.n0.val", "Dispensers.n1.val", PH_Lower); // Читаем нижний предел pH.
     PH_Upper = readDispensersTenths("Dispensers.n2.val", "Dispensers.n3.val", PH_Upper); // Читаем верхний предел pH.
     CL_Lower = readDispensersTenths("Dispensers.n6.val", "Dispensers.n7.val", CL_Lower); // Читаем нижний предел CL.
     CL_Upper = readDispensersTenths("Dispensers.n4.val", "Dispensers.n5.val", CL_Upper); // Читаем верхний предел CL.
     normalizeChemicalLimits(); // Исправляем диапазоны после ввода с Nextion.
-    persistChemicalLimits(); // Сразу сохраняем пределы pH/CL в энергонезависимую память.
+    persistChangedChemicalLimits(oldPHLower, oldPHUpper, oldCLLower, oldCLUpper); // Сохраняем только реально измененные поля.
 }
-void trigger26(){read_Dispensers_PH_CL_limits();}
+void trigger26(){holdNextionDispensersWrites(4000); read_Dispensers_PH_CL_limits();}
 
 inline bool floatSettingChanged(float oldValue, float newValue) { // Проверяем изменение десятичной настройки с защитой от шума float.
     float delta = oldValue > newValue ? oldValue - newValue : newValue - oldValue; // Считаем модуль разницы без дополнительной math-библиотеки.
@@ -693,6 +888,10 @@ void poll_Dispensers_PH_CL_limits(){ // Периодически читаем pH
     if(millis() - lastPollMs < 1000UL) return; // Опрос не чаще одного раза в секунду.
     lastPollMs = millis(); // Обновляем время опроса.
     bool changed = false; // Флаг нужен, чтобы не писать NVS без реального изменения.
+    const float oldPHLower = PH_Lower;
+    const float oldPHUpper = PH_Upper;
+    const float oldCLLower = CL_Lower;
+    const float oldCLUpper = CL_Upper;
 
     if(pollStep == 0){ // Первый проход читает нижний предел pH.
       float nextValue = readDispensersTenths("Dispensers.n0.val", "Dispensers.n1.val", PH_Lower); // Получаем pH lower.
@@ -715,7 +914,7 @@ void poll_Dispensers_PH_CL_limits(){ // Периодически читаем pH
     pollStep = (pollStep + 1) % 4; // Следующий раз читаем следующее поле.
     if(!changed) return; // Если ничего не изменилось, NVS не трогаем.
     normalizeChemicalLimits(); // Исправляем перевернутые или выходящие за пределы значения.
-    persistChemicalLimits(); // Сохраняем актуальные пределы, чтобы Web и перезагрузка видели одно и то же.
+    persistChangedChemicalLimits(oldPHLower, oldPHUpper, oldCLLower, oldCLUpper); // Сохраняем только реально измененные поля.
 }
 
 inline bool readNextionBoolSafe(const char* component, bool fallback) { // Безопасно читаем bool-компонент Nextion.

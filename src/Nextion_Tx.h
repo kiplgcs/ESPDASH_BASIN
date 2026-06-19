@@ -331,6 +331,24 @@ if (Saved_Filtr_timeOFF3 != filtrTimer3.off && !triggerRestartNextion) {Saved_Fi
   myNex.writeNum("set_filtr.n11.val", getSubstring(filtrOff3Str, 3, 4));
 }
 #endif // Конец отключенного legacy-блока set_lamp/set_RGB/set_filtr с принудительными переходами страниц.
+
+// Активная синхронизация фильтрации без принудительного перехода на страницу.
+// Показываем факт работы насоса: команда Power_Filtr или уже включенное RS485-реле.
+const bool nextionFiltrActualState = Power_Filtr || ReadRelayArray[8];
+static bool savedNextionFiltrActualState = false;
+static int savedNextionFiltrPageId = -1;
+if (Power_Filtr1 != nextionFiltrActualState && !triggerRestartNextion) {
+  Power_Filtr1 = nextionFiltrActualState;
+  myNex.writeNum("page0.b1.pic", nextionFiltrActualState ? 4 : 3);
+}
+if (Nx_page_id != 3) savedNextionFiltrPageId = -1;
+if (Nx_page_id == 3 && !triggerRestartNextion &&
+    (savedNextionFiltrPageId != 3 || savedNextionFiltrActualState != nextionFiltrActualState)) {
+  savedNextionFiltrPageId = 3;
+  savedNextionFiltrActualState = nextionFiltrActualState;
+  myNex.writeNum("set_filtr.sw3.val", nextionFiltrActualState ? 1 : 0);
+}
+
 // /////////////////////////************* page Clean **************/////////////////////////////
 // ////////////////////////************* page Clean **************//////////////////////////////
 // ///////////////////////************* page Clean **************///////////////////////////////
@@ -599,20 +617,20 @@ if (Nx_page_id == 6 && !triggerRestartNextion &&
 static int SavedNxDispensersPageId = -1; // Запоминаем вход на страницу дозаторов для первичной синхронизации.
 if (Nx_page_id != 9) SavedNxDispensersPageId = -1; // При уходе со страницы разрешаем новый полный sync при следующем входе.
 const bool forceDispensersSync = (Nx_page_id == 9 && SavedNxDispensersPageId != 9); // true только при первом проходе после входа.
-if (Nx_page_id == 9 && (forceDispensersSync || Saved_PHControlACO != PH_Control_ACO) && !triggerRestartNextion) {Saved_PHControlACO = PH_Control_ACO;
+if (Nx_page_id == 9 && !nextionDispensersWriteHoldActive() && (forceDispensersSync || Saved_PHControlACO != PH_Control_ACO) && !triggerRestartNextion) {Saved_PHControlACO = PH_Control_ACO;
     myNex.writeNum("Dispensers.sw0.val", PH_Control_ACO ? 1 : 0);
 }
 
-if (Nx_page_id == 9 && (forceDispensersSync || ACO_Work != Saved_ACO_Work) && !triggerRestartNextion) {Saved_ACO_Work = ACO_Work;
+if (Nx_page_id == 9 && !nextionDispensersWriteHoldActive() && (forceDispensersSync || ACO_Work != Saved_ACO_Work) && !triggerRestartNextion) {Saved_ACO_Work = ACO_Work;
   myNex.writeNum("Dispensers.cb0.val", ACO_Work - 1); 
 }
 
-if (Nx_page_id == 9 && (forceDispensersSync || Saved_NaOCl_H2O2_Control != NaOCl_H2O2_Control) && !triggerRestartNextion) {
+if (Nx_page_id == 9 && !nextionDispensersWriteHoldActive() && (forceDispensersSync || Saved_NaOCl_H2O2_Control != NaOCl_H2O2_Control) && !triggerRestartNextion) {
     Saved_NaOCl_H2O2_Control = NaOCl_H2O2_Control;
     myNex.writeNum("Dispensers.sw2.val", NaOCl_H2O2_Control ? 1 : 0);
 }
 
-if (Nx_page_id == 9 && (forceDispensersSync || H2O2_Work != Saved_H2O2_Work) && !triggerRestartNextion) {Saved_H2O2_Work = H2O2_Work;
+if (Nx_page_id == 9 && !nextionDispensersWriteHoldActive() && (forceDispensersSync || H2O2_Work != Saved_H2O2_Work) && !triggerRestartNextion) {Saved_H2O2_Work = H2O2_Work;
   myNex.writeNum("Dispensers.cb1.val", H2O2_Work - 1); 
 }
 
@@ -620,7 +638,7 @@ static float Saved_PH_Lower_Nextion = -100.0f;
 static float Saved_PH_Upper_Nextion = -100.0f;
 static float Saved_CL_Lower_Nextion = -100.0f;
 static float Saved_CL_Upper_Nextion = -100.0f;
-if (Nx_page_id == 9 && !triggerRestartNextion && (forceDispensersSync || Saved_PH_Lower_Nextion != PH_Lower || Saved_PH_Upper_Nextion != PH_Upper || Saved_CL_Lower_Nextion != CL_Lower || Saved_CL_Upper_Nextion != CL_Upper)) {
+if (Nx_page_id == 9 && !nextionDispensersWriteHoldActive() && !triggerRestartNextion && (forceDispensersSync || Saved_PH_Lower_Nextion != PH_Lower || Saved_PH_Upper_Nextion != PH_Upper || Saved_CL_Lower_Nextion != CL_Lower || Saved_CL_Upper_Nextion != CL_Upper)) {
   Saved_PH_Lower_Nextion = PH_Lower;
   Saved_PH_Upper_Nextion = PH_Upper;
   Saved_CL_Lower_Nextion = CL_Lower;
