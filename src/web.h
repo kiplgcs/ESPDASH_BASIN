@@ -219,6 +219,8 @@ bool Saved_Power_H2O, Power_H2O2 = false; //Дозация перекеси во
 bool Saved_Power_ACO, Power_ACO = false; 	//Дозация Активное Каталитическое Окисление «Active Catalytic Oxidation» ACO
 bool ManualPulse_H2O2_Active = false;
 bool ManualPulse_ACO_Active = false;
+bool ManualPulse_H2O2_Request = false; // Разовый запрос ручной проверки насоса H2O2 из Web/Nextion.
+bool ManualPulse_ACO_Request = false; // Разовый запрос ручной проверки насоса ACO из Web/Nextion.
 unsigned long ManualPulse_H2O2_StartedAt = 0;
 unsigned long ManualPulse_ACO_StartedAt = 0;
 
@@ -831,14 +833,14 @@ private:
             return active ? String("Работа") : String("Откл.");
     });
     registerUiValueProvider("Power_ACO_Button", [](){ // кнопка также светится при ручном импульсе
-        return (Power_ACO || ManualPulse_ACO_Active) ? String("1") : String("0");
+        return (Power_ACO || ManualPulse_ACO_Active || ManualPulse_ACO_Request) ? String("1") : String("0");
     });
     registerUiValueProvider("Power_H2O2", [](){ // статус дозатора H2O2
       const bool active = Power_H2O2 || ManualPulse_H2O2_Active;
         return active ? String("Работа") : String("Откл.");
     });
     registerUiValueProvider("Power_H2O2_Button", [](){ // кнопка H2O2 реагирует на импульсы
-      return (Power_H2O2 || ManualPulse_H2O2_Active) ? String("1") : String("0");
+      return (Power_H2O2 || ManualPulse_H2O2_Active || ManualPulse_H2O2_Request) ? String("1") : String("0");
     });
 
     // Кнопки промывки должны отражать и логику автоматики, и фактическое состояние реле.

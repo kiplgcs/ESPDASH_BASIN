@@ -324,7 +324,7 @@ UI_COLOR("LEDColor", LEDColor, "🎨 Цвет подсветки");
                 UI_NUMBER("Temper_Reference", Temper_Reference, "🌡 Температура референсная", true);
                 UI_NUMBER("Temper_PH", Temper_PH, "🌡 Измеренная тепература для компенасации измерения PH", true);
 
-                UI_BUTTON("Power_H2O2_Button", Power_H2O2, "gray", "🧪 Проверка работы перельстатического насоса подачи кислоты (вручную)");
+                UI_BUTTON_DEFAULT("Power_H2O2_Button", ManualPulse_H2O2_Request, "gray", "🧪 Проверка работы перельстатического насоса подачи кислоты (вручную)", 0);
         UI_POPUP_END();
 
 
@@ -351,7 +351,7 @@ UI_COLOR("LEDColor", LEDColor, "🎨 Цвет подсветки");
             UI_NUMBER("Cl_Cal", Cl_Cal_str, "📐 ORP - ORPCal = калибровочный коэффициент", true);
             UI_NUMBER("CalRastvor256mV", CalRastvor256mV, "🧪 ОВП калибровочного раствора - мВ", false);
             UI_NUMBER("Calibration_ORP_mV", Calibration_ORP_mV, "📏 Калибровочный коэффициент - мВ", false);
-            UI_BUTTON("Power_ACO_Button", Power_ACO, "gray", "🧴 Проверка работы перельстатического насоса подачи хлора (вручную)");
+            UI_BUTTON_DEFAULT("Power_ACO_Button", ManualPulse_ACO_Request, "gray", "🧴 Проверка работы перельстатического насоса подачи хлора (вручную)", 0);
         UI_POPUP_END();
 
     // Контроль температуры в помещении

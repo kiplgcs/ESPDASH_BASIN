@@ -188,34 +188,34 @@ Serial.printf(
 }
 
 
-inline void acoServiceLoop(){ // Сервисная обработка кнопки ручного импульса ACO без id-логики
-  static bool lastUiState = false; // Предыдущее состояние UI-кнопки ACO
-  const bool uiState = Power_ACO; // Текущее состояние кнопки из UI
-  const bool actualState = ReadRelayArray[6]; // Фактическое состояние реле ACO из Modbus
-  if(uiState != actualState){ // Если UI изменил состояние относительно фактического
-    if(uiState && !lastUiState){ // Отслеживаем фронт нажатия кнопки
-      ManualPulse_ACO_Active = true; // Активируем ручной импульс ACO
-      ManualPulse_ACO_StartedAt = millis(); // Фиксируем время запуска импульса
-    } // Конец обработки фронта
-    Power_ACO = actualState; // Возвращаем значение к фактическому состоянию
-    saveButtonState("Power_ACO_Button", actualState ? 1 : 0); // Сохраняем корректное состояние кнопки
-  } // Конец обработки расхождения UI и фактического состояния
-  lastUiState = uiState; // Запоминаем состояние кнопки для детекции фронта
+inline void acoServiceLoop(){ // Сервисная обработка кнопки ручного импульса ACO без вмешательства в автоматику
+  static bool initialized = false; // Флаг первого прохода, чтобы очистить сохраненное состояние кнопки.
+  if(!initialized){
+    ManualPulse_ACO_Request = false; // Не запускаем насос из-за старого сохраненного состояния после перезагрузки.
+    saveButtonState("Power_ACO_Button", 0); // В памяти кнопка ручной проверки всегда хранится отпущенной.
+    initialized = true; // Дальше первый проход больше не повторяется.
+  }
+  if(ManualPulse_ACO_Request){ // Web/Nextion запросил ручную проверку насоса.
+    ManualPulse_ACO_Active = true; // Запускаем отдельный ручной импульс, не трогая автоматический Power_ACO.
+    ManualPulse_ACO_StartedAt = millis(); // Запоминаем старт для ограничения импульса пятью секундами.
+    ManualPulse_ACO_Request = false; // Запрос одноразовый, после приема сразу сбрасываем.
+    saveButtonState("Power_ACO_Button", 0); // Не сохраняем кнопку включенной между циклами и перезагрузками.
+  }
 } // Конец acoServiceLoop
 
-inline void h2o2ServiceLoop(){ // Сервисная обработка кнопки ручного импульса H2O2 без id-логики
-  static bool lastUiState = false; // Предыдущее состояние UI-кнопки H2O2
-  const bool uiState = Power_H2O2; // Текущее состояние кнопки из UI
-  const bool actualState = ReadRelayArray[5]; // Фактическое состояние реле H2O2 из Modbus
-  if(uiState != actualState){ // Если UI изменил состояние относительно фактического
-    if(uiState && !lastUiState){ // Отслеживаем фронт нажатия кнопки
-      ManualPulse_H2O2_Active = true; // Активируем ручной импульс H2O2
-      ManualPulse_H2O2_StartedAt = millis(); // Фиксируем время запуска импульса
-    } // Конец обработки фронта
-    Power_H2O2 = actualState; // Возвращаем значение к фактическому состоянию
-    saveButtonState("Power_H2O2_Button", actualState ? 1 : 0); // Сохраняем корректное состояние кнопки
-  } // Конец обработки расхождения UI и фактического состояния
-  lastUiState = uiState; // Запоминаем состояние кнопки для детекции фронта
+inline void h2o2ServiceLoop(){ // Сервисная обработка кнопки ручного импульса H2O2 без вмешательства в автоматику
+  static bool initialized = false; // Флаг первого прохода, чтобы очистить сохраненное состояние кнопки.
+  if(!initialized){
+    ManualPulse_H2O2_Request = false; // Не запускаем насос из-за старого сохраненного состояния после перезагрузки.
+    saveButtonState("Power_H2O2_Button", 0); // В памяти кнопка ручной проверки всегда хранится отпущенной.
+    initialized = true; // Дальше первый проход больше не повторяется.
+  }
+  if(ManualPulse_H2O2_Request){ // Web/Nextion запросил ручную проверку насоса.
+    ManualPulse_H2O2_Active = true; // Запускаем отдельный ручной импульс, не трогая автоматический Power_H2O2.
+    ManualPulse_H2O2_StartedAt = millis(); // Запоминаем старт для ограничения импульса пятью секундами.
+    ManualPulse_H2O2_Request = false; // Запрос одноразовый, после приема сразу сбрасываем.
+    saveButtonState("Power_H2O2_Button", 0); // Не сохраняем кнопку включенной между циклами и перезагрузками.
+  }
 } // Конец h2o2ServiceLoop
 
 
