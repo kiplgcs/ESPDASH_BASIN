@@ -370,6 +370,49 @@ inline bool applyWaterControlRequest(const String &id, bool requestedState) { //
   return false; // Остальные id не относятся к опасным переключателям уровня.
 }
 
+
+inline uint8_t unicodeCyrillicToKoi8R(uint32_t cp) {
+  static const uint8_t lower[] = {
+    0xC1,0xC2,0xD7,0xC7,0xC4,0xC5,0xD6,0xDA,0xC9,0xCA,0xCB,0xCC,0xCD,0xCE,0xCF,0xD0,
+    0xD2,0xD3,0xD4,0xD5,0xC6,0xC8,0xC3,0xDE,0xDB,0xDD,0xDF,0xD9,0xD8,0xDC,0xC0,0xD1
+  };
+  static const uint8_t upper[] = {
+    0xE1,0xE2,0xF7,0xE7,0xE4,0xE5,0xF6,0xFA,0xE9,0xEA,0xEB,0xEC,0xED,0xEE,0xEF,0xF0,
+    0xF2,0xF3,0xF4,0xF5,0xE6,0xE8,0xE3,0xFE,0xFB,0xFD,0xFF,0xF9,0xF8,0xFC,0xE0,0xF1
+  };
+  if (cp >= 0x0410 && cp <= 0x042F) return upper[cp - 0x0410];
+  if (cp >= 0x0430 && cp <= 0x044F) return lower[cp - 0x0430];
+  if (cp == 0x0401) return 0xB3;
+  if (cp == 0x0451) return 0xA3;
+  return 0;
+}
+
+inline String nextionKoi8R(const String &utf8Text) {
+  String out;
+  for (size_t i = 0; i < utf8Text.length();) {
+    uint8_t c = static_cast<uint8_t>(utf8Text[i]);
+    if (c < 0x80) { out += static_cast<char>(c); i++; continue; }
+    uint32_t cp = 0;
+    size_t advance = 1;
+    if ((c & 0xE0) == 0xC0 && i + 1 < utf8Text.length()) {
+      cp = ((c & 0x1F) << 6) | (static_cast<uint8_t>(utf8Text[i + 1]) & 0x3F);
+      advance = 2;
+    } else if ((c & 0xF0) == 0xE0 && i + 2 < utf8Text.length()) {
+      cp = ((c & 0x0F) << 12) | ((static_cast<uint8_t>(utf8Text[i + 1]) & 0x3F) << 6) | (static_cast<uint8_t>(utf8Text[i + 2]) & 0x3F);
+      advance = 3;
+    } else if ((c & 0xF8) == 0xF0 && i + 3 < utf8Text.length()) {
+      cp = ((c & 0x07) << 18) | ((static_cast<uint8_t>(utf8Text[i + 1]) & 0x3F) << 12) | ((static_cast<uint8_t>(utf8Text[i + 2]) & 0x3F) << 6) | (static_cast<uint8_t>(utf8Text[i + 3]) & 0x3F);
+      advance = 4;
+    }
+    uint8_t koi = unicodeCyrillicToKoi8R(cp);
+    if (koi) out += static_cast<char>(koi);
+    else out += '?';
+    i += advance;
+  }
+  return out;
+}
+
+
 inline String waterLevelNextionText() { // Формируем короткую русскую строку для поля set_topping.t0.
   if (Power_Drain && DrainCycleRunning) return "Слив: работа " + String(DrainCyclesDone + 1) + "/" + String(DrainCyclesTarget); // Показываем активную порцию слива.
   if (Power_Drain && DrainPauseRunning) return "Слив: пауза " + String(DrainCyclesDone) + "/" + String(DrainCyclesTarget); // Показываем паузу между порциями.
@@ -1950,6 +1993,7 @@ function toggleSidebar(){
   };
 
   const wifiInputEdited = {ssid: false, pass: false};
+    const mqttInputEdited = {host: false, port: false, user: false, pass: false};
   const watchWifiInput = (id)=>{
     const el = document.getElementById(id);
     if(!el) return;
@@ -1962,6 +2006,12 @@ function toggleSidebar(){
   const initializeWifiInputs = ()=>{
     watchWifiInput('ssid');
     watchWifiInput('pass');
+    [['mqtt-host','host'],['mqtt-port','port'],['mqtt-user','user'],['mqtt-pass','pass']].forEach(([id,key])=>{
+      const el = document.getElementById(id);
+      if(!el) return;
+      el.addEventListener('input', ()=>{ mqttInputEdited[key] = true; });
+      el.addEventListener('focus', ()=>{ mqttInputEdited[key] = true; markManualChange(el); });
+    });
   };
   if(document.readyState === 'loading'){
     document.addEventListener('DOMContentLoaded', initializeWifiInputs);
@@ -2015,10 +2065,10 @@ function toggleSidebar(){
       const port = document.getElementById('mqtt-port');
       const user = document.getElementById('mqtt-user');
       const pass = document.getElementById('mqtt-pass');
-      if(host) host.value = data.host || '';
-      if(port) port.value = data.port || '';
-      if(user) user.value = data.user || '';
-      if(pass) pass.value = data.pass || '';
+      if(host && !mqttInputEdited.host) host.value = data.host || '';
+      if(port && !mqttInputEdited.port) port.value = data.port || '';
+      if(user && !mqttInputEdited.user) user.value = data.user || '';
+      if(pass && !mqttInputEdited.pass) pass.value = data.pass || '';
       mqttEnabledState = Boolean(data.enabled);
       mqttConnectedState = Boolean(data.enabled && data.connected);
       updateMqttActivationButton(mqttEnabledState, mqttConnectedState);
@@ -2042,7 +2092,7 @@ function toggleSidebar(){
       enabled: (document.getElementById('mqtt-activate-btn') || {dataset:{enabled:'0'}}).dataset.enabled === '1' ? '1' : '0'
     });
     fetch('/mqtt/save',{method:'POST', body:payload})
-      .then(()=>setTimeout(fetchMqttConfig, 300))
+      .then(()=>{ mqttInputEdited.host = mqttInputEdited.port = mqttInputEdited.user = mqttInputEdited.pass = false; setTimeout(fetchMqttConfig, 300); })
 
       .finally(()=>{ if(saveBtn){ saveBtn.disabled = false; saveBtn.innerText = originalText || 'Сохранить настройки'; } });
   }
@@ -2294,10 +2344,8 @@ function saveProfileSettings(){
     const rssiVal = (typeof data.rssi !== 'undefined' && data.rssi !== null) ? data.rssi : 'N/A';
     const rssiText = isNaN(Number(rssiVal)) ? String(rssiVal) : `${rssiVal} dBm`;
     updateStat('wifi-rssi', rssiText);
-    if(!wifiInputEdited.ssid && data.ssid && data.ssid.length){
-      const ssidInput = document.getElementById('ssid');
-      if(ssidInput) ssidInput.value = data.ssid;
-    }
+    // Не перезаписываем поля WiFi статусом соединения: форма должна показывать сохраненные настройки, а не случайно стирать ввод пользователя.
+
   };
 
   function fetchWifiStatus(){
@@ -2675,6 +2723,8 @@ function saveWiFi(){
    .then(r=>r.json())
    .then(data=>{
      const connected = data && data.connected ? ' (подключено)' : ' (AP mode)';
+     wifiInputEdited.ssid = false;
+     wifiInputEdited.pass = false;
      alert('WiFi сохранен' + connected);
      fetchStats(true);
    })
@@ -3641,6 +3691,23 @@ server.on("/getImage", HTTP_GET, [](AsyncWebServerRequest *r){
     server.serveStatic("/Basin.jpg", SPIFFS, "/Basin.jpg"); // Отдаёт изображение Basin.jpg из SPIFFS по HTTP пути /Basin.jpg
     server.serveStatic("/img1.jpg", SPIFFS, "/img1.jpg"); // Отдаёт изображение img1.jpg из SPIFFS по HTTP пути /img1.jpg
     server.serveStatic("/img2.jpg", SPIFFS, "/img2.jpg"); // Отдаёт изображение img2.jpg из SPIFFS по HTTP пути /img2.jpg
+
+        server.onNotFound([](AsyncWebServerRequest *r){
+      WifiStatusInfo wifiInfo = getWifiStatus();
+      bool apMode = wifiInfo.apActive && !wifiIsConnected(); // Captive portal нужен только в автономном AP.
+      if(apMode){
+        String host = wifiHostName();
+        if(!host.length()) host = String(defaultHostname);
+        String url = String("http://") + host + String(".local/");
+        AsyncWebServerResponse *response = r->beginResponse(302, "text/plain", "Redirecting to ESP32 setup portal");
+        response->addHeader("Location", url);
+        response->addHeader("Cache-Control", "no-store");
+        r->send(response);
+        return;
+      }
+      r->send(404, "text/plain", "Not found");
+    });
+
 
     server.begin();
   }

@@ -230,7 +230,7 @@ UI_COLOR("LEDColor", LEDColor, "🎨 Цвет подсветки");
     // Контроль температуры
     UI_PAGE();
     UI_DISPLAY_FLOAT("DS1", DS1, "🌡 Температура воды, °C");
-    UI_RANGE("Sider_heat", Sider_heat, 5, 30, 1, "🎯 Уставка нагрева");
+    UI_RANGE("Sider_heat", Sider_heat, 5, 35, 1, "🎯 Уставка нагрева");
     // UI_NUMBER("Sider_heat", Sider_heat, "🎯 Уставка нагрева, °C", false);
     UI_CHECKBOX("Activation_Heat", Activation_Heat, "🔥 Контроль нагрева");
     UI_DISPLAY_BOOL("Power_Heat", Power_Heat, "♨️ Состояние нагрева", "🔥 Нагрев", "⏹️ Откл.");

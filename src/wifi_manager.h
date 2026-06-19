@@ -3,6 +3,7 @@
 #include <WiFi.h>
 #include <ESPmDNS.h>
 #include <Preferences.h>
+#include <DNSServer.h>
 #include <type_traits>
 
 struct WifiStatusInfo {
@@ -16,6 +17,14 @@ struct WifiStatusInfo {
 
 // Persistent storage helpers and Wi-Fi defaults
 inline Preferences prefs;
+inline SemaphoreHandle_t prefsMutex = nullptr;
+inline DNSServer captiveDnsServer;
+inline bool captiveDnsActive = false;
+inline const byte captiveDnsPort = 53;
+
+inline void ensurePrefsMutex() { if (prefsMutex == nullptr) prefsMutex = xSemaphoreCreateMutex(); }
+inline void lockPrefs() { ensurePrefsMutex(); if (prefsMutex) xSemaphoreTake(prefsMutex, portMAX_DELAY); }
+inline void unlockPrefs() { if (prefsMutex) xSemaphoreGive(prefsMutex); }
 inline const char *defaultSSID = "OAB-GeelyM";
 inline const char *defaultPASS = "83913381";
 inline const char *apSSID = "ESP32";
@@ -23,21 +32,26 @@ inline const char *apPASS = "12345678";
 inline const char *defaultHostname = "ESP32";
 
 inline void saveButtonState(const char *key, int val) {
+  lockPrefs();
   prefs.begin("buttons", false);
   prefs.putInt(key, val);
   prefs.end();
+    unlockPrefs();
 }
 
 inline int loadButtonState(const char *key, int def = 0) {
+    lockPrefs();
   prefs.begin("buttons", false);
   int val = prefs.getInt(key, def);
   prefs.end();
+    unlockPrefs();
   return val;
 }
 
 template <typename T> void saveValue(const char *key, T val);
 // Универсальная функция чтения значения из NVS с автоматической инициализацией
 template <typename T> T loadValue(const char *key, T def) {
+    lockPrefs();
   prefs.begin("MINIDASH", true);
   T val;
   if (prefs.isKey(key)) {
@@ -50,15 +64,18 @@ template <typename T> T loadValue(const char *key, T def) {
     else
       val = def;                        // Любой другой тип — возвращаем дефолт
     prefs.end();
+        unlockPrefs();
     return val;
   }
   prefs.end();
+    unlockPrefs();
   val = def;
   saveValue<T>(key, val);
   return val;
 }
 // Универсальная функция сохранения значения в NVS
 template <typename T> void saveValue(const char *key, T val) {
+    lockPrefs();
   prefs.begin("MINIDASH", false);
   if constexpr (std::is_same<T, float>::value)
     prefs.putFloat(key, val);
@@ -67,6 +84,7 @@ template <typename T> void saveValue(const char *key, T val) {
   else if constexpr (std::is_same<T, String>::value)
     prefs.putString(key, val.c_str());
   prefs.end();
+    unlockPrefs();
 }
 
 namespace wifi_internal {
@@ -101,6 +119,17 @@ inline void stopMdns() {
   mdnsStarted = false;
 }
 
+inline void startCaptiveDns() {
+  captiveDnsServer.stop();
+  captiveDnsServer.start(captiveDnsPort, "*", WiFi.softAPIP()); // Wildcard DNS для captive portal в AP.
+  captiveDnsActive = true;
+}
+
+inline void stopCaptiveDns() {
+  if (captiveDnsActive) captiveDnsServer.stop();
+  captiveDnsActive = false;
+}
+
 inline void startHiddenApForSta() {
   WiFi.softAP(apSsid.c_str(), apPass.c_str(), 1, true); // Поднимаем скрытый AP, чтобы устройство оставалось доступным
 }
@@ -121,6 +150,7 @@ inline void activateFallbackAp() {
   WiFi.disconnect(true);
   WiFi.mode(WIFI_AP);
   WiFi.softAP(apSsid.c_str(), apPass.c_str()); // Запускаем только AP, чтобы пользователь смог подключиться
+    startCaptiveDns(); // В AP режиме все DNS-запросы ведем на ESP32 для автоперехода браузеров.
   fallbackApActive = true;                     // Запоминаем, что мы в аварийном режиме
   staAttemptInProgress = false;
   attemptCount = 0;
@@ -148,6 +178,7 @@ inline void onConnected() {
   staAttemptInProgress = false;
   checkInterval = 120000;      // 120 seconds — замедляем проверки статуса при стабильной связи
   attemptCount = 0;            // Сбрасываем счетчик
+    stopCaptiveDns();            // В STA captive DNS не нужен
   WiFi.mode(WIFI_STA);         // Оставляем только STA
   beginMdns();                 // Стартуем mDNS для удобного доступа
   Serial.printf("[WiFi] Connected: SSID \"%s\" | IP: %s | RSSI: %d dBm | Mode: %s\n",
@@ -216,7 +247,7 @@ inline void initWiFiModule() {
   startStaAttempt();             // Запускаем первую попытку подключения
 }
 
-inline void wifiModuleLoop() { wifi_internal::ensureConnection(); }
+inline void wifiModuleLoop() { if (captiveDnsActive) captiveDnsServer.processNextRequest(); wifi_internal::ensureConnection(); }
 
 inline WifiStatusInfo getWifiStatus() {
   WifiStatusInfo info{};
@@ -312,8 +343,10 @@ inline String scanWifiNetworksJson() {
 
 inline bool saveWifiConfig(const String &ssid, const String &pass, const String &apSsidIn, const String &apPassIn, const String &hostNameIn) {
   using namespace wifi_internal;
-  staSsid = ssid.length() ? ssid : String(defaultSSID);        // Обновляем SSID
-  staPass = pass;                                               // Обновляем пароль
+  String storedSsid = loadValue<String>("ssid", String(defaultSSID));
+  String storedPass = loadValue<String>("pass", String(defaultPASS));
+  staSsid = ssid.length() ? ssid : (storedSsid.length() ? storedSsid : String(defaultSSID)); // Не затираем SSID пустой строкой.
+  staPass = pass.length() ? pass : storedPass;                  // Пустой пароль из формы не стирает сохраненный пароль.
   apSsid = apSsidIn.length() ? apSsidIn : String(::apSSID);     // Новое имя AP
   apPass = apPassIn;                                            // Новый пароль AP
   hostName = hostNameIn.length() ? hostNameIn : String(defaultHostname); // Новое имя хоста

@@ -35,7 +35,7 @@ inline bool DS1Assigned = false; // Служебная строка логики
 inline bool DS2Assigned = false; // Служебная строка логики DS18B20.
 
 inline String formatTemperatureString(float value, bool available) { // Начало inline-функции для работы с адресами/состоянием DS18B20.
-  return available ? (String(value, 1) + " \u00B0C") : "n/a"; // Возвращаем рассчитанный результат вызывающему коду.
+  return available ? (String(value, 1) + " C") : "n/a"; // Возвращаем рассчитанный результат вызывающему коду.
 }
 
 inline String formatDeviceAddress(const DeviceAddress &addr) { // Начало inline-функции для работы с адресами/состоянием DS18B20.

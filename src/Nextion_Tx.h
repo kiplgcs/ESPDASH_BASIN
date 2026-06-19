@@ -542,7 +542,7 @@ if (Nx_page_id == 6 && !triggerRestartNextion &&
   myNex.writeNum("set_topping.c0.val", WaterLevelSensorUpper ? 1 : 0); // c0: верхний уровень бассейна.
   myNex.writeNum("set_topping.c1.val", WaterLevelSensorLower ? 1 : 0); // c1: нижний уровень бассейна.
   myNex.writeNum("set_topping.c2.val", WaterLevelSensorDrain ? 1 : 0); // c2: верхний уровень сливной ямы.
-  myNex.writeStr("set_topping.t0.txt", currentWaterText); // t0: понятная строка этапа работы.
+  myNex.writeStr("set_topping.t0.txt", nextionKoi8R(currentWaterText)); // t0: понятная строка этапа работы.
 }
 #endif // Конец синхронизации set_topping без фонового переключения страниц.
 

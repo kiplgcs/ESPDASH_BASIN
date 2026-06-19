@@ -1218,7 +1218,12 @@ inline void publishMqttStateInt(const char* topic, int value){ // публика
 
 
 inline void persistMqttSettings(){ // сохранение настроек MQTT
-  if(!spiffsMounted) return; // выход если SPIFFS не смонтирован
+  saveValue<String>("mqttHost", mqttHost); // Дублируем MQTT host в NVS, чтобы не терять настройки при проблемах SPIFFS.
+  saveValue<int>("mqttPort", mqttPort); // Дублируем порт MQTT в NVS.
+  saveValue<String>("mqttUser", mqttUsername); // Дублируем логин MQTT в NVS.
+  saveValue<String>("mqttPass", mqttPassword); // Дублируем пароль MQTT в NVS.
+  saveValue<int>("mqttEnabled", mqttEnabled ? 1 : 0); // Дублируем флаг включения MQTT в NVS.
+  if(!spiffsMounted) return; // NVS уже сохранен, если SPIFFS не смонтирован
   JsonDocument doc; // JSON-документ
   doc["host"] = mqttHost; // адрес брокера
   doc["port"] = mqttPort; // порт брокера
@@ -1234,13 +1239,26 @@ inline void persistMqttSettings(){ // сохранение настроек MQTT
 }
 
 inline void loadMqttSettings(){ // загрузка настроек MQTT
-  if(spiffsMounted && SPIFFS.exists(mqttConfigPath)){ // если файл существует
+  String nvsHost = loadValue<String>("mqttHost", mqttHost); // NVS считается основным надежным хранилищем.
+  uint16_t nvsPort = static_cast<uint16_t>(loadValue<int>("mqttPort", mqttPort));
+  String nvsUser = loadValue<String>("mqttUser", mqttUsername);
+  String nvsPass = loadValue<String>("mqttPass", mqttPassword);
+  bool nvsEnabled = loadValue<int>("mqttEnabled", mqttEnabled ? 1 : 0) == 1;
+
+  mqttHost = nvsHost.length() ? nvsHost : mqttHost;
+  mqttPort = nvsPort > 0 ? nvsPort : mqttPort;
+  mqttUsername = nvsUser;
+  mqttPassword = nvsPass;
+  mqttEnabled = nvsEnabled;
+
+  if(spiffsMounted && SPIFFS.exists(mqttConfigPath)){ // SPIFFS используем как совместимый дубль настроек.
     File file = SPIFFS.open(mqttConfigPath, FILE_READ); // открытие файла
     if(file){ // если файл открыт
       JsonDocument doc; // JSON-документ
       DeserializationError err = deserializeJson(doc, file); // парсинг JSON
       if(!err){ // если без ошибок
-        mqttHost = doc["host"] | mqttHost; // адрес брокера
+        String fileHost = doc["host"] | String("");
+        if(!mqttHost.length() && fileHost.length()) mqttHost = fileHost; // Не даем пустому файлу затереть NVS.
         mqttPort = static_cast<uint16_t>(doc["port"] | mqttPort); // порт
         mqttUsername = doc["user"] | mqttUsername; // пользователь
         mqttPassword = doc["pass"] | mqttPassword; // пароль
@@ -1249,14 +1267,7 @@ inline void loadMqttSettings(){ // загрузка настроек MQTT
       }
       file.close(); // закрытие файла
     }
-  } else { // если файл отсутствует
-    // fallback to legacy preferences if present
-    mqttHost = loadValue<String>("mqttHost", mqttHost); // старый host
-    mqttPort = static_cast<uint16_t>(loadValue<int>("mqttPort", mqttPort)); // старый порт
-    mqttUsername = loadValue<String>("mqttUser", mqttUsername); // старый пользователь
-    mqttPassword = loadValue<String>("mqttPass", mqttPassword); // старый пароль
-    mqttEnabled = loadValue<int>("mqttEnabled", mqttEnabled ? 1 : 0) == 1; // старый флаг
-    persistMqttSettings(); // сохранение в новом формате
+  persistMqttSettings(); // После чтения синхронизируем оба хранилища.
   }
 }
 

@@ -614,9 +614,23 @@ void TimerControlRelay(int interval) {
 //     //текущий день недели "DayOfWeek" - будет указывать в массиве "chk_Array[DayOfWeek - 1]"" на "chk1...chk7" который имее значение "true" или "false"
 //     bool chk_Array[] = {chk1, chk2, chk3, chk4, chk5, chk6, chk7}; 
 
+    static bool filtrationWasTimerManaged = false; // Запоминаем, что насос был передан автоматике таймеров фильтрации.
+    static uint8_t lastFiltrationTimerMask = 0; // Нужен, чтобы отключение любого таймера сразу гасило насос, если он работал от таймера.
+    uint8_t filtrationTimerMask = (Filtr_Time1 ? 0x01 : 0x00) | (Filtr_Time2 ? 0x02 : 0x00) | (Filtr_Time3 ? 0x04 : 0x00); // Маска включенных таймеров.
+    bool filtrationTimerDisabled = (lastFiltrationTimerMask & ~filtrationTimerMask) != 0; // true, если выключили хотя бы один таймер.
+    lastFiltrationTimerMask = filtrationTimerMask; // Обновляем маску после проверки фронта выключения.
+
+
     FiltrationTimerActive = anyFiltrTimer && filtrActive; // Флаг активности фильтрации по таймерам
-    if (anyFiltrTimer && !CleanSequenceActive) { // Если фильтрация по таймерам активна и нет промывки
+    if (filtrationTimerDisabled && filtrationWasTimerManaged && !CleanSequenceActive) { // Отключение любого таймера гасит насос, если его включала автоматика.
+      Power_Filtr = false; // Ручное управление при этом не блокируется: следующий клик set_filtr.sw3 снова включит насос.
+      filtrationWasTimerManaged = false; // После принудительного OFF считаем, что насос больше не под управлением таймера.
+    } else if (anyFiltrTimer && !CleanSequenceActive) { // Если фильтрация по таймерам активна и нет промывки
       Power_Filtr = filtrActive; // Устанавливаем состояние насоса фильтрации
+            filtrationWasTimerManaged = filtrActive; // Помечаем только фактическую работу насоса по таймеру.
+    } else if (!anyFiltrTimer && filtrationWasTimerManaged && !CleanSequenceActive) { // Все таймеры выключили, пока насос работал по расписанию.
+      Power_Filtr = false; // Останавливаем насос один раз и затем оставляем ручное управление свободным.
+      filtrationWasTimerManaged = false; // Снимаем автопринадлежность, чтобы ручной режим не гасился снова.
     } // Конец условия фильтрации
 
 //     if (checkTimeInInterval(hours, minutes, Clean_timeON1, Clean_timeOFF1) && Clean_Time1 == true && chk_Array[DayOfWeek - 1]) {
@@ -758,7 +772,8 @@ void TimerControlRelay(int interval) {
     static unsigned long lastMillisACO = 0;
     static bool phDosingActive = false;
     PH_setting = PH_Upper; // Совместимость со старым ключом верхней уставки pH
-    if (!PH_Control_ACO || !Power_Filtr) {
+    const bool dosingFlowAllowed = FiltrationTimerActive && Power_Filtr; // Химию подаем только при активном таймере фильтрации и работающем насосе.
+    if (!PH_Control_ACO || !dosingFlowAllowed) {
       phDosingActive = false;
       manageTimer(ACO_Work, Power_ACO = false, false, lastMillisACO, Info_ACO);
           } else {
@@ -770,7 +785,7 @@ void TimerControlRelay(int interval) {
     // Активация дозации NaOCl по датчику хлора с гистерезисом CL
     static unsigned long lastMillisH2O2 = 0;
     static bool clDosingActive = false;
-    if (!NaOCl_H2O2_Control || !Power_Filtr) {
+    if (!NaOCl_H2O2_Control || !dosingFlowAllowed) {
       clDosingActive = false;
       manageTimer(H2O2_Work, Power_H2O2 = false, false, lastMillisH2O2, Info_H2O2);
           } else {
@@ -1051,9 +1066,13 @@ if (AktualReadInput) {
   queueRelayWriteIfNeeded(1, Pow_WS2815, relayWritesThisPass); // Реле 2: питание RGB-ленты WS2815.
   queueRelayWriteIfNeeded(8, Power_Filtr, relayWritesThisPass); // Реле 9: насос фильтрации и слив воды.
 
-  const bool modbusHeatInterlockActive = Power_Filtr || ReadRelayArray[8]; // Нагрев разрешен только при работающем насосе.
-  if (!Activation_Heat || !modbusHeatInterlockActive) { // Если нагрев выключен или нет протока.
+  const bool heatFiltrationFlowAllowed = FiltrationTimerActive && (Power_Filtr || ReadRelayArray[8]); // Нагрев разрешен только при работе насоса по таймеру фильтрации.
+  if (!Activation_Heat || !DS1Available || !heatFiltrationFlowAllowed) { // Если нагрев выключен, нет датчика или нет протока фильтрации по таймеру.
     Power_Heat = false; // Снимаем команду нагрева до записи реле.
+      } else if (DS1 <= (static_cast<float>(Sider_heat) - 0.2f)) { // Гистерезис: включаем ниже уставки.
+    Power_Heat = true; // Контроль температуры включает реле RS485 нагревателя.
+  } else if (DS1 >= (static_cast<float>(Sider_heat) + 0.2f)) { // Гистерезис: выключаем выше уставки.
+    Power_Heat = false; // Контроль температуры выключает реле RS485 нагревателя.
   }
   queueRelayWriteIfNeeded(4, Power_Heat, relayWritesThisPass); // Реле 5: нагреватель.
   queueRelayWriteIfNeeded(14, Power_Warm_floor_heating, relayWritesThisPass); // Реле 15: теплый пол помещения.

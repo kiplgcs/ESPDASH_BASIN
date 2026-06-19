@@ -62,27 +62,85 @@ if(Nx_page_id == 0){
 
 }
 
+
+if(Nx_page_id == 1){
+  myNex.writeNum("set_lamp.sw3.val", Lamp ? 1 : 0); // Полная синхронизация открытой страницы лампы с Web.
+  myNex.writeNum("set_lamp.sw1.val", Lamp_autosvet ? 1 : 0);
+  myNex.writeNum("set_lamp.sw0.val", Power_Time1 ? 1 : 0);
+  UITimerEntry &lampTimerNow = ui.timer("LampTimer");
+  String lampOnNow = formatMinutesToTime(lampTimerNow.on);
+  String lampOffNow = formatMinutesToTime(lampTimerNow.off);
+  myNex.writeNum("set_lamp.n0.val", getSubstring(lampOnNow, 0, 1));
+  myNex.writeNum("set_lamp.n1.val", getSubstring(lampOnNow, 3, 4));
+  myNex.writeNum("set_lamp.n2.val", getSubstring(lampOffNow, 0, 1));
+  myNex.writeNum("set_lamp.n3.val", getSubstring(lampOffNow, 3, 4));
+}
+
+if(Nx_page_id == 2){
+  myNex.writeNum("set_RGB.sw3.val", Pow_WS2815 ? 1 : 0); // Полная синхронизация открытой страницы RGB с Web.
+  myNex.writeNum("set_RGB.sw2.val", Pow_WS2815_autosvet ? 1 : 0);
+  myNex.writeNum("set_RGB.sw0.val", WS2815_Time1 ? 1 : 0);
+  UITimerEntry &rgbTimerNow = ui.timer("RgbTimer");
+  String rgbOnNow = formatMinutesToTime(rgbTimerNow.on);
+  String rgbOffNow = formatMinutesToTime(rgbTimerNow.off);
+  myNex.writeNum("set_RGB.n0.val", getSubstring(rgbOnNow, 0, 1));
+  myNex.writeNum("set_RGB.n1.val", getSubstring(rgbOnNow, 3, 4));
+  myNex.writeNum("set_RGB.n2.val", getSubstring(rgbOffNow, 0, 1));
+  myNex.writeNum("set_RGB.n3.val", getSubstring(rgbOffNow, 3, 4));
+}
+
+if(Nx_page_id == 3){
+  myNex.writeNum("set_filtr.sw3.val", Power_Filtr ? 1 : 0); // Полная синхронизация открытой страницы фильтрации с Web.
+  myNex.writeNum("set_filtr.sw0.val", Filtr_Time1 ? 1 : 0); // Таймер фильтрации №1.
+  myNex.writeNum("set_filtr.sw2.val", Filtr_Time2 ? 1 : 0); // Таймер фильтрации №2.
+  myNex.writeNum("set_filtr.sw1.val", Filtr_Time3 ? 1 : 0); // Таймер фильтрации №3.
+  UITimerEntry &filtrTimer1Now = ui.timer("FiltrTimer1");
+  UITimerEntry &filtrTimer2Now = ui.timer("FiltrTimer2");
+  UITimerEntry &filtrTimer3Now = ui.timer("FiltrTimer3");
+  String filtrOn1Now = formatMinutesToTime(filtrTimer1Now.on);
+  String filtrOff1Now = formatMinutesToTime(filtrTimer1Now.off);
+  String filtrOn2Now = formatMinutesToTime(filtrTimer2Now.on);
+  String filtrOff2Now = formatMinutesToTime(filtrTimer2Now.off);
+  String filtrOn3Now = formatMinutesToTime(filtrTimer3Now.on);
+  String filtrOff3Now = formatMinutesToTime(filtrTimer3Now.off);
+  myNex.writeNum("set_filtr.n0.val", getSubstring(filtrOn1Now, 0, 1));
+  myNex.writeNum("set_filtr.n1.val", getSubstring(filtrOn1Now, 3, 4));
+  myNex.writeNum("set_filtr.n2.val", getSubstring(filtrOff1Now, 0, 1));
+  myNex.writeNum("set_filtr.n3.val", getSubstring(filtrOff1Now, 3, 4));
+  myNex.writeNum("set_filtr.n4.val", getSubstring(filtrOn2Now, 0, 1));
+  myNex.writeNum("set_filtr.n5.val", getSubstring(filtrOn2Now, 3, 4));
+  myNex.writeNum("set_filtr.n6.val", getSubstring(filtrOff2Now, 0, 1));
+  myNex.writeNum("set_filtr.n7.val", getSubstring(filtrOff2Now, 3, 4));
+  myNex.writeNum("set_filtr.n8.val", getSubstring(filtrOn3Now, 0, 1));
+  myNex.writeNum("set_filtr.n9.val", getSubstring(filtrOn3Now, 3, 4));
+  myNex.writeNum("set_filtr.n10.val", getSubstring(filtrOff3Now, 0, 1));
+  myNex.writeNum("set_filtr.n11.val", getSubstring(filtrOff3Now, 3, 4));
+}
+
+
 //Если находимся на странице "heat"
 if(Nx_page_id == 5){
   myNex.writeNum("heat.sw0.val", Activation_Heat);  //Отправляем отктивирован ли режим контроля температуры
   
-  // myNex.writeStr("heat.t1.txt", String(DS1) + " C"); // Температура в бассейне  - перед нагревателем
-  // myNex.writeStr("heat.t0.txt", String(DS2) + " C"); // Температура после нагревателя - падача нагретой воды в бассейн
-  // myNex.writeStr("heat.t2.txt", String(DS1+30) + " C"); // Температура теплоносителя в нагреватель для пологрева воды
+  myNex.writeNum("heat.h0.val", Sider_heat); // Синхронизируем уставку с Web/памятью на открытой странице heat.
+  myNex.writeNum("heat.n0.val", Sider_heat); // Синхронизируем числовое поле уставки на открытой странице heat.
+  myNex.writeStr("heat.t1.txt", formatTemperatureString(DS1, DS1Available)); // Температура воды в бассейне до нагрева.
+  myNex.writeStr("heat.t0.txt", formatTemperatureString(DS2, DS2Available)); // Температура после нагревателя.
+  myNex.writeStr("heat.t2.txt", formatTemperatureString(DS1, DS1Available)); // Резервное поле температуры без символа градуса.
 }
 
 
 
 //Если находимся на странице "RTC"
 if(Nx_page_id == 4){
-  myNex.writeStr("Clean.t3.txt", CommentClean); // На странице промывки показываем текущий этап и время.
+  myNex.writeStr("Clean.t3.txt", nextionKoi8R(CommentClean)); // На странице промывки показываем текущий этап и время.
 }
 
 if(Nx_page_id == 6){
   myNex.writeNum("set_topping.c0.val", WaterLevelSensorUpper ? 1 : 0); // c0: верхний уровень бассейна.
   myNex.writeNum("set_topping.c1.val", WaterLevelSensorLower ? 1 : 0); // c1: нижний уровень бассейна.
   myNex.writeNum("set_topping.c2.val", WaterLevelSensorDrain ? 1 : 0); // c2: верхний уровень сливной ямы.
-  myNex.writeStr("set_topping.t0.txt", waterLevelNextionText()); // t0: понятная строка текущего этапа.
+  myNex.writeStr("set_topping.t0.txt", nextionKoi8R(waterLevelNextionText())); // t0: понятная строка текущего этапа.
 }
 
 if(Nx_page_id == 7){
@@ -368,17 +426,13 @@ switch (sync_step) {
     break;
   }
   case 17:
-    if (!onSetFiltrPage) { // Не мешаем редактированию таймеров фильтрации
-      myNex.writeNum("set_filtr.sw3.val", Power_Filtr ? 1 : 0);
-      myNex.writeNum("set_filtr.sw0.val", Filtr_Time1 ? 1 : 0);
-    }
+    myNex.writeNum("set_filtr.sw3.val", Power_Filtr ? 1 : 0); // Web/автоматика должны быть видны на открытой странице фильтрации.
+    myNex.writeNum("set_filtr.sw0.val", Filtr_Time1 ? 1 : 0); // Синхронизация таймера 1 с Web без пропуска открытой страницы.
     sync_step++;
     break;
   case 18:
-    if (!onSetFiltrPage) { // Не мешаем редактированию таймеров фильтрации
-      myNex.writeNum("set_filtr.sw2.val", Filtr_Time2 ? 1 : 0);
-      myNex.writeNum("set_filtr.sw1.val", Filtr_Time3 ? 1 : 0);
-    }
+    myNex.writeNum("set_filtr.sw2.val", Filtr_Time2 ? 1 : 0); // Синхронизация таймера 2 с Web без пропуска открытой страницы.
+    myNex.writeNum("set_filtr.sw1.val", Filtr_Time3 ? 1 : 0); // Синхронизация таймера 3 с Web без пропуска открытой страницы.
     sync_step++;
     break;
   case 19: {
