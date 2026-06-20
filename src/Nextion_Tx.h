@@ -349,6 +349,28 @@ if (Nx_page_id == 3 && !triggerRestartNextion && !nextionFiltrWriteHoldActive() 
   myNex.writeNum("set_filtr.sw3.val", nextionFiltrActualState ? 1 : 0);
 }
 
+static int savedNextionFiltrTimerPageId = -1;
+static bool savedNextionFiltrTime1 = false;
+static bool savedNextionFiltrTime2 = false;
+static bool savedNextionFiltrTime3 = false;
+if (Nx_page_id != 3) savedNextionFiltrTimerPageId = -1;
+if (Nx_page_id == 3 && !triggerRestartNextion && !nextionFiltrWriteHoldActive()) {
+  const bool forceFiltrTimerSync = savedNextionFiltrTimerPageId != 3;
+  if (forceFiltrTimerSync || savedNextionFiltrTime1 != Filtr_Time1) {
+    savedNextionFiltrTime1 = Filtr_Time1;
+    myNex.writeNum("set_filtr.sw0.val", Filtr_Time1 ? 1 : 0);
+  }
+  if (forceFiltrTimerSync || savedNextionFiltrTime2 != Filtr_Time2) {
+    savedNextionFiltrTime2 = Filtr_Time2;
+    myNex.writeNum("set_filtr.sw2.val", Filtr_Time2 ? 1 : 0);
+  }
+  if (forceFiltrTimerSync || savedNextionFiltrTime3 != Filtr_Time3) {
+    savedNextionFiltrTime3 = Filtr_Time3;
+    myNex.writeNum("set_filtr.sw1.val", Filtr_Time3 ? 1 : 0);
+  }
+  savedNextionFiltrTimerPageId = 3;
+}
+
 // /////////////////////////************* page Clean **************/////////////////////////////
 // ////////////////////////************* page Clean **************//////////////////////////////
 // ///////////////////////************* page Clean **************///////////////////////////////

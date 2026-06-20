@@ -375,7 +375,6 @@ UI_BUTTON("Pow_Ul_light", Pow_Ul_light, "gray", "🚏 Включить/Откл�
 
     //Реле RS485
     UI_PAGE();
-    UI_TEXT("InfoStringDIN_RS485", InfoStringDIN, "x:30%;y:30%;fontSize:18;color:#00ffcc;white-space:pre-line;line-height:1.7");
-    UI_DISPLAY("Rs485UsageInfo", Rs485UsageInfo, "ℹ️ Назначение реле и входов RS485");
+    UI_RS485_PANEL("Rs485Panel", "/huaqingjun.jpg", "RS485 16CH + DI16");
         
     }

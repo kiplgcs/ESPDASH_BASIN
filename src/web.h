@@ -136,6 +136,30 @@ extern bool DS1Assigned; // Признак, что датчик бассейна
 extern bool DS2Assigned; // Признак, что датчик после нагревателя привязан.
 
 extern bool ReadRelayArray[16]; // Readback состояний Modbus-реле (объявление, реализация в ModbusRTU_RS485.h)
+extern bool ReadInputArray[16]; // Readback дискретных входов Modbus-реле (объявление, реализация в ModbusRTU_RS485.h)
+extern bool AktualReadRelay;
+extern bool AktualReadInput;
+extern bool Pow_WS2815;
+extern bool Pow_WS2815_autosvet;
+extern bool WS2815_Time1;
+extern bool Power_Filtr;
+extern bool AirPump;
+extern bool SolValveFilBack;
+extern bool SolValveFiltration;
+extern bool SolSandDump;
+extern bool AirPumpAuto;
+extern bool SolSandDumpAuto;
+extern bool ValveBackwashAuto;
+extern bool ValveFiltrationAuto;
+extern bool CleanSequenceActive;
+
+inline bool Rs485Enabled = false;
+inline int Rs485BaudRate = 19200;
+inline String Rs485UartMode = "8N1";
+inline int Rs485SlaveId = 1;
+inline int Rs485PollIntervalMs = 1000;
+inline bool Rs485ForcePoll = false;
+inline bool Rs485ManualRelayState[16] = {false};
 
 
 String formatTemperatureString(float value, bool available);
@@ -411,6 +435,226 @@ inline bool applyWaterControlRequest(const String &id, bool requestedState) { //
     return true; // Сообщаем вызывающему коду, что команда обработана.
   } // Конец обработки Power_Topping.
   return false; // Остальные id не относятся к опасным переключателям уровня.
+}
+
+inline String rs485ManualRelayKey(uint8_t relay) {
+  return String("Rs485RelayManual") + String(relay + 1);
+}
+
+inline void persistRs485ManualRelay(uint8_t relay) {
+  if (relay >= 16) return;
+  const String key = rs485ManualRelayKey(relay);
+  saveValue<int>(key.c_str(), Rs485ManualRelayState[relay] ? 1 : 0);
+}
+
+inline void loadRs485PanelSettings() {
+  Rs485Enabled = loadValue<int>("Rs485Enabled", 0) != 0;
+  Rs485BaudRate = loadValue<int>("Rs485BaudRate", Rs485BaudRate);
+  if (Rs485BaudRate <= 0) Rs485BaudRate = 19200;
+  Rs485UartMode = loadValue<String>("Rs485UartMode", Rs485UartMode);
+  if (Rs485UartMode.length() == 0) Rs485UartMode = "8N1";
+  Rs485SlaveId = loadValue<int>("Rs485SlaveId", Rs485SlaveId);
+  if (Rs485SlaveId < 1) Rs485SlaveId = 1;
+  if (Rs485SlaveId > 247) Rs485SlaveId = 247;
+  Rs485PollIntervalMs = loadValue<int>("Rs485PollIntervalMs", Rs485PollIntervalMs);
+  if (Rs485PollIntervalMs < 200) Rs485PollIntervalMs = 200;
+  if (Rs485PollIntervalMs > 5000) Rs485PollIntervalMs = 5000;
+  for (uint8_t relay = 0; relay < 16; relay++) {
+    const String key = rs485ManualRelayKey(relay);
+    Rs485ManualRelayState[relay] = loadValue<int>(key.c_str(), 0) != 0;
+  }
+}
+
+inline bool applyRs485ConfigRequest(const String &key, const String &value) {
+  if (key == "Rs485Enabled") {
+    Rs485Enabled = value.toInt() != 0;
+    saveValue<int>("Rs485Enabled", Rs485Enabled ? 1 : 0);
+    return true;
+  }
+  if (key == "Rs485BaudRate") {
+    Rs485BaudRate = value.toInt();
+    if (Rs485BaudRate <= 0) Rs485BaudRate = 19200;
+    saveValue<int>("Rs485BaudRate", Rs485BaudRate);
+    return true;
+  }
+  if (key == "Rs485UartMode") {
+    Rs485UartMode = value;
+    if (Rs485UartMode.length() == 0) Rs485UartMode = "8N1";
+    saveValue<String>("Rs485UartMode", Rs485UartMode);
+    return true;
+  }
+  if (key == "Rs485SlaveId") {
+    Rs485SlaveId = value.toInt();
+    if (Rs485SlaveId < 1) Rs485SlaveId = 1;
+    if (Rs485SlaveId > 247) Rs485SlaveId = 247;
+    saveValue<int>("Rs485SlaveId", Rs485SlaveId);
+    return true;
+  }
+  if (key == "Rs485PollIntervalMs") {
+    Rs485PollIntervalMs = value.toInt();
+    if (Rs485PollIntervalMs < 200) Rs485PollIntervalMs = 200;
+    if (Rs485PollIntervalMs > 5000) Rs485PollIntervalMs = 5000;
+    saveValue<int>("Rs485PollIntervalMs", Rs485PollIntervalMs);
+    return true;
+  }
+  return false;
+}
+
+inline bool rs485RelayCommandState(uint8_t relay) {
+  switch (relay) {
+    case 0: return Lamp;
+    case 1: return Pow_WS2815;
+    case 2: return Rs485ManualRelayState[2];
+    case 3: return Rs485ManualRelayState[3];
+    case 4: return Power_Heat;
+    case 5: return Power_H2O2 || ManualPulse_H2O2_Active;
+    case 6: return Power_ACO || ManualPulse_ACO_Active;
+    case 7: return Rs485ManualRelayState[7];
+    case 8: return Power_Filtr;
+    case 9: return AirPump || AirPumpAuto;
+    case 10: return SolValveFiltration || ValveFiltrationAuto;
+    case 11: return SolValveFilBack || ValveBackwashAuto;
+    case 12: return SolSandDump || SolSandDumpAuto;
+    case 13: return Power_Topping;
+    case 14: return Power_Warm_floor_heating;
+    case 15: return Pow_Ul_light;
+    default: return false;
+  }
+}
+
+inline bool applyRs485RelayRequest(uint8_t relay, bool requestedState) {
+  if (relay >= 16) return false;
+  switch (relay) {
+    case 0:
+      SetLamp = requestedState ? "on" : "off";
+      Lamp = requestedState;
+      Lamp_autosvet = false;
+      Power_Time1 = false;
+      saveValue<String>("SetLamp", SetLamp);
+      saveButtonState("button_Lamp", Lamp ? 1 : 0);
+      saveValue<int>("Lamp_autosvet", 0);
+      saveValue<int>("Power_Time1", 0);
+      return true;
+    case 1:
+      SetRGB = requestedState ? "on" : "off";
+      Pow_WS2815 = requestedState;
+      Pow_WS2815_autosvet = false;
+      WS2815_Time1 = false;
+      saveValue<String>("SetRGB", SetRGB);
+      saveButtonState("button_WS2815", Pow_WS2815 ? 1 : 0);
+      saveValue<int>("Pow_WS2815_autosvet", 0);
+      saveValue<int>("WS2815_Time1", 0);
+      return true;
+    case 2:
+    case 3:
+    case 7:
+      Rs485ManualRelayState[relay] = requestedState;
+      persistRs485ManualRelay(relay);
+      return true;
+    case 4:
+      Activation_Heat = requestedState;
+      Power_Heat = requestedState;
+      saveValue<int>("Activation_Heat", Activation_Heat ? 1 : 0);
+      return true;
+    case 5:
+      Power_H2O2 = requestedState;
+      if (!requestedState) ManualPulse_H2O2_Active = false;
+      return true;
+    case 6:
+      Power_ACO = requestedState;
+      if (!requestedState) ManualPulse_ACO_Active = false;
+      return true;
+    case 8:
+      Power_Filtr = requestedState;
+      saveButtonState("Power_Filtr", Power_Filtr ? 1 : 0);
+      return true;
+    case 9:
+      AirPump = requestedState;
+      saveButtonState("AirPump", AirPump ? 1 : 0);
+      return true;
+    case 10:
+      SolValveFiltration = requestedState;
+      saveButtonState("SolValveFiltration", SolValveFiltration ? 1 : 0);
+      return true;
+    case 11:
+      SolValveFilBack = requestedState;
+      saveButtonState("SolValveFilBack", SolValveFilBack ? 1 : 0);
+      return true;
+    case 12:
+      SolSandDump = requestedState;
+      saveButtonState("SolSandDump", SolSandDump ? 1 : 0);
+      return true;
+    case 13:
+      applyWaterControlRequest("Power_Topping", requestedState);
+      return true;
+    case 14:
+      RoomTemper = false;
+      Power_Warm_floor_heating = requestedState;
+      saveValue<int>("RoomTemper", 0);
+      saveValue<int>("Power_Warm_floor_heating", Power_Warm_floor_heating ? 1 : 0);
+      return true;
+    case 15:
+      Pow_Ul_light = requestedState;
+      saveButtonState("Pow_Ul_light", Pow_Ul_light ? 1 : 0);
+      return true;
+    default:
+      return false;
+  }
+}
+
+inline void applyRs485AllOffRequest() {
+  SetLamp = "off";
+  Lamp = false;
+  Lamp_autosvet = false;
+  Power_Time1 = false;
+  SetRGB = "off";
+  Pow_WS2815 = false;
+  Pow_WS2815_autosvet = false;
+  WS2815_Time1 = false;
+  Power_Heat = false;
+  Activation_Heat = false;
+  Power_H2O2 = false;
+  ManualPulse_H2O2_Active = false;
+  ManualPulse_H2O2_Request = false;
+  Power_ACO = false;
+  ManualPulse_ACO_Active = false;
+  ManualPulse_ACO_Request = false;
+  Power_Filtr = false;
+  Power_Drain = false;
+  AirPump = false;
+  SolValveFiltration = false;
+  SolValveFilBack = false;
+  SolSandDump = false;
+  AirPumpAuto = false;
+  ValveFiltrationAuto = false;
+  ValveBackwashAuto = false;
+  SolSandDumpAuto = false;
+  CleanSequenceActive = false;
+  applyWaterControlRequest("Power_Topping", false);
+  RoomTemper = false;
+  Power_Warm_floor_heating = false;
+  Pow_Ul_light = false;
+  for (uint8_t relay = 0; relay < 16; relay++) {
+    Rs485ManualRelayState[relay] = false;
+    persistRs485ManualRelay(relay);
+  }
+  saveValue<String>("SetLamp", SetLamp);
+  saveButtonState("button_Lamp", 0);
+  saveValue<int>("Lamp_autosvet", 0);
+  saveValue<int>("Power_Time1", 0);
+  saveValue<String>("SetRGB", SetRGB);
+  saveButtonState("button_WS2815", 0);
+  saveValue<int>("Pow_WS2815_autosvet", 0);
+  saveValue<int>("WS2815_Time1", 0);
+  saveValue<int>("Activation_Heat", 0);
+  saveButtonState("Power_Filtr", 0);
+  saveButtonState("AirPump", 0);
+  saveButtonState("SolValveFiltration", 0);
+  saveButtonState("SolValveFilBack", 0);
+  saveButtonState("SolSandDump", 0);
+  saveValue<int>("RoomTemper", 0);
+  saveValue<int>("Power_Warm_floor_heating", 0);
+  saveButtonState("Pow_Ul_light", 0);
 }
 
 
@@ -1015,6 +1259,42 @@ private:
       ".dash-btn:hover{transform:translateY(-1px);box-shadow:0 6px 14px rgba(0,0,0,0.45);} " // Эффект наведения на кнопку
                 ".page{display:none;position:relative;grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap:15px;} " // Страница интерфейса
       ".page.active{display:block;} " // Отображение активной страницы
+      ".rs485-panel{display:flex;flex-direction:column;gap:12px;width:100%;} "
+      ".rs485-card{background:#1d1d1f;border:1px solid rgba(255,255,255,0.08);border-radius:8px;box-shadow:0 10px 24px rgba(0,0,0,0.45);padding:14px;box-sizing:border-box;} "
+      ".rs485-hero{display:flex;align-items:center;justify-content:space-between;gap:16px;} "
+      ".rs485-title{font-size:1.25rem;font-weight:800;color:#fff;line-height:1.2;} "
+      ".rs485-sub{color:#c7dcff;font-size:0.9rem;line-height:1.45;} "
+      ".rs485-status{min-width:156px;padding:10px 14px;border-radius:8px;border:1px solid #1c5d9c;background:#10243f;color:#fff;font-weight:800;text-align:center;} "
+      ".rs485-status.off{border-color:#7a2626;background:#3a1717;} "
+      ".rs485-board{display:grid;grid-template-columns:minmax(220px,300px) 1fr;gap:12px;align-items:stretch;} "
+      ".rs485-side{display:flex;flex-direction:column;gap:10px;} "
+      ".rs485-enable{display:flex;align-items:center;gap:8px;font-weight:800;color:#fff;} "
+      ".rs485-field{display:flex;flex-direction:column;gap:6px;} "
+      ".rs485-field label{font-size:0.9rem;color:#fff;} "
+      ".rs485-field select,.rs485-field input{width:100%;box-sizing:border-box;background:#111;border:1px solid #333;border-radius:6px;color:#fff;padding:8px 10px;font-size:0.95rem;} "
+      ".rs485-note{font-size:0.88rem;line-height:1.45;color:#b9d1ff;} "
+      ".rs485-image-card{display:grid;grid-template-columns:minmax(260px,0.95fr) 1.6fr;gap:10px;background:#121820;border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px;} "
+      ".rs485-image{width:100%;min-height:210px;max-height:250px;object-fit:contain;background:#05090e;border:1px solid rgba(255,255,255,0.10);border-radius:6px;} "
+      ".rs485-spec{background:#171b22;border:1px solid rgba(255,255,255,0.10);border-radius:6px;padding:12px;} "
+      ".rs485-spec h4{margin:0 0 10px 0;color:#fff;font-size:1.05rem;} "
+      ".rs485-spec-row{display:grid;grid-template-columns:110px 1fr;gap:10px;margin:7px 0;font-size:0.9rem;} "
+      ".rs485-spec-row strong{color:#8fc3ff;} "
+      ".rs485-controls{display:grid;grid-template-columns:repeat(5,minmax(120px,1fr));gap:10px;align-items:end;} "
+      ".rs485-action{height:42px;border-radius:8px;border:1px solid rgba(255,255,255,0.16);background:#222a34;color:#fff;font-weight:800;cursor:pointer;} "
+      ".rs485-action.danger{background:#641d1d;border-color:#983434;} "
+      ".rs485-grid-title{font-size:1.1rem;font-weight:800;color:#fff;margin:2px 0 12px;} "
+      ".rs485-relay-grid{display:grid;grid-template-columns:repeat(4,minmax(170px,1fr));gap:8px;} "
+      ".rs485-relay-row{display:grid;grid-template-columns:48px 1fr;gap:10px;align-items:center;background:#111820;border:1px solid rgba(255,255,255,0.08);border-radius:7px;padding:8px;} "
+      ".rs485-relay-row span{font-weight:800;color:#dfeeff;} "
+      ".rs485-relay-btn{height:38px;border-radius:8px;border:1px solid #555;background:#242321;color:#fff;font-weight:900;letter-spacing:0.02em;cursor:pointer;} "
+      ".rs485-relay-btn.on{background:#0e6b38;border-color:#22a357;color:#fff;} "
+      ".rs485-input-grid{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:8px;} "
+      ".rs485-input-chip{height:34px;border-radius:7px;border:1px solid rgba(255,255,255,0.12);background:#232a32;color:#dceeff;font-weight:800;display:flex;align-items:center;justify-content:center;} "
+      ".rs485-input-chip.on{background:#0d4269;border-color:#318bd0;color:#fff;} "
+      ".rs485-assignments{display:grid;grid-template-columns:repeat(2,minmax(260px,1fr));gap:8px;color:#d9e7ff;font-size:0.92rem;line-height:1.35;} "
+      ".rs485-assignment{background:#121820;border:1px solid rgba(255,255,255,0.08);border-radius:7px;padding:8px 10px;} "
+      "@media (max-width:1050px){.rs485-board,.rs485-image-card{grid-template-columns:1fr;}.rs485-controls{grid-template-columns:repeat(2,minmax(140px,1fr));}.rs485-relay-grid,.rs485-input-grid,.rs485-assignments{grid-template-columns:repeat(2,minmax(140px,1fr));}} "
+      "@media (max-width:640px){.rs485-hero{align-items:flex-start;flex-direction:column;}.rs485-controls,.rs485-relay-grid,.rs485-input-grid,.rs485-assignments{grid-template-columns:1fr;}.rs485-status{width:100%;box-sizing:border-box;}} "
             ".page-header{display:flex;flex-direction:row;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:10px;} " // Заголовок страницы
       ".page-header h3{margin:0;} " // Заголовок без отступов
              ".page-datetime{font-size:clamp(0.95em, 1.6vw, 1.25em);letter-spacing:0.08em;text-align:right;font-weight:600;" // Блок даты и времени
@@ -1543,6 +1823,88 @@ private:
                   html += "</table></div>";
                   continue; // Переход к следующему элементу
               }
+              if(e.type=="rs485Panel"){
+                  String imageSrc = e.value;
+                  if(imageSrc.length() && !imageSrc.startsWith("http") && !imageSrc.startsWith("/")) imageSrc = "/" + imageSrc;
+                  if(!imageSrc.length()) imageSrc = "/huaqingjun.jpg";
+
+                  html += "<div class='rs485-panel' id='"+e.id+"'>";
+                  html += "<div class='rs485-card rs485-hero'>"
+                          "<div><div class='rs485-title'>"+e.label+"</div>"
+                          "<div class='rs485-sub'>Modbus RTU: Huaqingjun FC05/FC03 0/4, N4D3E16 FC06/FC03 0x0070/0x00C0<br>"
+                          "Huaqingjun 16CH+DI16, Serial2 19200 8N1, RX GPIO16, TX GPIO17, DE/RE auto</div></div>"
+                          "<div id='rs485-status' class='rs485-status'>RS485 disabled</div>"
+                          "</div>";
+                  html += "<div class='rs485-card rs485-board'>"
+                          "<div class='rs485-side'>"
+                          "<label class='rs485-enable'><input id='Rs485Enabled' type='checkbox'> RS485 включено</label>"
+                          "<div class='rs485-field'><label>Тип платы</label><select id='Rs485BoardType'><option>Huaqingjun 16CH relay + DI16</option></select></div>"
+                          "<div class='rs485-note'>Профиль Huaqingjun: отдельное реле переключается FC05 по coil 0..15, реле читаются из регистра 0, входы из регистра 4.</div>"
+                          "</div>"
+                          "<div class='rs485-image-card'>"
+                          "<img class='rs485-image' src='"+imageSrc+"' alt='Huaqingjun 16-channel RS485 relay module'>"
+                          "<div class='rs485-spec'><h4>Huaqingjun 16CH relay + DI16</h4>"
+                          "<div class='rs485-spec-row'><strong>Питание</strong><span>DC 12/24 В на клеммы питания платы</span></div>"
+                          "<div class='rs485-spec-row'><strong>Интерфейс</strong><span>RS485 A/B, общий GND с ESP32 обязателен</span></div>"
+                          "<div class='rs485-spec-row'><strong>ESP32 UART</strong><span>RX GPIO16, TX GPIO17, DE/RE auto</span></div>"
+                          "<div class='rs485-spec-row'><strong>Выходы</strong><span>16 механических реле, контакты COM/NO/NC для внешней нагрузки</span></div>"
+                          "<div class='rs485-spec-row'><strong>Входы</strong><span>DI1..DI16, читаются отдельной 16-битной маской</span></div>"
+                          "<div class='rs485-spec-row'><strong>Slave ID</strong><span>1..247, адрес платы можно изменить с этой страницы</span></div>"
+                          "<div class='rs485-spec-row'><strong>Команда реле</strong><span>FC05, coil 0..15, ON 0xFF00, OFF 0x0000</span></div>"
+                          "<div class='rs485-spec-row'><strong>Состояния</strong><span>FC03: реле register 0, входы register 4</span></div>"
+                          "<div class='rs485-spec-row'><strong>UART режимы</strong><span>1200..115200 бод, 8N1/8N2/8O1/8E1</span></div>"
+                          "</div></div></div>";
+                  html += "<div class='rs485-card rs485-controls'>"
+                          "<div class='rs485-field'><label>Скорость</label><select id='Rs485BaudRate'><option>1200</option><option>2400</option><option>4800</option><option>9600</option><option selected>19200</option><option>38400</option><option>57600</option><option>115200</option></select></div>"
+                          "<div class='rs485-field'><label>UART</label><select id='Rs485UartMode'><option selected>8N1</option><option>8N2</option><option>8O1</option><option>8E1</option></select></div>"
+                          "<div class='rs485-field'><label>Modbus Slave ID</label><input id='Rs485SlaveId' type='number' min='1' max='247' value='1'></div>"
+                          "<div class='rs485-field'><label>Опрос, мс</label><input id='Rs485PollIntervalMs' type='number' min='200' max='5000' step='100' value='1000'></div>"
+                          "<button class='rs485-action' id='rs485-poll-now' type='button'>Опросить сейчас</button>"
+                          "<button class='rs485-action danger' id='rs485-all-off' type='button'>Выключить все</button>"
+                          "</div>";
+                  html += "<div class='rs485-card'><div class='rs485-grid-title'>Реле</div><div class='rs485-relay-grid'>";
+                  for(uint8_t relay = 0; relay < 16; relay++){
+                      html += "<div class='rs485-relay-row'><span>R"+String(relay + 1)+"</span>"
+                              "<button class='rs485-relay-btn off' data-relay='"+String(relay)+"' type='button'>OFF</button></div>";
+                  }
+                  html += "</div></div>";
+                  html += "<div class='rs485-card'><div class='rs485-grid-title'>Дискретные входы</div><div class='rs485-input-grid'>";
+                  for(uint8_t input = 0; input < 16; input++){
+                      html += "<div class='rs485-input-chip' data-input='"+String(input)+"'>DI"+String(input + 1)+": OFF</div>";
+                  }
+                  html += "</div></div>";
+                  static const char* assignments[] = {
+                    "R1: лампа бассейна",
+                    "R2: питание RGB-ленты WS2815",
+                    "R3: резерв / ручное реле",
+                    "R4: резерв / ручное реле",
+                    "R5: нагреватель воды",
+                    "R6: насос NaOCl",
+                    "R7: насос ACO / кислота pH",
+                    "R8: резерв / ручное реле",
+                    "R9: насос фильтрации и слив воды",
+                    "R10: компрессор воздуха клапанов",
+                    "R11: клапан FILTRATION",
+                    "R12: клапан BACKWASH",
+                    "R13: сброс песка после промывки",
+                    "R14: соленоид долива воды",
+                    "R15: теплый пол помещения",
+                    "R16: уличное освещение",
+                    "DI1: нижний уровень бассейна",
+                    "DI2: верхний уровень бассейна",
+                    "DI3: верхний уровень сливной ямы",
+                    "DI4-DI16: свободные входы"
+                  };
+                  html += "<div class='rs485-card'><div class='rs485-grid-title'>ℹ️ Назначение реле и входов RS485</div><div class='rs485-assignments'>";
+                  for(const char* assignment : assignments){
+                      html += "<div class='rs485-assignment'>";
+                      html += assignment;
+                      html += "</div>";
+                  }
+                  html += "</div></div></div>";
+                  renderedCount++;
+                  continue;
+              }
               String val = uiValueForId(e.id); // Текущее значение элемента UI
               if(e.type=="timer"){ // Элемент таймера
                   UITimerEntry &timer = ui.timer(e.id); // Получение таймера из реестра
@@ -1804,6 +2166,74 @@ private:
                             html += "</div>";
             renderedCount++; // Подсчитываем реально добавленные элементы в HTML
           }
+        if(renderedCount == 0){
+          String currentTabTitle;
+          for(auto &tab : self->tabs){
+            if(tab.id == tabId){
+              currentTabTitle = tab.title;
+              break;
+            }
+          }
+          if(currentTabTitle.indexOf("RS485") >= 0){
+            html += "<div class='rs485-panel' id='Rs485Panel'>";
+            html += "<div class='rs485-card rs485-hero'><div><div class='rs485-title'>RS485 16CH + DI16</div>"
+                    "<div class='rs485-sub'>Modbus RTU: Huaqingjun FC05/FC03 0/4, N4D3E16 FC06/FC03 0x0070/0x00C0<br>"
+                    "Huaqingjun 16CH+DI16, Serial2 19200 8N1, RX GPIO16, TX GPIO17, DE/RE auto</div></div>"
+                    "<div id='rs485-status' class='rs485-status off'>RS485 disabled</div></div>";
+            html += "<div class='rs485-card rs485-board'><div class='rs485-side'>"
+                    "<label class='rs485-enable'><input id='Rs485Enabled' type='checkbox'> RS485 включено</label>"
+                    "<div class='rs485-field'><label>Тип платы</label><select id='Rs485BoardType'><option>Huaqingjun 16CH relay + DI16</option></select></div>"
+                    "<div class='rs485-note'>Профиль Huaqingjun: отдельное реле переключается FC05 по coil 0..15, реле читаются из регистра 0, входы из регистра 4.</div>"
+                    "</div><div class='rs485-image-card'>"
+                    "<img class='rs485-image' src='/huaqingjun.jpg' alt='Huaqingjun 16-channel RS485 relay module'>"
+                    "<div class='rs485-spec'><h4>Huaqingjun 16CH relay + DI16</h4>"
+                    "<div class='rs485-spec-row'><strong>Питание</strong><span>DC 12/24 В</span></div>"
+                    "<div class='rs485-spec-row'><strong>Интерфейс</strong><span>RS485 A/B, общий GND с ESP32 обязателен</span></div>"
+                    "<div class='rs485-spec-row'><strong>ESP32 UART</strong><span>RX GPIO16, TX GPIO17, DE/RE auto</span></div>"
+                    "<div class='rs485-spec-row'><strong>Выходы</strong><span>16 реле COM/NO/NC</span></div>"
+                    "<div class='rs485-spec-row'><strong>Входы</strong><span>DI1..DI16</span></div>"
+                    "<div class='rs485-spec-row'><strong>Команда</strong><span>FC05 coil 0..15</span></div>"
+                    "<div class='rs485-spec-row'><strong>Состояния</strong><span>FC03: реле register 0, входы register 4</span></div>"
+                    "</div></div></div>";
+            html += "<div class='rs485-card rs485-controls'>"
+                    "<div class='rs485-field'><label>Скорость</label><select id='Rs485BaudRate'><option>1200</option><option>2400</option><option>4800</option><option>9600</option><option selected>19200</option><option>38400</option><option>57600</option><option>115200</option></select></div>"
+                    "<div class='rs485-field'><label>UART</label><select id='Rs485UartMode'><option selected>8N1</option><option>8N2</option><option>8O1</option><option>8E1</option></select></div>"
+                    "<div class='rs485-field'><label>Modbus Slave ID</label><input id='Rs485SlaveId' type='number' min='1' max='247' value='1'></div>"
+                    "<div class='rs485-field'><label>Опрос, мс</label><input id='Rs485PollIntervalMs' type='number' min='200' max='5000' step='100' value='1000'></div>"
+                    "<button class='rs485-action' id='rs485-poll-now' type='button'>Опросить сейчас</button>"
+                    "<button class='rs485-action danger' id='rs485-all-off' type='button'>Выключить все</button></div>";
+            html += "<div class='rs485-card'><div class='rs485-grid-title'>Реле</div><div class='rs485-relay-grid'>";
+            for(uint8_t relay = 0; relay < 16; relay++){
+              html += "<div class='rs485-relay-row'><span>R"+String(relay + 1)+"</span><button class='rs485-relay-btn off' data-relay='"+String(relay)+"' type='button'>OFF</button></div>";
+            }
+            html += "</div></div><div class='rs485-card'><div class='rs485-grid-title'>Дискретные входы</div><div class='rs485-input-grid'>";
+            for(uint8_t input = 0; input < 16; input++){
+              html += "<div class='rs485-input-chip' data-input='"+String(input)+"'>DI"+String(input + 1)+": OFF</div>";
+            }
+            html += "</div></div><div class='rs485-card'><div class='rs485-grid-title'>ℹ️ Назначение реле и входов RS485</div>"
+                    "<div class='rs485-assignments'>"
+                    "<div class='rs485-assignment'>R1: лампа бассейна</div>"
+                    "<div class='rs485-assignment'>R2: питание RGB-ленты WS2815</div>"
+                    "<div class='rs485-assignment'>R3/R4/R8: резерв / ручное реле</div>"
+                    "<div class='rs485-assignment'>R5: нагреватель воды</div>"
+                    "<div class='rs485-assignment'>R6: насос NaOCl</div>"
+                    "<div class='rs485-assignment'>R7: насос ACO / кислота pH</div>"
+                    "<div class='rs485-assignment'>R9: насос фильтрации и слив воды</div>"
+                    "<div class='rs485-assignment'>R10: компрессор воздуха клапанов</div>"
+                    "<div class='rs485-assignment'>R11: клапан FILTRATION</div>"
+                    "<div class='rs485-assignment'>R12: клапан BACKWASH</div>"
+                    "<div class='rs485-assignment'>R13: сброс песка после промывки</div>"
+                    "<div class='rs485-assignment'>R14: соленоид долива воды</div>"
+                    "<div class='rs485-assignment'>R15: теплый пол помещения</div>"
+                    "<div class='rs485-assignment'>R16: уличное освещение</div>"
+                    "<div class='rs485-assignment'>DI1: нижний уровень бассейна</div>"
+                    "<div class='rs485-assignment'>DI2: верхний уровень бассейна</div>"
+                    "<div class='rs485-assignment'>DI3: верхний уровень сливной ямы</div>"
+                    "<div class='rs485-assignment'>DI4-DI16: свободные входы</div>"
+                    "</div></div></div>";
+            renderedCount++;
+          }
+        }
         if(kWebVerboseSerial) Serial.printf("[WEB:/][timing] renderElements tab=%s ms=%u count=%u\n", // Помогает увидеть вкладку, где начинается торможение
                       tabId.c_str(),
                       static_cast<unsigned>(millis() - renderElementsStartMs),
@@ -1854,6 +2284,11 @@ private:
               "</div></div>"
               
               "<div class='wifi-field'><label>Password</label><input id='pass' type='password' value='"+loadValue<String>("pass",defaultPASS)+"'></div>"
+              "</div>"
+              "<h4 class='section-title'>Backup STA Settings</h4>"
+              "<div class='card compact wifi-card'>"
+              "<div class='wifi-field'><label>Backup SSID</label><input id='ssid2' value='"+loadValue<String>("ssid2", String(""))+"'></div>"
+              "<div class='wifi-field'><label>Backup Password</label><input id='pass2' type='password' value='"+loadValue<String>("pass2", String(""))+"'></div>"
               "</div>"
               "<h4 class='section-title'>AP Settings</h4>"
               "<div class='card compact wifi-card'>"
@@ -2048,7 +2483,7 @@ function toggleSidebar(){
     el.dataset.manual = '1';
   };
 
-  const wifiInputEdited = {ssid: false, pass: false};
+  const wifiInputEdited = {ssid: false, pass: false, ssid2: false, pass2: false};
     const mqttInputEdited = {host: false, port: false, user: false, pass: false};
   const watchWifiInput = (id)=>{
     const el = document.getElementById(id);
@@ -2062,6 +2497,8 @@ function toggleSidebar(){
   const initializeWifiInputs = ()=>{
     watchWifiInput('ssid');
     watchWifiInput('pass');
+    watchWifiInput('ssid2');
+    watchWifiInput('pass2');
     [['mqtt-host','host'],['mqtt-port','port'],['mqtt-user','user'],['mqtt-pass','pass']].forEach(([id,key])=>{
       const el = document.getElementById(id);
       if(!el) return;
@@ -2102,6 +2539,54 @@ function toggleSidebar(){
     const el = document.getElementById(id);
     if(el) el.innerText = value;
   };
+
+  function setRs485RelayButton(btn, isOn){
+    if(!btn) return;
+    btn.dataset.state = isOn ? '1' : '0';
+    btn.classList.toggle('on', isOn);
+    btn.classList.toggle('off', !isOn);
+    btn.innerText = isOn ? 'ON' : 'OFF';
+  }
+
+  function syncRs485Panel(j){
+    const status = document.getElementById('rs485-status');
+    const enabled = j.Rs485Enabled == 1 || j.Rs485Enabled === true || j.Rs485Enabled === '1';
+    if(status){
+      status.innerText = enabled ? 'RS485 enabled' : 'RS485 disabled';
+      status.classList.toggle('off', !enabled);
+    }
+    const enabledInput = document.getElementById('Rs485Enabled');
+    if(enabledInput && !isUserEditing(enabledInput)) enabledInput.checked = enabled;
+    const baud = document.getElementById('Rs485BaudRate');
+    if(baud && !isUserEditing(baud) && typeof j.Rs485BaudRate !== 'undefined') baud.value = String(j.Rs485BaudRate);
+    const uart = document.getElementById('Rs485UartMode');
+    if(uart && !isUserEditing(uart) && typeof j.Rs485UartMode !== 'undefined') uart.value = String(j.Rs485UartMode);
+    const slave = document.getElementById('Rs485SlaveId');
+    if(slave && !isUserEditing(slave) && typeof j.Rs485SlaveId !== 'undefined') slave.value = String(j.Rs485SlaveId);
+    const poll = document.getElementById('Rs485PollIntervalMs');
+    if(poll && !isUserEditing(poll) && typeof j.Rs485PollIntervalMs !== 'undefined') poll.value = String(j.Rs485PollIntervalMs);
+
+    const relayStates = Array.isArray(j.Rs485RelayActual) ? j.Rs485RelayActual : j.Rs485Relays;
+    if(Array.isArray(relayStates)){
+      relayStates.forEach((state, idx)=>{
+        setRs485RelayButton(document.querySelector(`.rs485-relay-btn[data-relay="${idx}"]`), state == 1 || state === true || state === '1');
+      });
+    }
+    if(Array.isArray(j.Rs485Inputs)){
+      j.Rs485Inputs.forEach((state, idx)=>{
+        const chip = document.querySelector(`.rs485-input-chip[data-input="${idx}"]`);
+        if(!chip) return;
+        const isOn = state == 1 || state === true || state === '1';
+        chip.classList.toggle('on', isOn);
+        chip.innerText = `DI${idx + 1}: ${isOn ? 'ON' : 'OFF'}`;
+      });
+    }
+  }
+
+  function saveRs485Config(key, value){
+    if(!key) return;
+    fetch('/save?key='+encodeURIComponent(key)+'&val='+encodeURIComponent(value));
+  }
 
 
     const updateMqttActivationButton = (enabled, connected)=>{
@@ -2447,6 +2932,7 @@ const refreshThemeColorUI = (val)=>{
 };
 
 const chemicalInputIds = new Set(['PH_Lower','PH_Upper','CL_Lower','CL_Upper','PH_setting','PH1','PH2','PH1_CAL','PH2_CAL','Temper_Reference','Temper_PH']);
+const rs485InputIds = new Set(['Rs485Enabled','Rs485BoardType','Rs485BaudRate','Rs485UartMode','Rs485SlaveId','Rs485PollIntervalMs']);
 
 // Очистка флага ручного изменения через delay (по умолчанию 600 мс)
 const clearManualFlag = (el, delay=600)=>{
@@ -2521,6 +3007,7 @@ function updateSelectValue(id, value){
 function applyLiveValue(id, value){
   const el = document.getElementById(id);
   if(!el || isUserEditing(el)) return;
+  if(el.classList.contains('rs485-panel')) return;
   if(el.classList.contains('range-slider')){
     if(isRangeSliderEditing(id)) return;
     const parts = String(value||'').split('-').map(v=>v.trim()).filter(Boolean);
@@ -2635,11 +3122,61 @@ const listenToManual = el=>{
   el.addEventListener('blur', ()=> clearManualFlag(el, chemicalInputIds.has(el.id) ? 4000 : 600));
 };
 
+function initRs485PanelControls(){
+  document.querySelectorAll('.rs485-relay-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const relay = Number(btn.dataset.relay);
+      const next = btn.dataset.state === '1' ? 0 : 1;
+      setRs485RelayButton(btn, next === 1);
+      fetch('/rs485/relay?idx='+encodeURIComponent(relay)+'&state='+next)
+        .then(r=>r.json())
+        .then(data=>{
+          if(data && typeof data.state !== 'undefined') setRs485RelayButton(btn, data.state == 1);
+        })
+        .catch(()=>{});
+    });
+  });
+
+  ['Rs485BaudRate','Rs485UartMode','Rs485SlaveId','Rs485PollIntervalMs'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+    listenToManual(el);
+    el.addEventListener('change', ()=>{
+      markManualChange(el);
+      saveRs485Config(id, el.value);
+      clearManualFlag(el, 1200);
+    });
+  });
+
+  const enabledInput = document.getElementById('Rs485Enabled');
+  if(enabledInput){
+    listenToManual(enabledInput);
+    enabledInput.addEventListener('change', ()=>{
+      markManualChange(enabledInput);
+      saveRs485Config('Rs485Enabled', enabledInput.checked ? 1 : 0);
+      clearManualFlag(enabledInput, 1200);
+    });
+  }
+
+  const pollNow = document.getElementById('rs485-poll-now');
+  if(pollNow){
+    pollNow.addEventListener('click', ()=>fetch('/rs485/poll', {method:'POST'}).finally(()=>setTimeout(fetchLive, 250)));
+  }
+
+  const allOff = document.getElementById('rs485-all-off');
+  if(allOff){
+    allOff.addEventListener('click', ()=>{
+      fetch('/rs485/all-off', {method:'POST'}).finally(()=>setTimeout(fetchLive, 250));
+    });
+  }
+}
+
 if(document.readyState === 'loading'){
   document.addEventListener('DOMContentLoaded', initTimeSettings);
 } else {
   initTimeSettings();
 }
+initRs485PanelControls();
 
 const themeInput = document.getElementById('ThemeColor');
 if(themeInput){
@@ -2656,6 +3193,7 @@ if(themeInput){
 
 document.querySelectorAll('input[type=text],input[type=number],input[type=time],input[type=color],select').forEach(el=>{
   if(el.id=='ThemeColor') return;
+  if(rs485InputIds.has(el.id)) return;
     if(el.dataset.skipSave === '1'){
     listenToManual(el);
     return;
@@ -2773,16 +3311,20 @@ function scanWiFi(){
 function saveWiFi(){
  let s=document.getElementById('ssid').value;
  let p=document.getElementById('pass').value;
+ let s2=document.getElementById('ssid2').value;
+ let p2=document.getElementById('pass2').value;
  let aps=document.getElementById('ap_ssid').value;
  let app=document.getElementById('ap_pass').value;
  let h=document.getElementById('hostname').value;
- const body = new URLSearchParams({ssid:s, pass:p, ap_ssid:aps, ap_pass:app, hostname:h});
+ const body = new URLSearchParams({ssid:s, pass:p, ssid2:s2, pass2:p2, ap_ssid:aps, ap_pass:app, hostname:h});
  fetch('/wifi/save', {method:'POST', body})
    .then(r=>r.json())
    .then(data=>{
      const connected = data && data.connected ? ' (подключено)' : ' (AP mode)';
      wifiInputEdited.ssid = false;
      wifiInputEdited.pass = false;
+     wifiInputEdited.ssid2 = false;
+     wifiInputEdited.pass2 = false;
      alert('WiFi сохранен' + connected);
      fetchStats(true);
    })
@@ -3015,8 +3557,15 @@ window.addEventListener('resize', ()=>{
     function updatePageDateTime(value){
           const parsed = parseDeviceDateTime(value);
       if(parsed){
+        const nowMs = Date.now();
+        if(pageDateTimeBase){
+          const expectedMs = pageDateTimeBase.getTime() + Math.floor((nowMs - pageDateTimeLastSync) / 1000) * 1000;
+          if(Math.abs(parsed.getTime() - expectedMs) <= 1100){
+            return;
+          }
+        }
         pageDateTimeBase = parsed;
-        pageDateTimeLastSync = Date.now();
+        pageDateTimeLastSync = nowMs;
         renderPageDateTime(parsed);
         return;
       }
@@ -3038,7 +3587,6 @@ window.addEventListener('resize', ()=>{
     liveInFlight = true;
     fetch('/live').then(r=>r.json()).then(j=>{
         if(typeof j.CurrentTime !== 'undefined') updatePageDateTime(j.CurrentTime);
-            if(typeof j.CurrentTime !== 'undefined') updatePageDateTime(j.CurrentTime);
         if(typeof j.CurrentTime !== 'undefined') syncManualTimeInputs(j.CurrentTime);
         if(typeof j.gmtOffset !== 'undefined') updateSelectValue('gmtOffset', j.gmtOffset);
     if(document.getElementById('RandomVal')) document.getElementById('RandomVal').innerText=j.RandomVal;
@@ -3138,6 +3686,7 @@ window.addEventListener('resize', ()=>{
     if(typeof j.H2O2_Work !== 'undefined') updateSelectValue('H2O2_Work', j.H2O2_Work);
     if(typeof j.Power_H2O2 !== 'undefined') updateStat('Power_H2O2', j.Power_H2O2);
     if(typeof j.Temper_Reference !== 'undefined') updateInputValue('Temper_Reference', j.Temper_Reference);
+    syncRs485Panel(j);
     
         if(typeof j.FilterImageState !== 'undefined' && j.FilterImageState !== lastFilterImageState){
       lastFilterImageState = j.FilterImageState;
@@ -3231,6 +3780,10 @@ function setImg(x){
           r->send(200,"text/plain","OK"); // Возвращаем успешный ответ после безопасного применения.
           return; // Не отдаем эти пределы в общий обработчик без проверки диапазонов.
         }
+        if(applyRs485ConfigRequest(key, valStr)){
+          r->send(200,"text/plain","OK");
+          return;
+        }
         if(uiApplyValueForId(key, valStr)){
           r->send(200,"text/plain","OK");
           return;
@@ -3313,6 +3866,8 @@ function setImg(x){
         }
         else if(key=="ssid") saveValue<String>(key.c_str(), valStr);
         else if(key=="pass") saveValue<String>(key.c_str(), valStr);
+        else if(key=="ssid2") saveValue<String>(key.c_str(), valStr);
+        else if(key=="pass2") saveValue<String>(key.c_str(), valStr);
         
         else if(key=="apSSID") { StoredAPSSID = valStr; saveValue<String>(key.c_str(), valStr); }
         else if(key=="apPASS") { StoredAPPASS = valStr; saveValue<String>(key.c_str(), valStr); }
@@ -3488,6 +4043,36 @@ function setImg(x){
       }
     });
 
+    server.on("/rs485/relay", HTTP_GET, [](AsyncWebServerRequest *r){
+      if(!ensureAuthorized(r)) return;
+      if(!r->hasParam("idx") || !r->hasParam("state")){
+        r->send(400, "application/json", "{\"status\":\"error\",\"error\":\"Missing params\"}");
+        return;
+      }
+      int relay = r->getParam("idx")->value().toInt();
+      bool state = r->getParam("state")->value().toInt() != 0;
+      if(relay < 0 || relay > 15 || !applyRs485RelayRequest(static_cast<uint8_t>(relay), state)){
+        r->send(400, "application/json", "{\"status\":\"error\",\"error\":\"Bad relay\"}");
+        return;
+      }
+      AktualReadRelay = false;
+      String json = "{\"status\":\"ok\",\"relay\":" + String(relay) + ",\"state\":" + String(rs485RelayCommandState(static_cast<uint8_t>(relay)) ? 1 : 0) + "}";
+      r->send(200, "application/json", json);
+    });
+
+    server.on("/rs485/all-off", HTTP_POST, [](AsyncWebServerRequest *r){
+      if(!ensureAuthorized(r)) return;
+      applyRs485AllOffRequest();
+      AktualReadRelay = false;
+      r->send(200, "application/json", "{\"status\":\"ok\"}");
+    });
+
+    server.on("/rs485/poll", HTTP_POST, [](AsyncWebServerRequest *r){
+      if(!ensureAuthorized(r)) return;
+      Rs485ForcePoll = true;
+      r->send(200, "application/json", "{\"status\":\"ok\"}");
+    });
+
     server.on("/live", HTTP_GET, [](AsyncWebServerRequest *r){
           if(!ensureAuthorized(r)) return;
       JsonDocument doc; // ArduinoJson v7 сам расширяет документ: не держим 64 КБ heap на каждый быстрый /live.
@@ -3503,6 +4088,21 @@ function setImg(x){
 
       doc["ACO_Work"] = ACO_Work;
       doc["H2O2_Work"] = H2O2_Work;
+      doc["Rs485Enabled"] = Rs485Enabled ? 1 : 0;
+      doc["Rs485BaudRate"] = Rs485BaudRate;
+      doc["Rs485UartMode"] = Rs485UartMode;
+      doc["Rs485SlaveId"] = Rs485SlaveId;
+      doc["Rs485PollIntervalMs"] = Rs485PollIntervalMs;
+      JsonArray rs485Relays = doc["Rs485Relays"].to<JsonArray>();
+      JsonArray rs485RelayActual = doc["Rs485RelayActual"].to<JsonArray>();
+      JsonArray rs485Inputs = doc["Rs485Inputs"].to<JsonArray>();
+      for(uint8_t relay = 0; relay < 16; relay++){
+        rs485Relays.add(rs485RelayCommandState(relay) ? 1 : 0);
+        rs485RelayActual.add(ReadRelayArray[relay] ? 1 : 0);
+      }
+      for(uint8_t input = 0; input < 16; input++){
+        rs485Inputs.add(ReadInputArray[input] ? 1 : 0);
+      }
 
             appendUiRegistryValues(doc);
       doc["PH_Lower"] = PH_Lower; // В live-ответе всегда отдаем актуальный нижний предел pH из рабочей переменной.
@@ -3658,13 +4258,15 @@ function setImg(x){
 
       String ssid = paramOr("ssid", loadValue<String>("ssid", String(defaultSSID)));
       String pass = paramOr("pass", loadValue<String>("pass", String(defaultPASS)));
+      String backupSsid = paramOr("ssid2", loadValue<String>("ssid2", String("")));
+      String backupPass = paramOr("pass2", loadValue<String>("pass2", String("")));
       String apSsid = paramOr("ap_ssid", loadValue<String>("apSSID", String(::apSSID)));
       String apPass = paramOr("ap_pass", loadValue<String>("apPASS", String(::apPASS)));
       String host = paramOr("hostname", loadValue<String>("hostname", String(defaultHostname)));
 
       StoredAPSSID = apSsid;
       StoredAPPASS = apPass;
-      saveWifiConfig(ssid, pass, apSsid, apPass, host);
+      saveWifiConfig(ssid, pass, backupSsid, backupPass, apSsid, apPass, host);
       WifiStatusInfo wifiInfo = getWifiStatus();
 
       String response = "{\\\"saved\\\":1,\\\"connected\\\":" + String(wifiIsConnected() ? 1 : 0) + ",";
@@ -3747,6 +4349,7 @@ server.on("/getImage", HTTP_GET, [](AsyncWebServerRequest *r){
 
     server.serveStatic("/anim1.gif", SPIFFS, "/anim1.gif"); // Отдаёт GIF-анимацию anim1.gif из SPIFFS по HTTP пути /anim1.gif
     server.serveStatic("/Basin.jpg", SPIFFS, "/Basin.jpg"); // Отдаёт изображение Basin.jpg из SPIFFS по HTTP пути /Basin.jpg
+    server.serveStatic("/huaqingjun.jpg", SPIFFS, "/huaqingjun.jpg"); // Отдаёт изображение RS485-реле Huaqingjun из SPIFFS.
     server.serveStatic("/img1.jpg", SPIFFS, "/img1.jpg"); // Отдаёт изображение img1.jpg из SPIFFS по HTTP пути /img1.jpg
     server.serveStatic("/img2.jpg", SPIFFS, "/img2.jpg"); // Отдаёт изображение img2.jpg из SPIFFS по HTTP пути /img2.jpg
 

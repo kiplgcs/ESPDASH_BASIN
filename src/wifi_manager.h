@@ -25,8 +25,10 @@ inline const byte captiveDnsPort = 53;
 inline void ensurePrefsMutex() { if (prefsMutex == nullptr) prefsMutex = xSemaphoreCreateMutex(); }
 inline void lockPrefs() { ensurePrefsMutex(); if (prefsMutex) xSemaphoreTake(prefsMutex, portMAX_DELAY); }
 inline void unlockPrefs() { if (prefsMutex) xSemaphoreGive(prefsMutex); }
-inline const char *defaultSSID = "OAB-GeelyM";
-inline const char *defaultPASS = "83913381";
+inline const char *defaultSSID = "OAB_2.4G_RPT";
+inline const char *defaultPASS = "OAB-245901:oab--245901";
+inline const char *defaultSSIDr = "OAB_2.4G";
+inline const char *defaultPASSr = "OAB-245901:oab--245901";
 inline const char *apSSID = "ESP32";
 inline const char *apPASS = "12345678";
 inline const char *defaultHostname = "ESP32";
@@ -90,18 +92,24 @@ template <typename T> void saveValue(const char *key, T val) {
 namespace wifi_internal {
 inline String staSsid;    // SSID внешней сети
 inline String staPass;    // Пароль внешней сети
+inline String staBackupSsid; // Резервный SSID внешней сети
+inline String staBackupPass; // Пароль резервной внешней сети
 inline String apSsid;     // Имя точки доступа устройства
 inline String apPass;     // Пароль точки доступа
 inline String hostName;   // Имя хоста для mDNS и DHCP
 inline bool staAttemptInProgress = false; // Флаг текущей попытки подключения к STA
 inline bool fallbackApActive = false;     // Флаг активного аварийного AP
 inline bool mdnsStarted = false;          // Указывает, что mDNS уже запущен
+inline bool usingBackupSta = false;       // Сейчас подключаемся к резервной STA-сети
 inline int attemptCount = 0;              // Счетчик попыток подключения
 inline const int maxAttempts = 5;         // Максимум попыток перед переходом в AP
 inline unsigned long lastAttemptStarted = 0; // Когда стартовала текущая попытка
 inline unsigned long lastStatusCheck = 0;    // Когда последний раз проверяли статус
+inline unsigned long lastSignalScan = 0;     // Когда последний раз сравнивали RSSI основной и резервной сети
 inline unsigned long checkInterval = 1000;      // 1s until stable connection
 inline const unsigned long attemptInterval = 5000; // retry window while connecting
+inline const unsigned long signalScanInterval = 120000; // Не сканируем WiFi чаще 1 раза в 2 минуты
+inline const int signalSwitchHysteresisDb = 8; // Переключаемся только при заметно лучшем сигнале, чтобы не прыгать между AP
 
 inline void beginMdns() {
   if (mdnsStarted)
@@ -134,16 +142,73 @@ inline void startHiddenApForSta() {
   WiFi.softAP(apSsid.c_str(), apPass.c_str(), 1, true); // Поднимаем скрытый AP, чтобы устройство оставалось доступным
 }
 
+inline void activateFallbackAp();
+
+inline bool chooseBestStaBySignal(bool connectedMode) {
+  if (!staBackupSsid.length()) {
+    usingBackupSta = false;
+    return false;
+  }
+  if (!staSsid.length()) {
+    const bool changed = !usingBackupSta;
+    usingBackupSta = true;
+    return changed;
+  }
+
+  wifi_mode_t prevMode = WiFi.getMode();
+  if (prevMode == WIFI_MODE_NULL) WiFi.mode(WIFI_MODE_STA);
+  else if (prevMode == WIFI_MODE_AP) WiFi.mode(WIFI_MODE_APSTA);
+
+  int primaryRssi = -1000;
+  int backupRssi = -1000;
+  int16_t count = WiFi.scanNetworks(false, true);
+  if (count < 0) count = 0;
+  for (int i = 0; i < count; i++) {
+    String found = WiFi.SSID(i);
+    int rssi = WiFi.RSSI(i);
+    if (found == staSsid && rssi > primaryRssi) primaryRssi = rssi;
+    if (found == staBackupSsid && rssi > backupRssi) backupRssi = rssi;
+  }
+  WiFi.scanDelete();
+
+  if (prevMode == WIFI_MODE_AP) WiFi.mode(prevMode);
+
+  bool desiredBackup = usingBackupSta;
+  const int hysteresis = connectedMode ? signalSwitchHysteresisDb : 0;
+  if (backupRssi > -1000 && (primaryRssi <= -1000 || backupRssi >= primaryRssi + hysteresis)) {
+    desiredBackup = true;
+  } else if (primaryRssi > -1000 && (backupRssi <= -1000 || primaryRssi >= backupRssi + hysteresis)) {
+    desiredBackup = false;
+  }
+
+  if (desiredBackup != usingBackupSta) {
+    Serial.printf("[WiFi] Auto selected %s SSID by RSSI: primary=%d dBm, backup=%d dBm\n",
+                  desiredBackup ? "backup" : "primary", primaryRssi, backupRssi);
+    usingBackupSta = desiredBackup;
+    attemptCount = 0;
+    return true;
+  }
+  return false;
+}
+
 inline void startStaAttempt() {
+  if (!staSsid.length() && staBackupSsid.length()) usingBackupSta = true;
+  const String &connectSsid = usingBackupSta ? staBackupSsid : staSsid;
+  const String &connectPass = usingBackupSta ? staBackupPass : staPass;
+  if (!connectSsid.length()) {
+    activateFallbackAp();
+    return;
+  }
   WiFi.mode(WIFI_MODE_APSTA);                 // Разрешаем одновременный STA и AP
   WiFi.setHostname(hostName.c_str());         // Применяем имя хоста перед подключением
   startHiddenApForSta();                      // Оставляем доступ через скрытый AP на время попытки
-  WiFi.begin(staSsid.c_str(), staPass.c_str());
+  WiFi.begin(connectSsid.c_str(), connectPass.c_str());
   staAttemptInProgress = true;                // Отмечаем, что попытка идет
   lastAttemptStarted = millis();              // Запоминаем время старта
   attemptCount++;                             // Увеличиваем счетчик попыток
-  Serial.printf("[WiFi] Connecting to SSID \"%s\" (attempt %d/%d), hostname: %s\n",
-                staSsid.c_str(), attemptCount, maxAttempts, hostName.c_str());
+  Serial.printf("[WiFi] Connecting to %s SSID \"%s\" (attempt %d/%d), hostname: %s\n",
+                usingBackupSta ? "backup" : "primary",
+                connectSsid.c_str(), attemptCount, maxAttempts, hostName.c_str());
 }
 
 inline void activateFallbackAp() {
@@ -207,6 +272,16 @@ inline void ensureConnection() {
   wl_status_t status = WiFi.status();
   if (status == WL_CONNECTED) {
     onConnected(); // Сбрасываем счетчики и отключаем AP
+    if (staBackupSsid.length() && now - lastSignalScan >= signalScanInterval) {
+      lastSignalScan = now;
+      if (chooseBestStaBySignal(true)) {
+        WiFi.disconnect(true);
+        staAttemptInProgress = false;
+        attemptCount = 0;
+        checkInterval = 1000;
+        startStaAttempt();
+      }
+    }
     return;
   }
 
@@ -223,6 +298,14 @@ inline void ensureConnection() {
 
   if (attemptCount < maxAttempts) {
     startStaAttempt();
+  } else if (!usingBackupSta && staBackupSsid.length()) {
+    Serial.printf("[WiFi] Primary SSID \"%s\" unavailable, switching to backup SSID \"%s\"\n",
+                  staSsid.c_str(), staBackupSsid.c_str());
+    WiFi.disconnect(true);
+    staAttemptInProgress = false;
+    usingBackupSta = true;
+    attemptCount = 0;
+    startStaAttempt();
   } else {
     activateFallbackAp();
   }
@@ -233,17 +316,21 @@ inline void initWiFiModule() {
   using namespace wifi_internal;
   staSsid = loadValue<String>("ssid", String(defaultSSID));      // Читаем сохраненный SSID
   staPass = loadValue<String>("pass", String(defaultPASS));      // Читаем пароль
+  staBackupSsid = loadValue<String>("ssid2", defaultSSIDr);        // Читаем резервный SSID
+  staBackupPass = loadValue<String>("pass2", defaultPASSr);        // Читаем пароль резервной сети
   apSsid = loadValue<String>("apSSID", String(::apSSID));        // Имя AP из NVS
   apPass = loadValue<String>("apPASS", String(::apPASS));        // Пароль AP из NVS
   hostName = loadValue<String>("hostname", String(defaultHostname)); // Имя хоста из NVS
 
-    Serial.printf("[WiFi] Config: STA SSID \"%s\" | AP SSID \"%s\" | Hostname \"%s\"\n",
-                staSsid.c_str(), apSsid.c_str(), hostName.c_str());
+    Serial.printf("[WiFi] Config: STA SSID \"%s\" | Backup SSID \"%s\" | AP SSID \"%s\" | Hostname \"%s\"\n",
+                staSsid.c_str(), staBackupSsid.c_str(), apSsid.c_str(), hostName.c_str());
                 
   WiFi.persistent(false);        // Не сохраняем настройки Wi-Fi во флэш автоматически
   WiFi.mode(WIFI_STA);           // Первичный режим — STA
   stopMdns();                    // Гарантируем чистый запуск mDNS
   WiFi.setHostname(hostName.c_str());
+  lastSignalScan = millis();
+  chooseBestStaBySignal(false);  // При старте сразу выбираем основную/резервную сеть с лучшим RSSI
   startStaAttempt();             // Запускаем первую попытку подключения
 }
 
@@ -341,18 +428,22 @@ inline String scanWifiNetworksJson() {
   return json; // Готовый список сетей в JSON
 }
 
-inline bool saveWifiConfig(const String &ssid, const String &pass, const String &apSsidIn, const String &apPassIn, const String &hostNameIn) {
+inline bool saveWifiConfig(const String &ssid, const String &pass, const String &backupSsid, const String &backupPass, const String &apSsidIn, const String &apPassIn, const String &hostNameIn) {
   using namespace wifi_internal;
   String storedSsid = loadValue<String>("ssid", String(defaultSSID));
   String storedPass = loadValue<String>("pass", String(defaultPASS));
   staSsid = ssid.length() ? ssid : (storedSsid.length() ? storedSsid : String(defaultSSID)); // Не затираем SSID пустой строкой.
   staPass = pass.length() ? pass : storedPass;                  // Пустой пароль из формы не стирает сохраненный пароль.
+  staBackupSsid = backupSsid;                                    // Пустой резервный SSID отключает резервную STA-сеть.
+  staBackupPass = backupPass;                                    // Пароль резервной сети хранится как введён.
   apSsid = apSsidIn.length() ? apSsidIn : String(::apSSID);     // Новое имя AP
   apPass = apPassIn;                                            // Новый пароль AP
   hostName = hostNameIn.length() ? hostNameIn : String(defaultHostname); // Новое имя хоста
 
   saveValue<String>("ssid", staSsid);
   saveValue<String>("pass", staPass);
+  saveValue<String>("ssid2", staBackupSsid);
+  saveValue<String>("pass2", staBackupPass);
   saveValue<String>("apSSID", apSsid);
   saveValue<String>("apPASS", apPass);
   saveValue<String>("hostname", hostName);
@@ -361,8 +452,11 @@ inline bool saveWifiConfig(const String &ssid, const String &pass, const String 
   stopMdns();
   fallbackApActive = false;
   staAttemptInProgress = false;
+  usingBackupSta = false;
   attemptCount = 0;                            // Сбрасываем счетчик — новые попытки возможны после изменения настроек
   checkInterval = 1000;                        // Проверяем статус чаще, пока нет подключения
+  lastSignalScan = millis();
+  chooseBestStaBySignal(false);
   startStaAttempt();
   return true;
 }
