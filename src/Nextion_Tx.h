@@ -368,6 +368,44 @@ if (Nx_page_id == 3 && !triggerRestartNextion && !nextionFiltrWriteHoldActive())
     savedNextionFiltrTime3 = Filtr_Time3;
     myNex.writeNum("set_filtr.sw1.val", Filtr_Time3 ? 1 : 0);
   }
+    static uint16_t savedNextionFiltrOn1 = 65535;
+  static uint16_t savedNextionFiltrOff1 = 65535;
+  static uint16_t savedNextionFiltrOn2 = 65535;
+  static uint16_t savedNextionFiltrOff2 = 65535;
+  static uint16_t savedNextionFiltrOn3 = 65535;
+  static uint16_t savedNextionFiltrOff3 = 65535;
+  auto writeFiltrTimeToNextion = [](const char *hourComponent, const char *minuteComponent, uint16_t minutes) {
+    String timeText = formatMinutesToTime(minutes);
+    myNex.writeNum(hourComponent, getSubstring(timeText, 0, 1));
+    myNex.writeNum(minuteComponent, getSubstring(timeText, 3, 4));
+  };
+  UITimerEntry &filtrTimer1Active = ui.timer("FiltrTimer1");
+  UITimerEntry &filtrTimer2Active = ui.timer("FiltrTimer2");
+  UITimerEntry &filtrTimer3Active = ui.timer("FiltrTimer3");
+  if (forceFiltrTimerSync || savedNextionFiltrOn1 != filtrTimer1Active.on) {
+    savedNextionFiltrOn1 = filtrTimer1Active.on;
+    writeFiltrTimeToNextion("set_filtr.n0.val", "set_filtr.n1.val", filtrTimer1Active.on);
+  }
+  if (forceFiltrTimerSync || savedNextionFiltrOff1 != filtrTimer1Active.off) {
+    savedNextionFiltrOff1 = filtrTimer1Active.off;
+    writeFiltrTimeToNextion("set_filtr.n2.val", "set_filtr.n3.val", filtrTimer1Active.off);
+  }
+  if (forceFiltrTimerSync || savedNextionFiltrOn2 != filtrTimer2Active.on) {
+    savedNextionFiltrOn2 = filtrTimer2Active.on;
+    writeFiltrTimeToNextion("set_filtr.n4.val", "set_filtr.n5.val", filtrTimer2Active.on);
+  }
+  if (forceFiltrTimerSync || savedNextionFiltrOff2 != filtrTimer2Active.off) {
+    savedNextionFiltrOff2 = filtrTimer2Active.off;
+    writeFiltrTimeToNextion("set_filtr.n6.val", "set_filtr.n7.val", filtrTimer2Active.off);
+  }
+  if (forceFiltrTimerSync || savedNextionFiltrOn3 != filtrTimer3Active.on) {
+    savedNextionFiltrOn3 = filtrTimer3Active.on;
+    writeFiltrTimeToNextion("set_filtr.n8.val", "set_filtr.n9.val", filtrTimer3Active.on);
+  }
+  if (forceFiltrTimerSync || savedNextionFiltrOff3 != filtrTimer3Active.off) {
+    savedNextionFiltrOff3 = filtrTimer3Active.off;
+    writeFiltrTimeToNextion("set_filtr.n10.val", "set_filtr.n11.val", filtrTimer3Active.off);
+  }
   savedNextionFiltrTimerPageId = 3;
 }
 

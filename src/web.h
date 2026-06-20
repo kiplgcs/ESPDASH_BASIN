@@ -110,9 +110,9 @@ inline String OverlayPh;         // pH воды (оверлей)
 inline String OverlayChlorine;   // Хлор (оверлей)
 inline String OverlayFilterState; // Состояние фильтра (оверлей)
 inline String ModeSelect = "Normal"; // Режим работы (например, Auto/Manual)
-inline String DaysSelect = "Mon,Wed,Fri"; // Выбор дней недели
-inline String SetLamp = "off"; // Режим работы лампы
-inline String SetRGB = "off"; // Режим управления RGB подсветкой
+inline String DaysSelect = "Sun"; // Выбор дней недели: по умолчанию промывка раз в неделю в воскресенье
+inline String SetLamp = "timer"; // Режим работы лампы: по умолчанию включение по таймеру
+inline String SetRGB = "timer"; // Режим управления RGB подсветкой: по умолчанию включение по таймеру
 inline String StoredAPSSID;      // Сохраненный SSID точки доступа
 inline String StoredAPPASS;      // Сохраненный пароль точки доступа
 inline String authUsername;      // Логин для доступа к веб-интерфейсу
@@ -153,7 +153,7 @@ extern bool ValveBackwashAuto;
 extern bool ValveFiltrationAuto;
 extern bool CleanSequenceActive;
 
-inline bool Rs485Enabled = false;
+inline bool Rs485Enabled = true;
 inline int Rs485BaudRate = 19200;
 inline String Rs485UartMode = "8N1";
 inline int Rs485SlaveId = 1;
@@ -201,7 +201,7 @@ uint16_t Saved_Lamp_timeON1, Saved_Lamp_timeOFF1;
 
 
 bool Power_Heat, Power_Heat1;
-bool Activation_Heat, Activation_Heat1; // Включение и Активация контроля включения нагрева воды
+bool Activation_Heat = false, Activation_Heat1; // Включение и Активация контроля включения нагрева воды
 int Sider_heat,  Sider_heat1; 			// Sider_heat1; bool Sider_Heat; // Переменная для получения или передачи из в  Nextion c  сидера монитора уставки нагрева воды
 
 bool RoomTemper = false;
@@ -210,11 +210,11 @@ float RoomTempOff = 4.0f;
 bool Power_Warm_floor_heating = false;
 	
 bool Pow_Ul_light, Pow_Ul_light1; // Промывка фильтра
-bool Ul_light_Time, Saved_Ul_light_Time; // Разрешения работы включения по времени
+bool Ul_light_Time = false, Saved_Ul_light_Time; // Разрешения работы включения по времени
 String Ul_light_timeON, Ul_light_timeOFF; // Утавки времени включения
 
 
-bool Activation_Water_Level = false;
+bool Activation_Water_Level = true;
 bool WaterLevelSensorUpper = false;
 bool WaterLevelSensorLower = false;
 bool WaterLevelSensorDrain = false;
@@ -249,11 +249,11 @@ unsigned long ManualPulse_H2O2_StartedAt = 0;
 unsigned long ManualPulse_ACO_StartedAt = 0;
 
 
-bool PH_Control_ACO, Saved_PHControlACO; // Флаг для отслеживания предыдущего состояния PH_Control_ACO
+bool PH_Control_ACO = false, Saved_PHControlACO; // Флаг для отслеживания предыдущего состояния PH_Control_ACO
 int ACO_Work = 3, Saved_ACO_Work; // Период дозирования кислоты: 3 = 5 секунд работы раз в 5 минут
 
 
-bool NaOCl_H2O2_Control, Saved_NaOCl_H2O2_Control;
+bool NaOCl_H2O2_Control = false, Saved_NaOCl_H2O2_Control;
 int H2O2_Work = 3, Saved_H2O2_Work; // Период дозирования хлора: 3 = 5 секунд работы раз в 5 минут
 
 int corr_ORP_temper_mV; 		// ОРП с учетом калибровки по температуре
@@ -448,7 +448,7 @@ inline void persistRs485ManualRelay(uint8_t relay) {
 }
 
 inline void loadRs485PanelSettings() {
-  Rs485Enabled = loadValue<int>("Rs485Enabled", 0) != 0;
+  Rs485Enabled = loadValue<int>("Rs485Enabled", Rs485Enabled ? 1 : 0) != 0;
   Rs485BaudRate = loadValue<int>("Rs485BaudRate", Rs485BaudRate);
   if (Rs485BaudRate <= 0) Rs485BaudRate = 19200;
   Rs485UartMode = loadValue<String>("Rs485UartMode", Rs485UartMode);
@@ -724,21 +724,20 @@ bool WS2815_Time1, Saved_WS2815_Time1;
 uint16_t Saved_timeON_WS2815, Saved_timeOFF_WS2815;
 
 inline int TimertestON = 0;        // Значение включения тестового таймера (минуты от начала суток)
-inline int TimertestOFF = 0;       // Значение отключения тестового таймера (минуты от начала суток)
-inline int FiltrTimer1ON = 0;      // Время включения фильтрации №1 в минутах
-inline int FiltrTimer1OFF = 0;     // Время отключения фильтрации №1 в минутах
-inline int FiltrTimer2ON = 0;      // Время включения фильтрации №2
-inline int FiltrTimer2OFF = 0;     // Время отключения фильтрации №2
-inline int FiltrTimer3ON = 0;      // Время включения фильтрации №3
-inline int FiltrTimer3OFF = 0;     // Время отключения фильтрации №3
-inline int CleanTimer1ON = 0;      // Время включения промывки в минутах
-inline int CleanTimer1OFF = 0;     // Время отключения промывки в минутах
-inline int LampTimerON = 0;        // Таймер лампы: начало
-inline int LampTimerOFF = 0;       // Таймер лампы: конец
-inline int RgbTimerON = 0;         // Таймер RGB-подсветки: начало
-inline int RgbTimerOFF = 0;        // Таймер RGB-подсветки: конец
-inline int UlLightTimerON = 0;     // Таймер уличного освещения: начало
-inline int UlLightTimerOFF = 0;    // Таймер уличного освещения: конец
+inline int FiltrTimer1ON = 9 * 60;      // Время включения фильтрации №1: 09:00 по умолчанию
+inline int FiltrTimer1OFF = 12 * 60;     // Время отключения фильтрации №1: 12:00 по умолчанию
+inline int FiltrTimer2ON = 14 * 60;      // Время включения фильтрации №2: 14:00 по умолчанию
+inline int FiltrTimer2OFF = 17 * 60;     // Время отключения фильтрации №2: 17:00 по умолчанию
+inline int FiltrTimer3ON = 19 * 60;      // Время включения фильтрации №3: 19:00 по умолчанию
+inline int FiltrTimer3OFF = 22 * 60;     // Время отключения фильтрации №3: 22:00 по умолчанию
+inline int CleanTimer1ON = 12 * 60;      // Время включения промывки: 12:00 по умолчанию
+inline int CleanTimer1OFF = 12 * 60;     // Время отключения промывки
+inline int LampTimerON = 20 * 60;        // Таймер лампы: 20:00 по умолчанию
+inline int LampTimerOFF = 60;            // Таймер лампы: 01:00 по умолчанию
+inline int RgbTimerON = 20 * 60;         // Таймер RGB-подсветки: 20:00 по умолчанию
+inline int RgbTimerOFF = 60;             // Таймер RGB-подсветки: 01:00 по умолчанию
+inline int UlLightTimerON = 20 * 60;     // Таймер уличного освещения: 20:00 по умолчанию
+inline int UlLightTimerOFF = 3 * 60;     // Таймер уличного освещения: 03:00 по умолчанию
 
 
 bool ColorRGB = false;    //режим ручного задания цвета
@@ -757,7 +756,7 @@ Index21,Index22,Index23,Index24;
 
 	
 bool Power_Filtr, Power_Filtr1;		// Фильтрация в бассейне -  Включение в ручную
-bool Filtr_Time1, Filtr_Time2, Filtr_Time3; // Разрешения работы включения по времени
+bool Filtr_Time1 = false, Filtr_Time2 = false, Filtr_Time3 = false; // Разрешения работы включения по времени
 bool Saved_Filtr_Time1, Saved_Filtr_Time2, Saved_Filtr_Time3;
 uint16_t Saved_Filtr_timeON1, Saved_Filtr_timeOFF1, Saved_Filtr_timeON2, Saved_Filtr_timeOFF2, Saved_Filtr_timeON3, Saved_Filtr_timeOFF3; 
 
@@ -943,6 +942,18 @@ private:
     return nullptr; // Таймер не найден
   }
   
+    uint16_t defaultTimerValue(const String &id, const String &suffix){
+    const bool isOn = suffix == "_ON";
+    if(id == "FiltrTimer1") return isOn ? 9 * 60 : 12 * 60;
+    if(id == "FiltrTimer2") return isOn ? 14 * 60 : 17 * 60;
+    if(id == "FiltrTimer3") return isOn ? 19 * 60 : 22 * 60;
+    if(id == "CleanTimer1") return 12 * 60;
+    if(id == "LampTimer") return isOn ? 20 * 60 : 60;
+    if(id == "RgbTimer") return isOn ? 20 * 60 : 60;
+    if(id == "UlLightTimer") return isOn ? 20 * 60 : 3 * 60;
+    return 0;
+  }
+
   uint16_t loadTimerValue(const String &id, const String &suffix){
     String storageKey = timerStorageKey(id, suffix); // Формирование ключа хранения
     int value = loadValue<int>(storageKey.c_str(), -1); // Загрузка значения из хранилища
@@ -951,7 +962,7 @@ private:
       if(legacyKey.length()){
         value = loadValue<int>(legacyKey.c_str(), 0); // Загрузка значения по legacy-ключу
       } else {
-        value = 0; // Значение по умолчанию
+        value = defaultTimerValue(id, suffix); // Значение по умолчанию
       }
     }
     return static_cast<uint16_t>(value); // Возврат значения в минутах
