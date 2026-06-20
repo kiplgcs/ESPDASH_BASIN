@@ -1090,6 +1090,25 @@ struct Element { String type; String id; String label; String value; String tab;
 
 struct Popup { String id; String title; String tabId; }; // Описание всплывающего окна и связанной вкладки
 
+struct SidebarBlock { String type; String id; String label; String value; }; // Декларативный блок левой панели.
+struct SystemPageDecl { String id; String title; String type; }; // Декларативная служебная страница Web UI.
+
+inline std::vector<SidebarBlock> sidebarBlocks; // Блоки левой панели, объявленные в interface().
+inline std::vector<SystemPageDecl> systemPageDecls; // Служебные страницы, объявленные в interface().
+
+inline void resetSystemUiDeclarations() {
+  sidebarBlocks.clear();
+  systemPageDecls.clear();
+}
+
+inline void registerSidebarBlock(const String &type, const String &id, const String &label, const String &value = String()) {
+  sidebarBlocks.push_back({type, id, label, value});
+}
+
+inline void registerSystemPage(const String &id, const String &title, const String &type) {
+  systemPageDecls.push_back({id, title, type});
+}
+
 
 
 // ---------- Класс MiniDash ----------
@@ -1521,6 +1540,12 @@ private:
       ".mqtt-field{display:flex;flex-direction:column;gap:6px;} " // Поле настроек MQTT
       ".mqtt-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:8px;} " // Кнопки действий MQTT
       ".profile-hint{color:#9fb4c8;font-size:0.9em;} " // Подсказка профиля
+      ".esp-link-card{background:#101722;border:1px solid rgba(91,141,196,0.65);border-radius:10px;padding:10px 8px;margin:10px 0 12px;box-shadow:0 10px 24px rgba(0,0,0,0.35);display:flex;flex-direction:column;gap:8px;} "
+      ".esp-link-title{font-size:0.78rem;color:#bcd6f5;text-transform:uppercase;letter-spacing:0.05em;} "
+      ".esp-link-state{border-radius:8px;border:1px solid #3ad76f;background:#0f5b2a;color:#fff;font-weight:900;text-align:center;padding:12px 8px;font-size:1rem;} "
+      ".esp-link-card.off{border-color:#7a2626;background:#221114;} "
+      ".esp-link-card.off .esp-link-state{border-color:#b93434;background:#6b1616;color:#fff;} "
+      ".esp-link-last{font-size:0.78rem;color:#94a8bd;} "
       ".btn-toggle-on{background:linear-gradient(135deg,#4caf50,#81c784);color:#0b0f14;} " // Кнопка включённого состояния
       ".btn-mqtt{position:relative;overflow:hidden;background:linear-gradient(135deg,#1f2a44,#263555);border:1px solid rgba(111,168,255,0.35);color:#e6edff;box-shadow:0 12px 24px rgba(0,0,0,0.4);} " // Базовая кнопка MQTT
       ".btn-mqtt:before{content:'';position:absolute;inset:0;opacity:0;pointer-events:none;background:radial-gradient(circle at 20% 20%,rgba(255,255,255,0.28),transparent 45%);transition:opacity 0.18s ease;} " // Световой эффект кнопки MQTT
@@ -1568,12 +1593,34 @@ private:
         if(first){ html += " class='active'"; first=false; } // Первая вкладка делается активной
         html += ">"+t.title+"</button>"; // Заголовок вкладки
       }
-      html += "<hr><div class='card'><label>Theme color</label>" // Разделитель и карточка цвета темы
-              "<input id='ThemeColor' type='color' value='"+ThemeColor+"'></div>"; // Input выбора цвета темы
-      html += "<button onclick=\"showPage('wifi',this)\">WiFi Settings</button>"; // Кнопка настроек Wi-Fi
-      html += "<button onclick=\"showPage('stats',this)\">Statistics</button>"; // Кнопка статистики
-            html += "<button onclick=\"showPage('profile',this)\">Профиль</button>"; // Кнопка профиля
-      html += "<button onclick=\"showPage('mqtt',this)\">Настройка MQTT</button>"; // Кнопка настроек MQTT
+      html += "<hr>";
+      bool themeRendered = false;
+      for(auto &block : sidebarBlocks){
+        if(block.type == "espStatus"){
+          html += "<div class='esp-link-card off' id='"+block.id+"'>"
+                  "<div class='esp-link-title'>"+block.label+"</div>"
+                  "<div class='esp-link-state' id='"+block.id+"_state'>Нет связи с ESP32</div>"
+                  "<div class='esp-link-last' id='"+block.id+"_last'>Последний отклик: --</div>"
+                  "</div>";
+        } else if(block.type == "themeColor"){
+          html += "<div class='card'><label>"+block.label+"</label>"
+                  "<input id='"+block.id+"' type='color' value='"+ThemeColor+"'></div>";
+          themeRendered = true;
+        }
+      }
+      if(!themeRendered){
+        html += "<div class='card'><label>Theme color</label><input id='ThemeColor' type='color' value='"+ThemeColor+"'></div>";
+      }
+      if(systemPageDecls.empty()){
+        html += "<button onclick=\"showPage('wifi',this)\">WiFi Settings</button>";
+        html += "<button onclick=\"showPage('stats',this)\">Statistics</button>";
+        html += "<button onclick=\"showPage('profile',this)\">Профиль</button>";
+        html += "<button onclick=\"showPage('mqtt',this)\">Настройка MQTT</button>";
+      } else {
+        for(auto &page : systemPageDecls){
+          html += "<button onclick=\"showPage('"+page.id+"',this)\">"+page.title+"</button>";
+        }
+      }
       html += "</div>"; // Конец боковой панели
 
       html += "<button id='toggleBtn' onclick='toggleSidebar()'></button>"; // Кнопка сворачивания сайдбара - кнопка боковой панели
@@ -2283,11 +2330,30 @@ private:
       stageRenderPopupsMs = millis() - stageStartMs; // Длительность этапа renderPopups
       if(kWebVerboseSerial) Serial.printf("[WEB:/][timing] renderPopups=%u ms\n", static_cast<unsigned>(stageRenderPopupsMs)); // Лог renderPopups только в debug-режиме.
 
+      auto systemPageEnabled = [&](const String &type)->bool{
+        if(systemPageDecls.empty()) return true;
+        for(auto &page : systemPageDecls){
+          if(page.type == type) return true;
+        }
+        return false;
+      };
+      auto resolveSystemPage = [&](const String &type, const String &fallbackId, const String &fallbackTitle)->SystemPageDecl{
+        for(auto &page : systemPageDecls){
+          if(page.type == type) return page;
+        }
+        return SystemPageDecl{fallbackId, fallbackTitle, type};
+      };
+      const SystemPageDecl wifiPage = resolveSystemPage("wifi", "wifi", "WiFi Settings");
+      const SystemPageDecl statsPage = resolveSystemPage("stats", "stats", "Statistics");
+      const SystemPageDecl mqttPage = resolveSystemPage("mqtt", "mqtt", "Настройка MQTT");
+      const SystemPageDecl profilePage = resolveSystemPage("profile", "profile", "Профиль");
+
       
       // ====== WiFi страница ======
-      html += "<div id='wifi' class='page'>"
-              "<div class='page-header'><h3>WiFi Settings</h3>"
-              "<div class='page-datetime' id='page-datetime-wifi'>--</div></div>"
+      if(systemPageEnabled("wifi")){
+      html += "<div id='"+wifiPage.id+"' class='page'>"
+              "<div class='page-header'><h3>"+wifiPage.title+"</h3>"
+              "<div class='page-datetime' id='page-datetime-"+wifiPage.id+"'>--</div></div>"
               "<div class='card compact wifi-card'>"
               "<div class='wifi-field'><label>SSID</label><div class='input-with-action'>"
               "<input id='ssid' value='"+loadValue<String>("ssid",defaultSSID)+"'>"
@@ -2325,11 +2391,13 @@ private:
               "<div id='wifi-scan-list' class='wifi-scan-list'></div>"
               "</div></div>"
               "</div>";
+      }
 
       // ====== Statistics страница ======
-      html += "<div id='stats' class='page'>"
-              "<div class='page-header'><h3>Statistics</h3>"
-              "<div class='page-datetime' id='page-datetime-stats'>--</div></div>"
+      if(systemPageEnabled("stats")){
+      html += "<div id='"+statsPage.id+"' class='page'>"
+              "<div class='page-header'><h3>"+statsPage.title+"</h3>"
+              "<div class='page-datetime' id='page-datetime-"+statsPage.id+"'>--</div></div>"
               "<div class='stats-actions'>"
               "<button class='btn-secondary' id='refresh-stats-btn' onclick='fetchStats(true)'>Обновить информацию</button>"
               "<button class='btn-danger' id='reboot-btn' onclick='rebootEsp()'>Перезагрузить ESP</button>"
@@ -2351,9 +2419,11 @@ private:
               "<li><span>SPIFFS Used / Free (использовано / свободно в SPIFFS) — файлы интерфейса, логи или другие пользовательские данные</span><strong id='stat-spiffs'>--</strong></li>"
               "</ul></div>"
               "</div></div>";
+      }
 
       // ====== MQTT страница ======
-      html += "<div id='mqtt' class='page'><h3>Настройка MQTT</h3>"
+      if(systemPageEnabled("mqtt")){
+      html += "<div id='"+mqttPage.id+"' class='page'><h3>"+mqttPage.title+"</h3>"
               "<div class='card compact'>"
               "<div class='mqtt-grid'>"
               "<div class='mqtt-field'><label>MQTT Host</label><input id='mqtt-host' value='"+mqttHost+"'></div>"
@@ -2366,9 +2436,11 @@ private:
                           "<button class='btn-secondary btn-mqtt btn-activate-off' id='mqtt-activate-btn' data-enabled='0' onclick='toggleMqttActivation()'>Реконект MQTT</button>"
               "</div>"
               "</div></div>";
+      }
 
  // ====== Профиль ======
-      html += "<div id='profile' class='page'><h3>Профиль</h3>"
+      if(systemPageEnabled("profile")){
+      html += "<div id='"+profilePage.id+"' class='page'><h3>"+profilePage.title+"</h3>"
               "<div class='card compact'>"
               "<h4>Доступ к веб-интерфейсу</h4>"
               "<div class='mqtt-grid'>"
@@ -2390,6 +2462,7 @@ private:
               "</div>"
               "<div id='profile-status' class='profile-hint'></div>"
               "</div></div>";
+      }
 
       // ====== Основной скрипт страницы ======
             String timerIdsScript = "<script>const timerIds = [";
@@ -2411,11 +2484,40 @@ private:
     let mqttStatusInterval = null;
     let mqttEnabledState = false;
     let mqttConnectedState = false;
+    let espLiveLastOkAt = 0;
+
+  function formatConnectionClock(dateObj){
+    const pad = (num)=>String(num).padStart(2, '0');
+    return `${pad(dateObj.getHours())}:${pad(dateObj.getMinutes())}:${pad(dateObj.getSeconds())}`;
+  }
+
+  function setEspConnectionState(connected){
+    const card = document.getElementById('EspLinkStatus');
+    const state = document.getElementById('EspLinkStatus_state');
+    const last = document.getElementById('EspLinkStatus_last');
+    if(!card || !state) return;
+    card.classList.toggle('off', !connected);
+    state.innerText = connected ? 'ESP32 на связи' : 'Нет связи с ESP32';
+    if(last && connected) last.innerText = 'Последний отклик: ' + formatConnectionClock(new Date());
+  }
+
+  function markEspLiveOk(){
+    espLiveLastOkAt = Date.now();
+    setEspConnectionState(true);
+  }
+
+  function checkEspLiveTimeout(){
+    if(!espLiveLastOkAt || Date.now() - espLiveLastOkAt > 3000){
+      setEspConnectionState(false);
+    }
+  }
 
   // Показ выбранной страницы и скрытие остальных
   function showPage(id,btn){
     document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-    document.getElementById(id).classList.add('active'); // Отображаем выбранную страницу
+    const targetPage = document.getElementById(id);
+    if(!targetPage) return;
+    targetPage.classList.add('active'); // Отображаем выбранную страницу
     document.querySelectorAll('#sidebar button').forEach(b=>b.classList.remove('active'));
     if(btn) btn.classList.add('active'); // Активируем кнопку меню
 
@@ -3597,6 +3699,7 @@ window.addEventListener('resize', ()=>{
     if(liveInFlight) return;
     liveInFlight = true;
     fetch('/live').then(r=>r.json()).then(j=>{
+        markEspLiveOk();
         if(typeof j.CurrentTime !== 'undefined') updatePageDateTime(j.CurrentTime);
         if(typeof j.CurrentTime !== 'undefined') syncManualTimeInputs(j.CurrentTime);
         if(typeof j.gmtOffset !== 'undefined') updateSelectValue('gmtOffset', j.gmtOffset);
@@ -3713,6 +3816,8 @@ window.addEventListener('resize', ()=>{
   }
 setInterval(fetchLive, 1000);
 setInterval(tickPageDateTime, 1000);
+setInterval(checkEspLiveTimeout, 500);
+checkEspLiveTimeout();
 fetchMqttConfig();
 
 function setImg(x){
