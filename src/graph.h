@@ -31,7 +31,7 @@ inline void trimGraphPoints(vector<GraphPoint> &points, size_t limit){ // огр
 inline const unsigned long minGraphUpdateInterval = 100; // минимальный интервал обновления графика (мс)
 inline const unsigned long graphSaveIntervalMs = 15000; // SPIFFS сохраняем реже, чтобы flash-записи не рвали плавность RGB.
 inline const int minGraphPoints = 1; // минимальное допустимое количество точек
-inline const int maxGraphPoints = 50; // максимальное допустимое количество точек
+inline const int maxGraphPoints = 100; // максимальное допустимое количество точек
 
 inline String graphDataPath(const String &series){ // формирует путь к файлу данных графика
   return "/graph_" + sanitizeSeriesId(series) + ".dat"; // имя файла на основе серии

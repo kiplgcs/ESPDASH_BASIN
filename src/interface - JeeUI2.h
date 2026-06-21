@@ -235,16 +235,19 @@ UI_COLOR("LEDColor", LEDColor, "🎨 Цвет подсветки");
    
     // Контроль температуры
     UI_PAGE();
-    UI_DISPLAY_FLOAT("DS1", DS1, "🌡 Температура воды, °C");
+    // UI_DISPLAY_FLOAT("DS1", DS1, "🌡 Температура воды, °C");
+
+    UI_GRAPH_SOURCE("FloatTrend3", "📈 Температура бассейна",
+    "value:Temperatura;updatePeriod_of_Time:60;updateStep:5;maxPoints:100;width:100%;height:240;"
+    "xLabel:Time;yLabel:Temperature;pointColor:#6b66ff;lineColor:#ff5e5e;"
+    "lineWidth:1;pointRadius:3;smooth:false", DS1);
+
     UI_RANGE("Sider_heat", Sider_heat, 5, 35, 1, "🎯 Уставка нагрева");
     // UI_NUMBER("Sider_heat", Sider_heat, "🎯 Уставка нагрева, °C", false);
     UI_CHECKBOX("Activation_Heat", Activation_Heat, "🔥 Контроль нагрева");
     UI_DISPLAY_BOOL("Power_Heat", Power_Heat, "♨️ Состояние нагрева", "🔥 Нагрев", "⏹️ Откл.");
     
-    UI_GRAPH_SOURCE("FloatTrend3", "📈 Температура бассейна",
-    "value:Temperatura;updatePeriod_of_Time:60;updateStep:5;maxPoints:40;width:100%;height:240;"
-    "xLabel:Time;yLabel:Temperature;pointColor:#6b66ff;lineColor:#ff5e5e;"
-    "lineWidth:1;pointRadius:3;smooth:false", DS1);
+
 
     
         UI_POPUP_BEGIN("Ds18Config", "⚙️ Настройка DS18B20", "⚙️ Настройка DS18B20"); // Уникальный ID popup для DS18B20, чтобы не конфликтовать с другим DataEntry.
@@ -264,9 +267,13 @@ UI_COLOR("LEDColor", LEDColor, "🎨 Цвет подсветки");
 
     // Контроль PH (NaOCl)
     UI_PAGE();
- 
+     // UI_DISPLAY_FLOAT("PH", PH, "🧪 pH (текущее)");
 
-    UI_DISPLAY_FLOAT("PH", PH, "🧪 pH (текущее)");
+    UI_GRAPH_SOURCE("FloatPH", "📊 PH воды",
+    "value:PH;updatePeriod_of_Time:60;updateStep:5;maxPoints:100;width:100%;height:400;"
+    "xLabel:Time;yLabel:PH;pointColor:#6b66ff;lineColor:#ff5e5e;"
+    "lineWidth:1;pointRadius:3;smooth:false", PH);
+
     UI_DISPLAY_BOOL("Power_ACO", Power_ACO, "🧴 Дозатор ACO", "✅ Работа", "⏹️ Откл.");
     UI_CHECKBOX("PH_Control_ACO", PH_Control_ACO, "🧪 Контроль pH (ACO)");
     UI_NUMBER("PH_Lower", PH_Lower, "⬇️ Нижний предел pH", true);
@@ -310,10 +317,7 @@ UI_COLOR("LEDColor", LEDColor, "🎨 Цвет подсветки");
     //      pointRadius:3              — радиус точек.
     //      smooth:false               — отключено сглаживание линий (ступенчатый вывод).
     //  - Temperatura — переменная-источник, из которой читается значение для построения графика.
-    UI_GRAPH_SOURCE("FloatPH", "📊 PH воды",
-    "value:PH;updatePeriod_of_Time:60;updateStep:5;maxPoints:50;width:100%;height:400;"
-    "xLabel:Time;yLabel:PH;pointColor:#6b66ff;lineColor:#ff5e5e;"
-    "lineWidth:1;pointRadius:3;smooth:false", PH);
+
         
      UI_POPUP_BEGIN("Cal_PH", "🧪 Калибровка датчика PH", "🪟 Открыть окно калибровки датчика PH");
 
@@ -337,7 +341,13 @@ UI_COLOR("LEDColor", LEDColor, "🎨 Цвет подсветки");
     //Контроль хлора CL (ACO)
     UI_PAGE();
     
-    UI_DISPLAY_FLOAT("ppmCl", ppmCl, "🧴 Свободный хлор, мг/л");
+    // UI_DISPLAY_FLOAT("ppmCl", ppmCl, "🧴 Свободный хлор, мг/л");
+
+    UI_GRAPH_SOURCE("FloatСl", "📊 Хлор в воде, ppmCl",
+    "value:ppmCl;updatePeriod_of_Time:60;updateStep:5;maxPoints:100;width:100%;height:400;"
+    "xLabel:Time;yLabel:Хлор,мг/л;pointColor:#6b66ff;lineColor:#ff5e5e;"
+    "lineWidth:1;pointRadius:3;smooth:false", ppmCl);
+
     UI_DISPLAY_INT("corrected_ORP_Eh_mV", corrected_ORP_Eh_mV, "📟 ORP, мВ");
     UI_DISPLAY_BOOL("Power_H2O2", Power_H2O2, "🧴 Дозатор NaOCl", "✅ Работа", "⏹️ Откл.");
     UI_CHECKBOX("NaOCl_H2O2_Control", NaOCl_H2O2_Control, "🧪 Контроль хлора (NaOCl)");
@@ -347,10 +357,7 @@ UI_COLOR("LEDColor", LEDColor, "🎨 Цвет подсветки");
     UI_SELECT_CB("H2O2_Work", H2O2_Work, dosingOptions, "⏳ Период дозирования NaOCl", onH2O2DosingPeriodChange);
     UI_DISPLAY("ClLogicInfo", ClLogicInfo, "ℹ️ Логика CL и RS485");
 
-    UI_GRAPH_SOURCE("FloatСl", "📊 Хлор в воде, ppmCl",
-    "value:ppmCl;updatePeriod_of_Time:60;updateStep:5;maxPoints:50;width:100%;height:400;"
-    "xLabel:Time;yLabel:Хлор,мг/л;pointColor:#6b66ff;lineColor:#ff5e5e;"
-    "lineWidth:1;pointRadius:3;smooth:false", ppmCl);
+
 
         UI_POPUP_BEGIN("CL", "Калибровка датчика хлора", "Открыть окно калибровки датчика CL хлора}");
             static String Cl_Cal_str = String(corrected_ORP_Eh_mV) + "-" + String(CalRastvor256mV) + "=" + String(CalRastvor256mV - corrected_ORP_Eh_mV);   

@@ -721,6 +721,13 @@ bool Pow_WS2815, Pow_WS28151;		// Включение в ручную
 bool Pow_WS2815_autosvet, Saved_Pow_WS2815_autosvet; 
 bool WS2815_Time1, Saved_WS2815_Time1;
 
+inline const char* currentBasinImagePath() { // Выбирает изображение бассейна по фактическому состоянию подсветки.
+  if (Pow_WS2815 && Lamp) return "/Basin_RGB_LAMP.jpg";
+  if (Pow_WS2815) return "/Basin_RGB.jpg";
+  if (Lamp) return "/Basin_Lamp.jpg";
+  return "/Basin.jpg";
+}
+
 uint16_t Saved_timeON_WS2815, Saved_timeOFF_WS2815;
 
 inline int TimertestON = 0;        // Значение включения тестового таймера (минуты от начала суток)
@@ -1366,13 +1373,15 @@ private:
       ".graph-controls .control-group{flex:1;min-width:220px;display:flex;align-items:center;gap:10px;} " // Группа контролов графика
       ".graph-controls label{display:inline-flex;font-size:0.72em;color:#9fb4c8;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:0;white-space:nowrap;} " // Подписи графика
       ".graph-controls select,.graph-controls input{margin-bottom:0;flex:1;} " // Поля управления графиком
- ".graph-card{position:relative;}"  // Карточка графика
-      ".graph-heading{text-align:center;}"  // Заголовок графика
-      ".dash-graph{width:100%;background:#05070a;}"  // Холст графика
+      ".graph-card{position:relative;overflow:hidden;background:linear-gradient(180deg,#171924,#10131d);border-radius:8px;}"  // Карточка графика
+      ".graph-heading{text-align:center;font-size:1.05em;font-weight:500;color:#dce5f2;margin-bottom:10px;}"  // Заголовок графика
+      ".dash-graph{width:100%;background:#05070a;border-radius:0;}"  // Холст графика
       ".graph-axes{position:absolute;inset:0;pointer-events:none;font-size:0.85em;color:#cbd4df;}"  // Подписи осей
       ".graph-axes .axis-name{position:absolute;}"  // Названия осей
       ".graph-axes .axis-name:first-child{right:10px;bottom:8px;}"  // Подпись оси X
       ".graph-axes .axis-name:last-child{left:8px;top:8px;writing-mode:vertical-rl;transform:rotate(180deg);}"  // Подпись оси Y
+      ".graph-table-wrap{max-height:220px;overflow-y:auto;overflow-x:auto;margin-top:0;}"  // Прокрутка таблицы точек графика
+      ".graph-table-wrap thead th{position:sticky;top:0;z-index:1;}"  // Фиксация заголовка таблицы графика
       ".graph-tooltip{position:fixed;pointer-events:none;background:rgba(10,14,20,0.9);color:#eef4ff;padding:6px 10px;border:1px solid rgba(255,255,255,0.18);border-radius:6px;font-size:0.8em;z-index:1000;transform:translate(-50%,-120%);white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,0.35);}"  // Всплывающая подсказка графика
       ".graph-tooltip.hidden{display:none;}"  // Скрытое состояние tooltip
       ".card:has(#ModeSelect),.card:has(#LEDColor),.card:has(#Timer1),"  // Специальные карточки UI
@@ -1652,6 +1661,7 @@ private:
 
               String imgSrc = e.label; // Источник изображения
               if(!imgSrc.startsWith("http") && !imgSrc.startsWith("/")) imgSrc = "/" + imgSrc; // Приведение к относительному пути
+              if(e.id == "Image1") imgSrc = currentBasinImagePath(); // Главная картинка бассейна зависит от RGB и лампы.
               if(imgSrc == "/getImage") imgSrc = "/getImage"; // Специальный endpoint изображения
 
               String widthRaw, heightRaw, leftRaw, topRaw, extraStyles; // Параметры размеров и позиционирования
@@ -1833,10 +1843,11 @@ private:
                   String maxPointsRaw = readSetting("maxPoints"); // Максимум точек
                   int defaultGraphMax = maxPointsRaw.length() ? maxPointsRaw.toInt() : (maxPoints > 0 ? maxPoints : 30); // Значение по умолчанию
                   if(defaultGraphMax < minGraphPoints) defaultGraphMax = minGraphPoints; // Минимум
-                  int maxSelectablePoints = defaultGraphMax; // Ограничение выбора
-                  if(maxSelectablePoints > maxGraphPoints) maxSelectablePoints = maxGraphPoints; // Максимум
+                  if(defaultGraphMax > maxGraphPoints) defaultGraphMax = maxGraphPoints; // Максимум для значения по умолчанию
+                  int maxSelectablePoints = maxGraphPoints; // Ограничение выбора
+                  if(maxSelectablePoints < minGraphPoints) maxSelectablePoints = minGraphPoints; // Минимум выбора
                   unsigned long defaultUpdate = updateInterval > 0 ? updateInterval : updateStep; // Интервал обновления
-                  GraphSettings seriesSettings{defaultUpdate, maxSelectablePoints}; // Настройки серии
+                  GraphSettings seriesSettings{defaultUpdate, defaultGraphMax}; // Настройки серии
 
                   if(!loadGraphSettings(seriesName, seriesSettings)){ // Загрузка сохранённых настроек
                     loadGraphSettings(valueName, seriesSettings);
@@ -1859,7 +1870,7 @@ private:
                   }
                   html += "<div class='card graph-card' style='"+containerStyle+"'>"; // Карточка графика
                   html += "<div class='graph-heading'>"+e.label+"</div>"; // Заголовок графика
-                  html += "<canvas id='graph_"+e.id+"' class='dash-graph' data-graph-id='"+e.id+"' width='"+String(canvasWidth)+"' height='"+String(canvasHeight)+"' data-series='"+seriesName+"' data-table-id='"+tableId+"' data-update-interval='"+String(graphUpdateInterval)+"' data-max-points='"+String(graphMaxPoints)+"' data-line-color='"+lineColor+"' data-point-color='"+pointColor+"' data-x-label='"+xLabel+"' data-y-label='"+yLabel+"' style='border:1px solid rgba(255,255,255,0.08);height:"+heightStyle+";'></canvas>"; // Canvas графика
+                  html += "<canvas id='graph_"+e.id+"' class='dash-graph' data-graph-id='"+e.id+"' width='"+String(canvasWidth)+"' height='"+String(canvasHeight)+"' data-series='"+seriesName+"' data-value-name='"+valueName+"' data-table-id='"+tableId+"' data-update-interval='"+String(graphUpdateInterval)+"' data-max-points='"+String(graphMaxPoints)+"' data-line-color='"+lineColor+"' data-point-color='"+pointColor+"' data-x-label='"+xLabel+"' data-y-label='"+yLabel+"' style='border:1px solid rgba(255,255,255,0.08);height:"+heightStyle+";'></canvas>"; // Canvas графика
                   html += "<div class='graph-axes'><span class='axis-name'>"+xLabel+"</span><span class='axis-name'>"+yLabel+"</span></div>"; // Подписи осей
               html += "</div>"; // Закрытие карточки графика
                   html += "<div class='card graph-controls' style='margin-bottom:0;'>"; // Панель управления графиком
@@ -1892,7 +1903,7 @@ private:
                   html += "<input class='graph-max-points' data-graph='"+e.id+"' type='number' min='1' max='"+String(maxSelectablePoints)+"' value='"+graphMaxStr+"'>"; // Input max точек
                   html += "</div>";
                   html += "</div>";
-                  html += "<div class='card' style='overflow-x:auto;'>"; // Карточка таблицы
+                  html += "<div class='card graph-table-wrap'>"; // Карточка таблицы
                   html += "<table id='"+tableId+"' style='min-width:400px;'>"; // Таблица данных
                   html += "<thead><tr><th>#</th><th>Date &amp; Time</th><th>Value</th></tr></thead><tbody></tbody>"; // Заголовок таблицы
                   html += "</table></div>";
@@ -3558,24 +3569,51 @@ function populateGraphTable(tableId, data){
   }
 }
 
+function formatGraphNumber(value){
+  const num = Number(value);
+  if(!Number.isFinite(num)) return '--';
+  const abs = Math.abs(num);
+  const digits = abs >= 100 ? 0 : (abs >= 10 ? 1 : 2);
+  return num.toFixed(digits).replace(/\.?0+$/, '');
+}
+
+function formatGraphHeadline(canvas, value){
+  const yLabel = (canvas.dataset.yLabel || '').toLowerCase();
+  const series = (canvas.dataset.series || '').toLowerCase();
+  let unit = '';
+  if(yLabel.includes('temperature') || yLabel.includes('темпер')) unit = '°C';
+  else if(yLabel.includes('ph') || series.includes('ph')) unit = ' pH';
+  else if(yLabel.includes('хлор') || yLabel.includes('cl') || yLabel.includes('ppm')) unit = ' ppm';
+  return formatGraphNumber(value) + unit;
+}
+
+function graphPointPosition(metrics, index){
+  const count = metrics.points.length;
+  const x = count <= 1
+    ? metrics.plotLeft + metrics.plotWidth / 2
+    : metrics.plotLeft + index * (metrics.plotWidth / (count - 1));
+  const value = Number(metrics.points[index].value);
+  const y = metrics.plotBottom - ((value - metrics.minValue) / (metrics.maxValue - metrics.minValue || 1)) * metrics.plotHeight;
+  return {x, y};
+}
+
 function drawCustomGraph(canvas,data){
-  if(!canvas || !canvas.getContext || !data.length) return;
+  if(!canvas || !canvas.getContext) return;
   const ctx = canvas.getContext('2d');
   if(!ctx) return;
   const width = canvas.width;
   const height = canvas.height;
   ctx.clearRect(0,0,width,height);
-  ctx.fillStyle = '#05070a';
+  const bg = ctx.createLinearGradient(0, 0, 0, height);
+  bg.addColorStop(0, '#05070a');
+  bg.addColorStop(0.48, '#07131c');
+  bg.addColorStop(1, '#04070c');
+  ctx.fillStyle = bg;
   ctx.fillRect(0,0,width,height);
-
-  ctx.strokeStyle = 'rgba(255,255,255,0.07)';
-  ctx.lineWidth = 1;
-  for(let i=0;i<=4;i++){
-    let y = i*(height/4);
-    ctx.beginPath();
-    ctx.moveTo(0,y);
-    ctx.lineTo(width,y);
-    ctx.stroke();
+  if(!data.length){
+    graphDataCache.set(canvas, {points: [], plotLeft: 0, plotWidth: width, plotBottom: height, minValue: 0, maxValue: 1});
+    populateGraphTable(canvas.dataset.tableId, []);
+    return;
   }
 
   const maxPointsAttr = parseInt(canvas.dataset.maxPoints);
@@ -3583,40 +3621,89 @@ function drawCustomGraph(canvas,data){
     ? maxPointsAttr
     : 10;
   const pointsToDraw = data.slice(-maxPoints);
+  const values = pointsToDraw.map(point=>Number(point.value)).filter(Number.isFinite);
+  let minValue = values.length ? Math.min(...values) : 0;
+  let maxValue = values.length ? Math.max(...values) : 1;
+  if(minValue === maxValue){
+    minValue -= 1;
+    maxValue += 1;
+  } else {
+    const padding = (maxValue - minValue) * 0.18;
+    minValue -= padding;
+    maxValue += padding;
+  }
+
+  const plotTop = Math.max(84, Math.min(height - 70, Math.round(height * 0.48)));
+  const plotBottom = Math.max(plotTop + 32, height - 38);
+  const plotLeft = 14;
+  const plotRight = Math.max(plotLeft + 10, width - 16);
+  const plotWidth = plotRight - plotLeft;
+  const plotHeight = plotBottom - plotTop;
+  const metrics = {points: pointsToDraw, plotLeft, plotWidth, plotBottom, plotHeight, minValue, maxValue};
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+  ctx.lineWidth = 1;
+  for(let i=0;i<=4;i++){
+    let y = plotTop + i*(plotHeight/4);
+    ctx.beginPath();
+    ctx.moveTo(plotLeft,y);
+    ctx.lineTo(plotRight,y);
+    ctx.stroke();
+  }
+  for(let i=0;i<=10;i++){
+    let x = plotLeft + i*(plotWidth/10);
+    ctx.beginPath();
+    ctx.moveTo(x,plotTop);
+    ctx.lineTo(x,plotBottom);
+    ctx.stroke();
+  }
+
+  const latest = pointsToDraw[pointsToDraw.length - 1];
+  const headlineSize = Math.max(34, Math.min(86, Math.round(height * 0.22)));
+  ctx.save();
+  ctx.font = '700 ' + headlineSize + 'px "Inter", "Segoe UI", system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.shadowColor = 'rgba(0, 255, 255, 0.95)';
+  ctx.shadowBlur = 22;
+  ctx.fillStyle = 'rgba(26, 245, 255, 0.96)';
+  const headlineValue = typeof canvas.dataset.liveValue !== 'undefined' ? canvas.dataset.liveValue : latest.value;
+  ctx.fillText(formatGraphHeadline(canvas, headlineValue), width / 2, Math.max(42, plotTop * 0.45));
+  ctx.restore();
+
   const lineColor = canvas.dataset.lineColor || '#4CAF50';
   const pointColor = canvas.dataset.pointColor || '#ff0000';
   ctx.strokeStyle = lineColor;
   ctx.lineWidth = 2;
   ctx.beginPath();
   for(let i=0;i<pointsToDraw.length;i++){
-    const x = i*(width/(pointsToDraw.length || 1));
-    const y = height - (pointsToDraw[i].value/50.0)*height;
+    const {x, y} = graphPointPosition(metrics, i);
     if(i==0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
   }
   ctx.stroke();
 
   ctx.fillStyle = pointColor;
   for(let i=0;i<pointsToDraw.length;i++){
-    const x = i*(width/(pointsToDraw.length || 1));
-    const y = height - (pointsToDraw[i].value/50.0)*height;
+    const {x, y} = graphPointPosition(metrics, i);
     ctx.beginPath();
     ctx.arc(x,y,3,0,2*Math.PI);
     ctx.fill();
   }
 
   const labelOffsets = [-14, 10, -24, 6];
+  const labelStride = Math.max(1, Math.ceil(pointsToDraw.length * 54 / Math.max(plotWidth, 1)));
   ctx.font = '12px "Inter", "Segoe UI", system-ui, sans-serif';
   ctx.textAlign = 'center';
   ctx.fillStyle = 'rgba(235, 242, 255, 0.86)';
   for(let i=0;i<pointsToDraw.length;i++){
-    const x = i*(width/(pointsToDraw.length || 1));
-    const y = height - (pointsToDraw[i].value/50.0)*height;
+    if(i % labelStride !== 0 && i !== pointsToDraw.length - 1) continue;
+    const {x, y} = graphPointPosition(metrics, i);
     const offset = labelOffsets[i % labelOffsets.length];
     const labelY = Math.min(height - 6, Math.max(12, y + offset));
-    const label = `${pointsToDraw[i].value}`;
+    const label = formatGraphNumber(pointsToDraw[i].value);
     ctx.fillText(label, x, labelY);
   }
-  graphDataCache.set(canvas, pointsToDraw);
+  graphDataCache.set(canvas, metrics);
   populateGraphTable(canvas.dataset.tableId, pointsToDraw);
 }
 
@@ -3626,25 +3713,25 @@ function hideGraphTooltip(){
 
 function showGraphTooltip(canvas, evt){
   if(!canvas || !graphDataCache.has(canvas)) return hideGraphTooltip();
-  const points = graphDataCache.get(canvas);
+  const metrics = graphDataCache.get(canvas);
+  const points = metrics.points;
   if(!points || !points.length) return hideGraphTooltip();
 
   const rect = canvas.getBoundingClientRect();
   const relX = evt.clientX - rect.left;
-  const width = canvas.width || rect.width;
-  const height = canvas.height || rect.height;
-  const step = points.length ? (width / (points.length || 1)) : width;
-  let index = Math.round(relX / (step || 1));
+  const scaleX = (canvas.width || rect.width) / rect.width;
+  const scaleY = (canvas.height || rect.height) / rect.height;
+  const canvasX = relX * scaleX;
+  const step = points.length > 1 ? (metrics.plotWidth / (points.length - 1)) : metrics.plotWidth;
+  let index = points.length > 1 ? Math.round((canvasX - metrics.plotLeft) / (step || 1)) : 0;
   if(index < 0) index = 0;
   if(index >= points.length) index = points.length - 1;
   const point = points[index];
-  const x = index * (width / (points.length || 1));
-  let y = height - (point.value / 50.0) * height;
-  if(!isFinite(y)) y = height / 2;
+  const {x, y} = graphPointPosition(metrics, index);
 
-  graphTooltip.textContent = `${point.time}: ${point.value}`;
-  graphTooltip.style.left = `${rect.left + x}px`;
-  graphTooltip.style.top = `${rect.top + y}px`;
+  graphTooltip.textContent = `${point.time}: ${formatGraphHeadline(canvas, point.value)}`;
+  graphTooltip.style.left = `${rect.left + (x / scaleX)}px`;
+  graphTooltip.style.top = `${rect.top + (y / scaleY)}px`;
   graphTooltip.classList.remove('hidden');
 }
 
@@ -3700,7 +3787,8 @@ document.querySelectorAll('.graph-max-points').forEach(input=>{
   input.addEventListener('change', ()=>{
     let value = parseInt(input.value);
     if(isNaN(value) || value < 1) value = 1;
-    if(value > 50) value = 50;
+    const max = parseInt(input.max) || 100;
+    if(value > max) value = max;
     input.value = value;
     const target = document.getElementById('graph_'+graphId);
     if(!target) return;
@@ -3720,6 +3808,7 @@ window.addEventListener('resize', ()=>{
 
     let pageDateTimeBase = null;
     let lastFilterImageState = null;
+    let lastBasinImage = null;
     let pageDateTimeLastSync = 0;
     let liveInFlight = false;
 
@@ -3790,9 +3879,14 @@ window.addEventListener('resize', ()=>{
     if(document.getElementById('OverlayHeaterTemp')) document.getElementById('OverlayHeaterTemp').innerText=j.OverlayHeaterTemp;
     if(document.getElementById('OverlayLevelUpper')) document.getElementById('OverlayLevelUpper').innerText=j.OverlayLevelUpper;
     if(document.getElementById('OverlayLevelLower')) document.getElementById('OverlayLevelLower').innerText=j.OverlayLevelLower;
-        if(document.getElementById('OverlayPh')) document.getElementById('OverlayPh').innerText=j.OverlayPh;
+    if(document.getElementById('OverlayPh')) document.getElementById('OverlayPh').innerText=j.OverlayPh;
     if(document.getElementById('OverlayChlorine')) document.getElementById('OverlayChlorine').innerText=j.OverlayChlorine;
     if(document.getElementById('OverlayFilterState')) document.getElementById('OverlayFilterState').innerText=j.OverlayFilterState;
+    if(typeof j.BasinImage !== 'undefined' && j.BasinImage !== lastBasinImage){
+      lastBasinImage = j.BasinImage;
+      const basinImage = document.getElementById('Image1');
+      if(basinImage) basinImage.src = j.BasinImage;
+    }
     syncDashButton('button1', j.button1);
     syncDashButton('button2', j.button2);
     syncDashButton('button_Lamp', j.button_Lamp);
@@ -3877,6 +3971,13 @@ window.addEventListener('resize', ()=>{
     if(typeof j.H2O2_Work !== 'undefined') updateSelectValue('H2O2_Work', j.H2O2_Work);
     if(typeof j.Power_H2O2 !== 'undefined') updateStat('Power_H2O2', j.Power_H2O2);
     if(typeof j.Temper_Reference !== 'undefined') updateInputValue('Temper_Reference', j.Temper_Reference);
+    customGraphCanvases.forEach(canvas=>{
+      const key = canvas.dataset.valueName;
+      if(!key || typeof j[key] === 'undefined') return;
+      canvas.dataset.liveValue = j[key];
+      const cached = graphDataCache.get(canvas);
+      if(cached && cached.points) drawCustomGraph(canvas, cached.points);
+    });
     syncRs485Panel(j);
     
         if(typeof j.FilterImageState !== 'undefined' && j.FilterImageState !== lastFilterImageState){
@@ -4278,6 +4379,7 @@ function setImg(x){
       doc["CurrentTime"] = CurrentTime; // Временная метка для синхронизации времени страницы
       doc["gmtOffset"] = gmtOffset_correct; // Часовой пояс (GMT offset)
       doc["FilterImageState"] = jpg; // Выбор картинки бассейна (анимация/статик)
+      doc["BasinImage"] = currentBasinImagePath(); // Картинка бассейна по состоянию RGB и лампы
       doc["button_Lamp"] = Lamp ? 1 : 0; // Отображение состояния кнопки лампы, которая не объявлена через UI
       for (const auto &timer : ui.allTimers()) {
         doc[String(timer.id + "_ON")] = formatMinutesToTime(timer.on);
@@ -4302,6 +4404,9 @@ function setImg(x){
         rs485Inputs.add(ReadInputArray[input] ? 1 : 0);
       }
 
+      doc["Temperatura"] = Temperatura; // Онлайн-значение для верхней подписи графика температуры
+      doc["PH"] = PH; // Онлайн-значение для верхней подписи графика pH
+      doc["ppmCl"] = ppmCl; // Онлайн-значение для верхней подписи графика хлора
             appendUiRegistryValues(doc);
       doc["PH_Lower"] = PH_Lower; // В live-ответе всегда отдаем актуальный нижний предел pH из рабочей переменной.
       doc["PH_Upper"] = PH_Upper; // В live-ответе всегда отдаем актуальный верхний предел pH из рабочей переменной.
@@ -4547,6 +4652,9 @@ server.on("/getImage", HTTP_GET, [](AsyncWebServerRequest *r){
 
     server.serveStatic("/anim1.gif", SPIFFS, "/anim1.gif"); // Отдаёт GIF-анимацию anim1.gif из SPIFFS по HTTP пути /anim1.gif
     server.serveStatic("/Basin.jpg", SPIFFS, "/Basin.jpg"); // Отдаёт изображение Basin.jpg из SPIFFS по HTTP пути /Basin.jpg
+    server.serveStatic("/Basin_RGB.jpg", SPIFFS, "/Basin_RGB.jpg"); // Отдаёт изображение Basin_RGB.jpg из SPIFFS.
+    server.serveStatic("/Basin_Lamp.jpg", SPIFFS, "/Basin_Lamp.jpg"); // Отдаёт изображение Basin_Lamp.jpg из SPIFFS.
+    server.serveStatic("/Basin_RGB_LAMP.jpg", SPIFFS, "/Basin_RGB_LAMP.jpg"); // Отдаёт изображение Basin_RGB_LAMP.jpg из SPIFFS.
     server.serveStatic("/huaqingjun.jpg", SPIFFS, "/huaqingjun.jpg"); // Отдаёт изображение RS485-реле Huaqingjun из SPIFFS.
     server.serveStatic("/img1.jpg", SPIFFS, "/img1.jpg"); // Отдаёт изображение img1.jpg из SPIFFS по HTTP пути /img1.jpg
     server.serveStatic("/img2.jpg", SPIFFS, "/img2.jpg"); // Отдаёт изображение img2.jpg из SPIFFS по HTTP пути /img2.jpg
