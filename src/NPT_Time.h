@@ -18,8 +18,14 @@ const char *ntpServer2 = "time.google.com";
 //int gmtOffset_correct = 3; //GMT+3:00, Москва/Краснодар
 const int daylightOffset = 0; // Смещение летнего времени (0 - отключено)
 
-inline int period_get_NPT_Time = 600000; // Период NTP-синхронизации (мс), при ошибках временно уменьшается
-inline int period_get_Nextion_Time = 60000; // RTC Nextion сверяем редко: локальное время идет от millis(), а частый опрос дергал RGB.
+inline const unsigned long kNtpSyncIntervalMs = 600000UL; // Успешную NTP-синхронизацию выполняем редко, чтобы не мешать основному циклу.
+inline const unsigned long kNtpRetryIntervalMs = 300000UL; // При ошибке или отсутствии интернета повторяем запрос не чаще одного раза в пять минут.
+inline const unsigned long kNextionRtcPollIntervalMs = 60000UL; // RTC и часовой пояс Nextion сверяем раз в минуту.
+inline const long kNextionRtcSyncToleranceSeconds = 1; // Минимальное расхождение, после которого ESP принимает время Nextion без интернета.
+inline const long kNtpNextionSyncToleranceSeconds = 3; // Допуск между NTP-временем ESP и RTC Nextion.
+
+inline int period_get_NPT_Time = static_cast<int>(kNtpSyncIntervalMs); // Стартовый период NTP берем из общей константы.
+inline int period_get_Nextion_Time = static_cast<int>(kNextionRtcPollIntervalMs); // Стартовый период опроса RTC/GMT Nextion берем из общей константы.
 
 // Внешние зависимости из других модулей
 extern WiFiUDP ntpUDP;
@@ -45,6 +51,14 @@ inline time_t baseEpoch = 0;                    // Базовый epoch, от к
 inline unsigned long baseEpochMillis = 0;       // millis() в момент установки baseEpoch
 inline bool baseEpochReady = false;             // Флаг, что базовое время валидно
 inline time_t lastSavedEpoch = 0;               // Последний epoch, сохраненный в NVS
+
+struct GmtOffsetSyncResult {
+  bool valid = false; // true, если значение часового пояса было прочитано из Nextion.
+  bool changed = false; // true, если часовой пояс действительно изменился.
+  int oldOffset = 0; // Предыдущий GMT offset ESP.
+  int newOffset = 0; // Новый GMT offset после нормализации.
+  long shiftSeconds = 0; // Сдвиг локального времени при смене часового пояса.
+};
 
 inline int normalizeGmtOffset(int offset) {
   if (offset < -12) return -12;
@@ -119,6 +133,44 @@ time_t getCurrentEpoch() {
   return baseEpoch + elapsedSeconds;
 }
 // Вспомогательная функция для расписаний (часы/минуты из единого источника времени)
+void applyGmtOffsetValue(int offset, bool shiftCurrentTime) {
+  const int oldOffset = normalizeGmtOffset(gmtOffset_correct); // Запоминаем старый GMT offset для расчета сдвига времени.
+  const int newOffset = normalizeGmtOffset(offset); // Ограничиваем часовой пояс допустимым диапазоном Nextion/ESP.
+  const long shiftSeconds = static_cast<long>(newOffset - oldOffset) * 3600L; // Переводим разницу часовых поясов в секунды.
+  const bool changed = newOffset != oldOffset; // Фиксируем реальное изменение, чтобы не писать NVS без необходимости.
+
+  gmtOffset_correct = newOffset; // Обновляем рабочее значение часового пояса ESP.
+  Saved_gmtOffset_correct = newOffset; // Синхронизируем сохраненную копию для существующей логики.
+  if (changed) {
+    saveValue<int>("gmtOffset", newOffset); // Сохраняем часовой пояс в NVS только при изменении.
+  }
+
+  if (shiftCurrentTime && shiftSeconds != 0 && baseEpochReady) {
+    setBaseEpoch(getCurrentEpoch() + shiftSeconds); // При смене GMT сдвигаем локальное время без ожидания NTP.
+  }
+}
+
+void applyGmtOffsetFromEsp(int offset, bool shiftCurrentTime = true) {
+  applyGmtOffsetValue(offset, shiftCurrentTime); // Единая точка применения GMT для веб-интерфейса ESP.
+  myNex.writeNum("pageRTC.n5.val", gmtOffset_correct); // Сразу отправляем новый часовой пояс в Nextion.
+}
+
+GmtOffsetSyncResult applyGmtOffsetFromNextion(bool shiftCurrentTime = true) {
+  GmtOffsetSyncResult result; // Возвращаем состояние, чтобы вызывающий код мог понять, был ли сдвиг времени.
+  result.oldOffset = normalizeGmtOffset(gmtOffset_correct);
+  const int nextionOffset = myNex.readNumber("pageRTC.n5.val"); // Редко читаем GMT offset из Nextion.
+  if (nextionOffset == kNextionInvalidValue) {
+    return result; // Если Nextion не ответил, оставляем текущий часовой пояс ESP.
+  }
+
+  result.valid = true;
+  result.newOffset = normalizeGmtOffset(nextionOffset);
+  result.changed = result.newOffset != result.oldOffset;
+  result.shiftSeconds = static_cast<long>(result.newOffset - result.oldOffset) * 3600L;
+  applyGmtOffsetValue(result.newOffset, shiftCurrentTime); // Применяем значение Nextion и при необходимости сдвигаем время ESP.
+  return result;
+}
+
 bool getCurrentHourMinute(int &currentHour, int &currentMinute) {
   time_t epoch = getCurrentEpoch();
   if (epoch <= 0) return false;
@@ -315,6 +367,8 @@ time_t nextionEpoch = 0;
 if (nowMs - timerNextion >= static_cast<unsigned long>(period_get_Nextion_Time)) {
   timerNextion = nowMs;
 
+  GmtOffsetSyncResult gmtOffsetSync = applyGmtOffsetFromNextion(false); // Сначала принимаем GMT из Nextion, но сдвиг времени решаем после чтения RTC.
+
   int nextionSeconds = 0;
   int nextionMinutes = 0;
   int nextionHours = 0;
@@ -328,12 +382,21 @@ if (nowMs - timerNextion >= static_cast<unsigned long>(period_get_Nextion_Time))
     nextionEpoch = buildEpoch(nextionYear, nextionMonth, nextionDay, nextionHours, nextionMinutes, nextionSeconds);
     if (nextionEpoch > 0) {
       time_t currentEpoch = getCurrentEpoch();
-      if (!baseEpochReady || epochDeltaSeconds(nextionEpoch, currentEpoch) >= 1) {
-        setBaseEpoch(nextionEpoch);
+      const bool timezoneOnlyChange = gmtOffsetSync.changed && baseEpochReady &&
+                                      epochDeltaSeconds(nextionEpoch, currentEpoch) <= kNextionRtcSyncToleranceSeconds; // Если RTC Nextion не менялся, значит пользователь изменил только GMT.
+      if (timezoneOnlyChange) {
+        setBaseEpoch(currentEpoch + gmtOffsetSync.shiftSeconds); // Сдвигаем локальное время ESP на разницу часовых поясов.
+        syncNextionRtcFromEpoch(getCurrentEpoch()); // Возвращаем в Nextion уже пересчитанное локальное время.
+      } else if (!baseEpochReady || epochDeltaSeconds(nextionEpoch, currentEpoch) >= kNextionRtcSyncToleranceSeconds) {
+        setBaseEpoch(nextionEpoch); // Без свежего NTP Nextion остается источником времени для ESP.
       }
     }
-      } else if (!baseEpochReady) {
-    loadBaseEpochFromStorage();
+  } else {
+    if (gmtOffsetSync.changed && baseEpochReady) {
+      setBaseEpoch(getCurrentEpoch() + gmtOffsetSync.shiftSeconds); // Если прочитали только GMT, все равно сдвигаем локальное время ESP.
+    } else if (!baseEpochReady) {
+      loadBaseEpochFromStorage(); // Если нет ни Nextion, ни базы времени, используем последнее сохраненное значение.
+    }
   }
 }
 
@@ -344,14 +407,8 @@ timerNtp = nowMs;
 // 2) Если Интернет доступен — берём NTP и синхронизируем всё
 if (checkInternetAvailability()) { //Если Интерент доступен
 
-    int gmtOffsetNextion = myNex.readNumber("pageRTC.n5.val"); // Без задержки: readNumber сам получает ответ от Nextion.
-    if (gmtOffsetNextion != kNextionInvalidValue) {
-      gmtOffset_correct = normalizeGmtOffset(gmtOffsetNextion);
-      Saved_gmtOffset_correct = gmtOffset_correct;
-      saveValue<int>("gmtOffset", gmtOffset_correct);
-    }
-
-    gmtOffset_correct = normalizeGmtOffset(gmtOffset_correct);
+    applyGmtOffsetFromNextion(false); // Перед NTP еще раз принимаем GMT из Nextion без сдвига: точное время сейчас задаст NTP.
+    gmtOffset_correct = normalizeGmtOffset(gmtOffset_correct); // NTP использует уже синхронизированный GMT offset ESP/Nextion.
 
     // NTPClient timeClient(ntpUDP, ntpServer, 3600*gmtOffset_correct, daylightOffset); //Для корректировки часового пояса, если вдруг другой часовой установлен
     NTPClient timeClient1(ntpUDP, ntpServer1, 3600 * gmtOffset_correct, daylightOffset);
@@ -370,9 +427,6 @@ if (checkInternetAvailability()) { //Если Интерент доступен
       epochTime = timeClient2.getEpochTime();
     }
 
-      timeClient2.begin();
-      timeClient2.update();
-
     if (epochTime != 0) {
       tm *timeInfo = localtime(&epochTime);
       if (timeInfo != nullptr) {
@@ -386,7 +440,7 @@ if (checkInternetAvailability()) { //Если Интерент доступен
       }
     }
 
-if(isValidDateTime(npt_Year, npt_Month, npt_Day, npt_hours, npt_minutes, npt_seconds)) { period_get_NPT_Time = 600000; // редкая синхронизация Nextion/ESP от Интернета
+if(isValidDateTime(npt_Year, npt_Month, npt_Day, npt_hours, npt_minutes, npt_seconds)) { period_get_NPT_Time = static_cast<int>(kNtpSyncIntervalMs); // Редкая синхронизация Nextion/ESP от Интернета.
       setBaseEpoch(epochTime);
 
       if (!nextionAvailable) {
@@ -411,11 +465,11 @@ if(isValidDateTime(npt_Year, npt_Month, npt_Day, npt_hours, npt_minutes, npt_sec
         syncNextionRtcFromEpoch(epochTime);
       }
     } else {
-      period_get_NPT_Time = 15000; //Короткий таймер повторных запросов - если время считали не правильно
+      period_get_NPT_Time = static_cast<int>(kNtpRetryIntervalMs); // При ошибке NTP повторяем запрос редко, чтобы не мешать loop().
     }
   } else {
         // 3) Интернета нет: если Nextion недоступен и базового времени еще нет — берём из NVS
-    period_get_NPT_Time = 15000;
+    period_get_NPT_Time = static_cast<int>(kNtpRetryIntervalMs); // Без интернета повторяем проверку редко, а время ведем от Nextion/millis().
     if (!baseEpochReady) {
       loadBaseEpochFromStorage();
     }

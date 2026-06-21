@@ -1343,7 +1343,7 @@ private:
             ".page-header{display:flex;flex-direction:row;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:10px;} " // Заголовок страницы
       ".page-header h3{margin:0;} " // Заголовок без отступов
              ".page-datetime{font-size:clamp(0.95em, 1.6vw, 1.25em);letter-spacing:0.08em;text-align:right;font-weight:600;" // Блок даты и времени
-      "margin-left:auto;display:inline-flex;align-items:center;justify-content:center;max-width:100%;" // Выравнивание блока даты
+      "margin-left:auto;display:inline-flex;align-items:center;justify-content:center;gap:8px;max-width:100%;white-space:nowrap;" // Выравнивание блока даты
       "padding:6px 12px;border-radius:12px;background:rgba(0,0,0,0.55);border:1px solid rgba(255,255,255,0.18);" // Фон и рамка даты
       "box-shadow:0 6px 14px rgba(0,0,0,0.4);" // Тень блока даты
       "color:#fff;text-shadow:0 0 10px rgba(0,0,0,0.55),0 1px 1px rgba(0,0,0,0.9);} " // Цвет и читаемость текста
@@ -3812,14 +3812,16 @@ window.addEventListener('resize', ()=>{
     let pageDateTimeLastSync = 0;
     let liveInFlight = false;
 
+    const russianWeekdays = ['Воскресенье','Понедельник','Вторник','Среда','Четверг','Пятница','Суббота']; // Русские названия дней недели для шапки страниц.
+
     function formatDateTime(dateObj){
       const pad = (num)=>String(num).padStart(2, '0');
       return `${pad(dateObj.getDate())}.${pad(dateObj.getMonth()+1)}.${dateObj.getFullYear()} ` +
-             `${pad(dateObj.getHours())}:${pad(dateObj.getMinutes())}:${pad(dateObj.getSeconds())}`;
+             `${pad(dateObj.getHours())}:${pad(dateObj.getMinutes())}:${pad(dateObj.getSeconds())} ${russianWeekdays[dateObj.getDay()]}`;
     }
 
     function parseDeviceDateTime(value){
-      const match = /^(\d{2})\.(\d{2})\.(\d{4}) (\d{2}):(\d{2}):(\d{2})$/.exec(value);
+      const match = /^(\d{2})\.(\d{2})\.(\d{4})\s+(\d{2}):(\d{2}):(\d{2})(?:\s+\S+)?$/.exec(String(value || '').trim()); // Принимаем время как с днем недели, так и без него.
       if(!match) return null;
       const [, dd, mm, yyyy, hh, min, ss] = match;
       return new Date(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh), Number(min), Number(ss));
@@ -4103,11 +4105,8 @@ function setImg(x){
 
            if(key=="ThemeColor") { ThemeColor = valStr; saveValue<String>(key.c_str(), valStr); }
           else if(key=="gmtOffset") {
-          int offset = normalizeGmtOffset(valStr.toInt());
-          gmtOffset_correct = offset;
-          Saved_gmtOffset_correct = offset;
-          saveValue<int>("gmtOffset", offset);
-          myNex.writeNum("pageRTC.n5.val", offset);
+          applyGmtOffsetFromEsp(valStr.toInt(), true); // Веб-изменение GMT сразу сохраняем в ESP, сдвигаем локальное время и отправляем в Nextion.
+          syncNextionRtcFromEpoch(getCurrentEpoch()); // После сдвига GMT сразу обновляем RTC Nextion новым локальным временем.
         }
                 else if(key=="graphMainMaxPoints") {
           int valInt = valStr.toInt();
@@ -4180,11 +4179,7 @@ function setImg(x){
       String timeStr = paramOr("time");
       String offsetStr = paramOr("gmtOffset");
       if(offsetStr.length()){
-        int offset = normalizeGmtOffset(offsetStr.toInt());
-        gmtOffset_correct = offset;
-        Saved_gmtOffset_correct = offset;
-        saveValue<int>("gmtOffset", offset);
-        myNex.writeNum("pageRTC.n5.val", offset);
+        applyGmtOffsetFromEsp(offsetStr.toInt(), false); // При ручной установке даты/времени GMT пишем в Nextion без отдельного сдвига времени.
       }
       if(dateStr.length() < 8 || timeStr.length() < 4){
         r->send(400, "application/json", "{\"status\":\"error\",\"error\":\"Некорректная дата/время\"}");

@@ -141,6 +141,7 @@ void setup() {
 
   setup_Nextion(); //Настраиваем Nextion монитор
 
+  applyGmtOffsetFromNextion(false); // При старте подхватываем часовой пояс из Nextion без сдвига еще не считанного RTC.
   readNextionTime(); // При старте сразу пробуем взять время с RTC Nextion
 
   setupDs18Bindings(); // Загружаем и применяем связанные настройки DS18B20.

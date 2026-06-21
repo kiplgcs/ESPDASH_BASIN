@@ -1040,7 +1040,12 @@ void trigger34(){read_set_topping_controls();} // Триггер Nextion для 
 //     Saved_gmtOffset_correct = gmtOffset_correct = myNex.readNumber("pageRTC.n5.val"); delay(100);
 //     if(gmtOffset_correct > 1 && gmtOffset_correct < 10){jee.var("gmtOffset_correct", String(gmtOffset_correct)); }
 // }
-// void trigger31(){read_RTC_n5();} 
+void trigger31(){
+  GmtOffsetSyncResult gmtOffsetSync = applyGmtOffsetFromNextion(true); // Nextion изменил GMT: сразу применяем часовой пояс в ESP и сдвигаем локальное время.
+  if (gmtOffsetSync.changed) {
+    syncNextionRtcFromEpoch(getCurrentEpoch()); // После сдвига GMT сразу возвращаем в Nextion пересчитанное локальное RTC-время.
+  }
+}
 
 
 // // printh 23 02 54 20
