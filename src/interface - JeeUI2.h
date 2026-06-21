@@ -9,10 +9,6 @@ inline void interface(){ // Декларатиынве функции интер
     UI_HIDDEN("ThemeColor", ThemeColor);
     UI_SIDEBAR_ESP_STATUS("EspLinkStatus", "СВЯЗЬ С ESP32");
     UI_SIDEBAR_THEME_COLOR("ThemeColor", "Theme color");
-    UI_WIFI_SETTINGS_PAGE();
-    UI_STATISTICS_PAGE();
-    UI_PROFILE_PAGE();
-    UI_MQTT_SETTINGS_PAGE();
 
     UI_MENU("📊 Общая информация по бассейну");
     // UI_MENU("🧰 Controls");
@@ -29,6 +25,10 @@ inline void interface(){ // Декларатиынве функции интер
     UI_MENU("🚏 Уличное освещение");
     UI_MENU("⏰ Настройка времени");
     UI_MENU("Реле RS485");
+    UI_MENU("WiFi Settings");
+    UI_MENU("Statistics");
+    UI_MENU("Профиль");
+    UI_MENU("Настройка MQTT");
   
     // Общая информация по бассейну
     UI_PAGE();

@@ -27,7 +27,10 @@ public:
     void profilePage(const String &id="profile", const String &title="Профиль"){ systemPage(id, title, "profile"); } // страница профиля
     void mqttSettingsPage(const String &id="mqtt", const String &title="Настройка MQTT"){ systemPage(id, title, "mqtt"); } // страница MQTT
 
-    void menu(const String &title){ menus.push_back(title); } // добавляет пункт меню для последующих страниц
+    void menu(const String &title){ // добавляет пункт меню для последующих страниц или декларативную служебную страницу
+        if(registerSystemPageFromMenu(title)) return; // системные страницы не занимают индекс обычных UI_PAGE()
+        menus.push_back(title);
+    }
 
     void page(){ // создаёт новую страницу (tab) UI
         if(pageIndex >= menus.size()){ // если для страницы нет названия
@@ -192,7 +195,7 @@ private:
     String optionBuffer; // временный буфер для накопления option у select
     size_t pageIndex = 0; // текущий индекс страницы при генерации UI
     std::map<String, float*> graphInputs; // реестр float-переменных для графиков
-        std::vector<String> tabStack; // стек вкладок для возврата после popup
+    std::vector<String> tabStack; // стек вкладок для возврата после popup
 
     struct GraphConfig{ // структура параметров графика
         String valueKey; // ключ источника данных
@@ -210,6 +213,28 @@ private:
         optionBuffer = ""; // сбрасывает буфер опций
         currentTabId = ""; // сбрасывает текущую вкладку
         pageIndex = 0; // сбрасывает счётчик страниц
+    }
+
+    bool registerSystemPageFromMenu(const String &title){ // Позволяет объявлять служебные страницы тем же UI_MENU(...), что и обычные вкладки.
+        String cleanTitle = title;
+        cleanTitle.trim();
+        if(cleanTitle == "WiFi Settings"){
+            wifiSettingsPage("wifi", cleanTitle);
+            return true;
+        }
+        if(cleanTitle == "Statistics"){
+            statisticsPage("stats", cleanTitle);
+            return true;
+        }
+        if(cleanTitle == "Профиль"){
+            profilePage("profile", cleanTitle);
+            return true;
+        }
+        if(cleanTitle == "Настройка MQTT"){
+            mqttSettingsPage("mqtt", cleanTitle);
+            return true;
+        }
+        return false;
     }
 
     bool containsIgnoreCase(String text, const __FlashStringHelper *needle){ // проверяет, содержит ли строка подстроку без учёта регистра
