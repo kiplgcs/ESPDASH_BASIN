@@ -885,6 +885,8 @@ if (AktualReadInput) {
     AktualReadInput = false;
   }
 
+  updateWaterLevelDebounce(); // Обновляем антидребезг и инверсную семантику уровнемеров без блокирующих задержек.
+
   if (AktualReadRelay) {
     Power_Topping_State = ReadRelayArray[13]; // Состояние реле №14 (соленоид долива воды)
     const bool filtrationRelayActive = ReadRelayArray[8]; // Реле насоса фильтрации (реле №3)
@@ -1012,7 +1014,7 @@ if (AktualReadInput) {
     Power_Topping = false; // Не разрешаем открывать клапан долива во время слива.
     if (!DrainCycleRunning && !DrainPauseRunning && DrainCyclesDone >= DrainCyclesTarget) { // Если выполнено заданное число порций.
       stopDrainMode(); // Завершаем слив полностью.
-    } else if (!DrainCycleRunning && !DrainPauseRunning && WaterLevelSensorDrain) { // Если яма уже полная до старта порции.
+    } else if (!DrainCycleRunning && !DrainPauseRunning && DrainPitFullConfirmed) { // Если яма уже заполнена до старта порции.
       DrainPauseRunning = true; // Сразу переходим в паузу ожидания.
       DrainPauseStartedAt = now; // Запоминаем старт паузы.
       Power_Filtr = false; // Насос не включаем, пока датчик ямы сработал.
@@ -1024,7 +1026,7 @@ if (AktualReadInput) {
 
     if (DrainCycleRunning) { // Если идет активная порция слива.
       Power_Filtr = true; // Удерживаем насос включенным на время порции.
-      if ((now - DrainCycleStartedAt >= drainWorkMs) || WaterLevelSensorDrain) { // Останавливаемся по времени или по датчику ямы.
+      if ((now - DrainCycleStartedAt >= drainWorkMs) || DrainPitFullConfirmed) { // Останавливаемся по времени или по заполнению ямы.
         Power_Filtr = false; // Немедленно выключаем насос слива.
         DrainCycleRunning = false; // Завершаем текущую порцию.
         DrainCyclesDone++; // Увеличиваем счетчик выполненных порций.
@@ -1045,13 +1047,13 @@ if (AktualReadInput) {
 
   if (!Power_Drain) { // Логика долива работает только когда слив отключен.
     if (Activation_Water_Level) { // Если включен автоматический контроль уровня.
-      if (WaterLevelSensorUpper) { // Если верхний уровень бассейна уже достигнут.
+      if (PoolUpperLevelReachedConfirmed) { // Если верхний уровень подтвержден 3 замерами через 1 секунду.
         Power_Topping = false; // Закрываем клапан долива.
         ToppingCycleRunning = false; // Завершаем активный долив.
         ToppingPauseRunning = false; // Пауза не нужна, потому что уровень нормальный.
       } else if (ToppingCycleRunning) { // Если клапан уже открыт текущей порцией.
         Power_Topping = true; // Удерживаем клапан открытым.
-        if ((now - ToppingCycleStartedAt >= toppingWorkMs) || WaterLevelSensorUpper) { // Закрываем по времени или верхнему датчику.
+        if ((now - ToppingCycleStartedAt >= toppingWorkMs) || PoolUpperLevelReachedConfirmed) { // Закрываем по времени или после подтверждения верхнего уровня.
           Power_Topping = false; // Закрываем клапан долива.
           ToppingCycleRunning = false; // Завершаем порцию долива.
           ToppingPauseRunning = true; // Запускаем паузу до следующей попытки.
@@ -1062,7 +1064,7 @@ if (AktualReadInput) {
         if (now - ToppingPauseStartedAt >= toppingPauseMs) { // Если пауза закончилась.
           ToppingPauseRunning = false; // Разрешаем новый долив при нижнем уровне.
         }
-      } else if (WaterLevelSensorLower) { // Если сработал нижний уровень и паузы нет.
+      } else if (PoolLowerLevelLowConfirmed) { // Если нижний уровень подтвержден 10 замерами через 1 секунду.
         ToppingCycleRunning = true; // Запускаем новую порцию долива.
         ToppingCycleStartedAt = now; // Запоминаем старт порции.
         Power_Topping = true; // Открываем клапан долива.
@@ -1072,7 +1074,7 @@ if (AktualReadInput) {
     } else { // Если автоматический контроль уровня выключен.
       ToppingCycleRunning = false; // Сбрасываем автоматическую порцию долива.
       ToppingPauseRunning = false; // Сбрасываем автоматическую паузу долива.
-      if (WaterLevelSensorUpper) Power_Topping = false; // Даже ручной долив закрываем по верхнему уровню для защиты от перелива.
+      if (PoolUpperLevelReachedConfirmed) Power_Topping = false; // Даже ручной долив закрываем после подтвержденного верхнего уровня.
     }
     Power_Topping_State = Power_Topping; // До чтения обратной связи показываем команду на клапан как ожидаемое состояние.
   }

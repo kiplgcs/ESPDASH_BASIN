@@ -11,7 +11,11 @@
 
 using std::vector; // упрощение записи vector<>
 
-struct GraphPoint { String time; float value; }; // одна точка графика: время + значение
+struct GraphPoint {
+  String time; // Время точки графика.
+  float value; // Значение измеряемого параметра.
+  uint16_t events = 0; // Сколько служебных событий попало в интервал этой точки.
+}; // одна точка графика: время + значение + необязательные события
 
 inline String sanitizeSeriesId(const String &series){ // приводит имя серии к безопасному имени файла
   String safe = series; // копируем исходное имя серии
@@ -86,7 +90,7 @@ inline void saveGraphSeries(const String &series, const vector<GraphPoint> &poin
     return; // выходим
   }
   for(const auto &p : points){ // перебираем все точки
-    f.printf("%s,%.3f\n", p.time.c_str(), p.value); // сохраняем время и значение в CSV-формате
+    f.printf("%s,%.3f,%u\n", p.time.c_str(), p.value, static_cast<unsigned>(p.events)); // сохраняем время, значение и события в CSV-формате
   }
   f.close(); // закрываем файл
 }
@@ -119,7 +123,14 @@ inline void loadGraphSeries(const String &series, vector<GraphPoint> &points){ /
     if(sep < 0) continue; // если формат неверный — пропускаем
     GraphPoint gp; // создаём точку графика
     gp.time = line.substring(0, sep); // извлекаем временную метку
-    gp.value = line.substring(sep+1).toFloat(); // извлекаем значение
+    int sep2 = line.indexOf(',', sep + 1); // второй разделитель появился в новых файлах с событиями.
+    if(sep2 < 0){ // Старый формат: время,значение.
+      gp.value = line.substring(sep+1).toFloat(); // извлекаем значение
+      gp.events = 0; // В старых точках событий не было.
+    } else { // Новый формат: время,значение,события.
+      gp.value = line.substring(sep+1, sep2).toFloat(); // извлекаем значение
+      gp.events = static_cast<uint16_t>(line.substring(sep2+1).toInt()); // извлекаем количество событий
+    }
     points.push_back(gp); // добавляем точку в массив
   }
   f.close(); // закрываем файл
@@ -172,7 +183,7 @@ inline void addGraphPoint(String t, float v){ // добавление новой
 
   seriesLastUpdate["main"] = now; // обновляем время последнего добавления
 
-  graphPoints.push_back({t, v}); // добавляем новую точку (время + значение)
+  graphPoints.push_back({t, v, 0}); // добавляем новую точку (время + значение без событий)
   trimGraphPoints(graphPoints, maxPoints); // обрезаем массив по глобальному лимиту
   trimGraphPoints(graphPoints, cfg.maxPoints); // дополнительно учитываем лимит серии
   saveGraphSeriesThrottled("main", graphPoints); // сохраняем обновлённую серию в SPIFFS без частых блокировок
@@ -214,7 +225,7 @@ inline void registerGraphSource( // регистрация новой серии
 }
 
 // Добавляет точку в пользовательскую серию
-inline void addSeriesPoint(const String &series, const String &t, float value){ // добавление точки в указанную серию
+inline bool addSeriesPoint(const String &series, const String &t, float value, uint16_t events = 0){ // добавление точки в указанную серию
   GraphSettings cfg = seriesConfig.count(series)
                         ? seriesConfig[series]
                         : GraphSettings{updateInterval, maxPoints}; // получаем настройки серии или используем дефолт
@@ -225,12 +236,13 @@ inline void addSeriesPoint(const String &series, const String &t, float value){ 
 
   unsigned long now = millis(); // текущее время
   unsigned long last = seriesLastUpdate[series]; // последнее обновление серии
-  if(now - last < cfg.updateInterval) return; // пропускаем обновление, если рано
+  if(now - last < cfg.updateInterval) return false; // пропускаем обновление, если рано
 
   seriesLastUpdate[series] = now; // фиксируем время обновления
 
   auto &points = customGraphSeries[series]; // получаем массив точек серии
-  points.push_back({t, value}); // добавляем новую точку
+  points.push_back({t, value, events}); // добавляем новую точку вместе со счетчиком событий
   trimGraphPoints(points, cfg.maxPoints); // обрезаем массив по лимиту
   saveGraphSeriesThrottled(series, points); // сохраняем серию в файл без частых блокировок
+  return true; // сообщаем вызывающему коду, что точка реально добавлена
 }

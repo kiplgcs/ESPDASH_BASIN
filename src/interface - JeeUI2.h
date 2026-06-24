@@ -17,7 +17,8 @@ inline void interface(){ // Декларатиынве функции интер
     UI_MENU("🧹 Настройка промывки фильтра");
     UI_MENU("💡 Управление лампой");
     UI_MENU("🌈 Управление RGB подсветкой");
-    UI_MENU("📏 Контроль уровня воды");
+    UI_MENU("📏 Контроль уровня воды в бассейне");
+    UI_MENU("🧯 Контроль слива бассейна в яму");
     UI_MENU("🌡 Контроль температуры");
     UI_MENU("🧪 Контроль PH (NaOCl)");
     UI_MENU("🧴 Контроль хлора CL (ACO)");
@@ -211,24 +212,27 @@ UI_COLOR("LEDColor", LEDColor, "🎨 Цвет подсветки");
 
 
 
-    // Контроль уровня воды
+    // Контроль уровня воды в бассейне
     oab.page();
     UI_CHECKBOX("Activation_Water_Level", Activation_Water_Level, "✅ Контроль уровня воды");
-    UI_DISPLAY_BOOL("WaterLevelSensorUpper", WaterLevelSensorUpper, "🛟🔼 Датчик уровня (верхний)", "сработал уровень", "нет уровня");
-    UI_DISPLAY_BOOL("WaterLevelSensorLower", WaterLevelSensorLower, "🛟🔽 Датчик уровня (нижний)", "сработал уровень", "нет уровня");
-    UI_DISPLAY_BOOL("WaterLevelSensorDrain", WaterLevelSensorDrain, "🛟⏬ Датчик уровня в яме слива (вход №3)", "яма заполнена", "яма не заполнена");
+    UI_DISPLAY_BOOL("WaterLevelSensorUpper", WaterLevelSensorUpper, "🛟🔼 Датчик уровня бассейна (верхний, DI2)", "уровень ниже верхнего датчика", "верхний уровень достигнут");
+    UI_DISPLAY_BOOL("WaterLevelSensorLower", WaterLevelSensorLower, "🛟🔽 Датчик уровня бассейна (нижний, DI1)", "контакт нижнего датчика замкнут", "уровень выше нижнего датчика");
     UI_DISPLAY_BOOL("Power_Topping_State", Power_Topping_State, "🚰 Состояние соленоида долива воды", "✅ Включен", "⏹️ Откл.");
     UI_BUTTON("Power_Topping", Power_Topping, "gray", "🚰 Включить/Отключить соленоид долива воды");
+    UI_RANGE("ToppingWorkMinutes", ToppingWorkMinutes, 5, 60, 1, "🚰 Долив: работа клапана, мин");
+    UI_RANGE("ToppingPauseMinutes", ToppingPauseMinutes, 5, 60, 1, "⏸️ Долив: пауза между доливами, мин");
+    UI_DISPLAY("PoolWaterLevelLogicInfo", PoolWaterLevelLogicInfo, "ℹ️ Логика контроля уровня в бассейне");
 
+    // Контроль слива бассейна в яму
+    UI_PAGE();
+    UI_DISPLAY_BOOL("WaterLevelSensorDrain", WaterLevelSensorDrain, "🛟⏬ Датчик уровня в яме слива (DI3)", "яма не заполнена", "яма заполнена");
     UI_DISPLAY_BOOL("Power_Drain_State", Power_Drain_State, "🧯 Режим слива (насос)", "✅ Активен", "⏹️ Неактивен");
-    UI_BUTTON("Power_Drain", Power_Drain, "gray", "🧯 СЛИВ ВОДЫ ИЗ БАССЕЙНИА");
+    UI_BUTTON("Power_Drain", Power_Drain, "gray", "🧯 СЛИВ ВОДЫ ИЗ БАССЕЙНА В ЯМУ");
     UI_RANGE("DrainWorkMinutes", DrainWorkMinutes, 1, 30, 1, "⏱️ Слив: работа порции, мин");
     UI_RANGE("DrainPauseMinutes", DrainPauseMinutes, 1, 30, 1, "⏸️ Слив: пауза между порциями, мин");
     UI_RANGE("DrainCyclesTarget", DrainCyclesTarget, 1, 30, 1, "🔁 Слив: количество порций");
     UI_DISPLAY_INT("DrainCyclesDone", DrainCyclesDone, "📊 Слив: выполнено порций");
-    UI_RANGE("ToppingWorkMinutes", ToppingWorkMinutes, 5, 60, 1, "🚰 Долив: работа клапана, мин");
-    UI_RANGE("ToppingPauseMinutes", ToppingPauseMinutes, 5, 60, 1, "⏸️ Долив: пауза между доливами, мин");
-    UI_DISPLAY("WaterLevelInfo", WaterLevelInfo, "ℹ️ Логика контроля уровня и RS485");
+    UI_DISPLAY("DrainPitLogicInfo", DrainPitLogicInfo, "ℹ️ Логика контроля слива бассейна в яму");
           
     // UI_TEXT("InfoStringDIN", InfoStringDIN, "x:50%;y:130%;fontSize:14;color:#00ff00;white-space:pre-line");
 

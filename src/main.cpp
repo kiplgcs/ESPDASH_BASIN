@@ -53,6 +53,31 @@ void webMqttTask(void * /*parameter*/) { // Определяем задачу Fr
 // ---------- NTP (синхронизация времени) ----------
 WiFiUDP ntpUDP;
 
+inline void captureDosingPumpGraphEvents(){ // Считаем фронты включения насосов для меток на графиках PH/CL.
+  static bool acoWasActive = false; // Помним прошлое состояние ACO, чтобы один импульс считался один раз.
+  static bool h2o2WasActive = false; // Помним прошлое состояние NaOCl, чтобы один импульс считался один раз.
+  const bool acoActive = Power_ACO || ManualPulse_ACO_Active; // ACO активен от автоматики или ручной проверки.
+  const bool h2o2Active = Power_H2O2 || ManualPulse_H2O2_Active; // NaOCl активен от автоматики или ручной проверки.
+
+  if(acoActive && !acoWasActive && PendingAcoDosingGraphEvents < 65535) PendingAcoDosingGraphEvents++; // Метка ACO попадет в ближайшую точку графика pH.
+  if(h2o2Active && !h2o2WasActive && PendingH2O2DosingGraphEvents < 65535) PendingH2O2DosingGraphEvents++; // Метка NaOCl попадет в ближайшую точку графика CL.
+
+  acoWasActive = acoActive; // Обновляем память фронта ACO.
+  h2o2WasActive = h2o2Active; // Обновляем память фронта NaOCl.
+}
+
+inline uint16_t dosingEventsForGraphSeries(const String &series){ // Возвращаем накопленные события для конкретного графика.
+  if(series == "FloatPH") return PendingAcoDosingGraphEvents; // Насос кислоты ACO относится к графику pH.
+  if(series == "FloatСl") return PendingH2O2DosingGraphEvents; // Насос NaOCl относится к графику хлора; в id используется кириллическая С.
+  return 0; // Для остальных графиков служебных событий нет.
+}
+
+inline void clearDosingEventsAfterGraphSample(const String &series, bool pointAdded){ // Сбрасываем счетчик только после записи точки.
+  if(!pointAdded) return; // Если интервал графика еще не прошел, события должны дождаться следующей точки.
+  if(series == "FloatPH") PendingAcoDosingGraphEvents = 0; // События ACO уже записаны в точку pH.
+  if(series == "FloatСl") PendingH2O2DosingGraphEvents = 0; // События NaOCl уже записаны в точку хлора.
+}
+
 
 /* ---------- Setup ---------- */
 void setup() {
@@ -356,8 +381,8 @@ loop_CL2(2100); // Обработка логики хлора
    
   OverlayPoolTemp = "🌡 Бассейн: " + formatTemperatureString(DS1, DS1Available);
   OverlayHeaterTemp = "♨️ После нагревателя: " + formatTemperatureString(DS2, DS2Available);
-  OverlayLevelUpper = String("🛟 Верхний уровень: ") + (WaterLevelSensorUpper ? "Активен" : "Нет уровня");
-  OverlayLevelLower = String("🛟 Нижний уровень: ") + (WaterLevelSensorLower ? "Активен" : "Нет уровня");
+  OverlayLevelUpper = String("🛟 Верхний уровень: ") + (PoolUpperLevelReachedConfirmed ? "достигнут" : "ниже верхнего");
+  OverlayLevelLower = String("🛟 Нижний уровень: ") + (PoolLowerLevelLowConfirmed ? "критически низкий" : "выше нижнего");
   OverlayPh = "🧪 pH: " + String(PH, 2);
   OverlayChlorine = "🧴 Cl: " + String(ppmCl, 3) + " ppm";
   // OverlayFilterState = String("🧽 Фильтр: ") + (Power_Clean ? "Промывка" : (Power_Filtr ? "Фильтрация" : "Остановлен"));
@@ -511,9 +536,13 @@ loop_CL2(2100); // Обработка логики хлора
 
   // ---------- Добавление точек в графики с интервалом ----------
   loop_WS2815(); // Перед возможными SPIFFS-записями даем ленте шанс выдать очередной кадр.
+  captureDosingPumpGraphEvents(); // Перед записью точки фиксируем включения дозаторов для меток на PH/CL.
   addGraphPoint(CurrentTime, RandomVal); // Обновление графика RandomVal
   for(auto &entry : graphValueProviders){
-    addSeriesPoint(entry.first, CurrentTime, entry.second()); // Обновление всех графиков
+    float graphValue = entry.second(); // Читаем значение один раз, чтобы событие и точка относились к одному измерению.
+    uint16_t graphEvents = dosingEventsForGraphSeries(entry.first); // Для PH/CL добавляем число включений дозатора за интервал.
+    bool pointAdded = addSeriesPoint(entry.first, CurrentTime, graphValue, graphEvents); // Обновление всех графиков.
+    clearDosingEventsAfterGraphSample(entry.first, pointAdded); // После записи точки сбрасываем только записанные события дозирования.
   }
 
   }
