@@ -1525,8 +1525,29 @@ private:
       ".graph-axes .axis-name{position:absolute;}"  // Названия осей
       ".graph-axes .axis-name:first-child{right:10px;bottom:8px;}"  // Подпись оси X
       ".graph-axes .axis-name:last-child{left:8px;top:8px;writing-mode:vertical-rl;transform:rotate(180deg);}"  // Подпись оси Y
-      ".graph-table-wrap{max-height:220px;overflow-y:auto;overflow-x:auto;margin-top:0;}"  // Прокрутка таблицы точек графика
-      ".graph-table-wrap thead th{position:sticky;top:0;z-index:1;}"  // Фиксация заголовка таблицы графика
+      ".graph-table-wrap{max-height:220px;overflow-y:auto;overflow-x:auto;margin-top:0;padding:0;}"  // Прокрутка таблицы точек графика
+      ".graph-table-wrap table{margin-top:0;border-collapse:separate;border-spacing:0;}"  // Таблица графика без сдвига заголовка при sticky.
+      ".graph-table-wrap thead th{position:sticky;top:0;z-index:3;background:#303030;box-shadow:0 2px 0 #444;}"  // Фиксация заголовка таблицы графика
+      ".level-sensor-card{display:grid;grid-template-columns:104px minmax(0,1fr);gap:14px;align-items:center;min-height:128px;}" // Карточка уровнемера с наглядной пиктограммой.
+      ".level-sensor-visual{display:flex;align-items:center;justify-content:center;}" // Контейнер пиктограммы уровнемера.
+      ".sensor-tank{position:relative;width:78px;height:112px;border:2px solid #5f7d95;border-radius:10px 10px 14px 14px;background:linear-gradient(180deg,#07111b,#0b1721);box-shadow:inset 0 0 14px rgba(0,0,0,0.65),0 10px 22px rgba(0,0,0,0.35);overflow:hidden;}" // Бак уровнемера.
+      ".sensor-tank:before{content:'';position:absolute;left:8px;right:8px;top:8px;height:14px;border-radius:50%;background:rgba(255,255,255,0.08);z-index:2;}" // Блик на баке.
+      ".sensor-water{position:absolute;left:7px;right:7px;bottom:7px;height:58%;border-radius:8px 8px 12px 12px;background:linear-gradient(180deg,#36ccff,#0878c7);box-shadow:0 -6px 16px rgba(63,207,255,0.3);transition:height .25s ease,background .25s ease;}" // Вода в пиктограмме уровнемера.
+      ".sensor-water:before{content:'';position:absolute;left:0;right:0;top:-5px;height:10px;border-radius:50%;background:rgba(150,238,255,0.55);}" // Поверхность воды.
+      ".sensor-mark{position:absolute;left:0;right:0;height:2px;background:rgba(255,255,255,0.55);z-index:4;}" // Контрольная отметка уровнемера.
+      ".sensor-mark.high{top:24px}.sensor-mark.low{bottom:28px}" // Верхняя и нижняя отметки.
+      ".sensor-probe{position:absolute;right:12px;top:10px;bottom:10px;width:4px;border-radius:4px;background:#b7c8d8;z-index:5;}" // Направляющая поплавкового датчика.
+      ".sensor-float{position:absolute;right:5px;width:18px;height:18px;border-radius:50%;background:#ffd166;border:2px solid #ffe9a8;box-shadow:0 0 10px rgba(255,209,102,0.55);z-index:6;transition:bottom .25s ease,background .25s ease;}" // Поплавок датчика.
+      ".level-sensor-info label{margin-bottom:8px;color:#dce6f2;font-weight:700;}" // Заголовок карточки уровнемера.
+      ".level-sensor-status{font-size:1.12em;line-height:1.35;color:#fff;font-weight:800;}" // Текст статуса уровнемера.
+      ".level-sensor-hint{margin-top:6px;color:#9fb4c8;font-size:0.82em;}" // Короткая подсказка к пиктограмме.
+      ".sensor-upper.sensor-reached .sensor-water{height:82%;}.sensor-upper.sensor-reached .sensor-float{bottom:82px;background:#40e07b;border-color:#b7ffd0;}" // Верхний уровень достигнут.
+      ".sensor-upper.sensor-below .sensor-water{height:58%;}.sensor-upper.sensor-below .sensor-float{bottom:58px;background:#ffd166;}" // Вода ниже верхнего датчика.
+      ".sensor-lower.sensor-normal .sensor-water{height:62%;}.sensor-lower.sensor-normal .sensor-float{bottom:62px;background:#40e07b;border-color:#b7ffd0;}" // Нижний датчик в норме.
+      ".sensor-lower.sensor-low .sensor-water{height:20%;background:linear-gradient(180deg,#ff8f70,#b92f2f);}.sensor-lower.sensor-low .sensor-float{bottom:22px;background:#ff5f5f;border-color:#ffc0c0;}" // Нижний уровень подтвержден.
+      ".sensor-drain.sensor-empty .sensor-water{height:28%;}.sensor-drain.sensor-empty .sensor-float{bottom:30px;background:#40e07b;border-color:#b7ffd0;}" // Сливная яма свободна.
+      ".sensor-drain.sensor-full .sensor-water{height:86%;background:linear-gradient(180deg,#ffb36b,#d64545);}.sensor-drain.sensor-full .sensor-float{bottom:86px;background:#ff5f5f;border-color:#ffc0c0;}" // Сливная яма заполнена.
+      ".sensor-low .level-sensor-status,.sensor-full .level-sensor-status{color:#ffb4a8;}.sensor-reached .level-sensor-status,.sensor-normal .level-sensor-status,.sensor-empty .level-sensor-status{color:#baffce;}" // Цвет текста по состоянию.
       ".graph-tooltip{position:fixed;pointer-events:none;background:rgba(10,14,20,0.9);color:#eef4ff;padding:6px 10px;border:1px solid rgba(255,255,255,0.18);border-radius:6px;font-size:0.8em;z-index:1000;transform:translate(-50%,-120%);white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,0.35);}"  // Всплывающая подсказка графика
       ".graph-tooltip.hidden{display:none;}"  // Скрытое состояние tooltip
       ".card:has(#ModeSelect),.card:has(#LEDColor),.card:has(#Timer1),"  // Специальные карточки UI
@@ -1971,7 +1992,7 @@ private:
                   String lineColor = readSetting("lineColor"); if(lineColor.length()==0) lineColor = "#4CAF50"; // Цвет линии
                   String updateStepRaw = readSetting("updateStep"); // Шаг обновления
                   unsigned long updateStepMinutes = updateStepRaw.length() ? updateStepRaw.toInt() : 5;           // минуты
-                  unsigned long maxUpdatePeriod = maxGraphUpdateInterval; // Для всех графиков верхний предел списка равен 12 часам.
+                  unsigned long maxUpdatePeriod = maxGraphUpdateInterval; // Для всех графиков верхний предел списка равен 24 часам.
                   unsigned long updateStep = updateStepMinutes * 60000UL; // В миллисекундах
 
                   if(maxUpdatePeriod < minGraphUpdateInterval) maxUpdatePeriod = minGraphUpdateInterval; // Минимальный предел
@@ -1979,7 +2000,7 @@ private:
                   if(updateStep > maxUpdatePeriod) updateStep = maxUpdatePeriod; // Ограничение шага
                   if(updateStep < 60000UL) updateStep = 5UL * 60000UL; // После часа список строим минутным шагом, а не секундами.
                   String maxPointsRaw = readSetting("maxPoints"); // Максимум точек
-                  int defaultGraphMax = maxPointsRaw.length() ? maxPointsRaw.toInt() : (maxPoints > 0 ? maxPoints : 30); // Значение по умолчанию
+                  int defaultGraphMax = maxPointsRaw.length() ? maxPointsRaw.toInt() : maxGraphPoints; // Значение по умолчанию: 100 точек.
                   if(defaultGraphMax < minGraphPoints) defaultGraphMax = minGraphPoints; // Минимум
                   if(defaultGraphMax > maxGraphPoints) defaultGraphMax = maxGraphPoints; // Максимум для значения по умолчанию
                   int maxSelectablePoints = maxGraphPoints; // Ограничение выбора
@@ -1987,12 +2008,19 @@ private:
                   unsigned long defaultUpdate = defaultGraphUpdateInterval; // Новые графики по умолчанию обновляются раз в 60 минут.
                   GraphSettings seriesSettings{defaultUpdate, defaultGraphMax}; // Настройки серии
 
+                  bool graphSettingsLoadedFromFlash = false; // Нужен для миграции старых конфигов, где maxPoints случайно стал 30.
                   auto runtimeSeriesSettings = seriesConfig.find(seriesName); // Ищем уже примененные настройки серии в RAM.
                   if(runtimeSeriesSettings != seriesConfig.end()){ // Для служебных графиков берем актуальный интервал без лишней записи во flash.
                     seriesSettings = runtimeSeriesSettings->second; // Например, графики насосов следуют периоду дозирования.
                   }
                   else if(!loadGraphSettings(seriesName, seriesSettings)){ // Загрузка сохранённых настроек
-                    loadGraphSettings(valueName, seriesSettings);
+                    graphSettingsLoadedFromFlash = loadGraphSettings(valueName, seriesSettings);
+                  } else {
+                    graphSettingsLoadedFromFlash = true; // Настройки серии прочитаны из SPIFFS.
+                  }
+                  if(graphSettingsLoadedFromFlash && maxPointsRaw.length() && defaultGraphMax == maxGraphPoints && seriesSettings.maxPoints == 30){ // Исправляем старый баг: при сохранении интервала мог записаться дефолт 30 вместо 100.
+                    seriesSettings.maxPoints = maxGraphPoints;
+                    saveGraphSettings(seriesName, seriesSettings);
                   }
                   int graphUpdateInterval = seriesSettings.updateInterval; // Интервал обновления графика
                   if(graphUpdateInterval < (int)minGraphUpdateInterval) graphUpdateInterval = minGraphUpdateInterval;
@@ -2017,7 +2045,7 @@ private:
                   html += "<div class='graph-axes'><span class='axis-name'>"+xLabel+"</span><span class='axis-name'>"+yLabel+"</span></div>"; // Подписи осей
               html += "</div>"; // Закрытие карточки графика
                   html += "<div class='card graph-controls' style='margin-bottom:0;'>"; // Панель управления графиком
-                  html += "<div class='control-group'><label>Update Interval</label>"; // Выбор интервала
+                  html += "<div class='control-group'><label>Интервал обновления</label>"; // Выбор интервала
                   html += "<select class='graph-update-interval' data-graph='"+e.id+"'>"; // Select интервала
                   auto formatIntervalLabel = [](unsigned long valMs){ // Форматирование интервала: секунды, минуты, затем часы+минуты.
                       if(valMs < 60000UL){
@@ -2046,27 +2074,28 @@ private:
                       html += String("<option value='") + val + "'" + (selected ? " selected" : "") + ">" + formatIntervalLabel(opt) + "</option>"; // Опция интервала
                   };
 
-                  for(unsigned long sec = 5UL; sec <= 59UL; sec++){ // До одной минуты показываем интервалы в секундах.
-                      addGraphIntervalOption(sec * 1000UL);
-                  }
-                  for(unsigned long min = 1UL; min <= 59UL; min++){ // До одного часа показываем интервалы в минутах.
-                      addGraphIntervalOption(min * 60000UL);
-                  }
-                  for(unsigned long opt = 60UL * 60000UL; opt <= maxUpdatePeriod; opt += updateStep){ // После часа показываем часы и остаток минут.
-                      addGraphIntervalOption(opt);
-                      if(maxUpdatePeriod - opt < updateStep) break;
+                  static const unsigned long graphIntervalOptions[] = { // Короткий практичный список интервалов от 5 секунд до 24 часов.
+                    5UL * 1000UL, 10UL * 1000UL, 15UL * 1000UL, 30UL * 1000UL, 45UL * 1000UL,
+                    1UL * 60000UL, 2UL * 60000UL, 5UL * 60000UL, 10UL * 60000UL, 15UL * 60000UL,
+                    20UL * 60000UL, 30UL * 60000UL, 45UL * 60000UL,
+                    60UL * 60000UL, 90UL * 60000UL, 2UL * 60UL * 60000UL, 3UL * 60UL * 60000UL,
+                    4UL * 60UL * 60000UL, 6UL * 60UL * 60000UL, 8UL * 60UL * 60000UL,
+                    12UL * 60UL * 60000UL, 24UL * 60UL * 60000UL
+                  };
+                  for(unsigned long opt : graphIntervalOptions){
+                      addGraphIntervalOption(opt); // Добавляем только оптимальные интервалы без длинного списка по секундам.
                   }
                   if(!graphUpdateOptionAdded){ // Если сохраненный период нестандартный для списка, добавляем его явно.
                       html += String("<option value='") + graphUpdateStr + "' selected>" + formatIntervalLabel(graphUpdateInterval) + "</option>"; // Текущий интервал серии.
                   }
                   html += "</select></div>"; // Закрытие select
-                  html += "<div class='control-group'><label>Max Points</label>"; // Выбор количества точек
+                  html += "<div class='control-group'><label>Точек на графике</label>"; // Выбор количества точек
                   html += "<input class='graph-max-points' data-graph='"+e.id+"' type='number' min='1' max='"+String(maxSelectablePoints)+"' value='"+graphMaxStr+"'>"; // Input max точек
                   html += "</div>";
                   html += "</div>";
                   html += "<div class='card graph-table-wrap'>"; // Карточка таблицы
                   html += "<table id='"+tableId+"' style='min-width:400px;'>"; // Таблица данных
-                  html += "<thead><tr><th>#</th><th>Date &amp; Time</th><th>Value</th><th>Events</th></tr></thead><tbody></tbody>"; // Заголовок таблицы
+                  html += "<thead><tr><th>№</th><th>Дата и время</th><th>Значение</th><th>События</th></tr></thead><tbody></tbody>"; // Заголовок таблицы
                   html += "</table></div>";
                   continue; // Переход к следующему элементу
               }
@@ -2153,6 +2182,35 @@ private:
                   continue;
               }
               String val = uiValueForId(e.id); // Текущее значение элемента UI
+              auto isLevelSensorDisplay = [&](const String &id)->bool { // Три уровнемера рисуем отдельной пиктограммой с водой и поплавком.
+                  return id == "WaterLevelSensorUpper" || id == "WaterLevelSensorLower" || id == "WaterLevelSensorDrain";
+              };
+              auto levelSensorStateClass = [&](const String &id)->String { // Начальный CSS-класс состояния уровнемера при загрузке страницы.
+                  if(id == "WaterLevelSensorUpper") return PoolUpperLevelReachedConfirmed ? String("sensor-upper sensor-reached") : String("sensor-upper sensor-below");
+                  if(id == "WaterLevelSensorLower") return PoolLowerLevelLowConfirmed ? String("sensor-lower sensor-low") : String("sensor-lower sensor-normal");
+                  if(id == "WaterLevelSensorDrain") return DrainPitFullConfirmed ? String("sensor-drain sensor-full") : String("sensor-drain sensor-empty");
+                  return String();
+              };
+              auto levelSensorHint = [&](const String &id)->String { // Подпись к пиктограмме, чтобы было понятно какая отметка контролируется.
+                  if(id == "WaterLevelSensorUpper") return String("верхняя отметка бассейна");
+                  if(id == "WaterLevelSensorLower") return String("нижняя отметка бассейна");
+                  if(id == "WaterLevelSensorDrain") return String("верхняя отметка сливной ямы");
+                  return String();
+              };
+              if((e.type=="display" || e.type=="displayString") && isLevelSensorDisplay(e.id)){ // Наглядные карточки уровнемеров вместо обычного текста.
+                  html += "<div class='card level-sensor-shell'>";
+                  html += "<div class='level-sensor-card "+levelSensorStateClass(e.id)+"' data-level-sensor='"+e.id+"'>";
+                  html += "<div class='level-sensor-visual' aria-hidden='true'><div class='sensor-tank'>"
+                          "<div class='sensor-mark high'></div><div class='sensor-mark low'></div>"
+                          "<div class='sensor-water'></div><div class='sensor-probe'></div><div class='sensor-float'></div>"
+                          "</div></div>";
+                  html += "<div class='level-sensor-info'><label>"+e.label+"</label>"
+                          "<div id='"+e.id+"' class='level-sensor-status'>"+val+"</div>"
+                          "<div class='level-sensor-hint'>"+levelSensorHint(e.id)+"</div></div>";
+                  html += "</div></div>";
+                  renderedCount++; // Подсчитываем реально добавленные элементы в HTML
+                  continue;
+              }
               if(e.type=="timer"){ // Элемент таймера
                   UITimerEntry &timer = ui.timer(e.id); // Получение таймера из реестра
                   html += "<div class='card timer-card'>"; // Карточка таймера
@@ -2860,9 +2918,25 @@ function toggleSidebar(){
     return `${formatBytes(used)} used / ${formatBytes(free)} free (${percent}%)`;
   };
 
+  function updateLevelSensorVisual(id, value){
+    const card = document.querySelector(`.level-sensor-card[data-level-sensor="${id}"]`);
+    if(!card) return;
+    card.classList.remove('sensor-upper','sensor-lower','sensor-drain','sensor-reached','sensor-below','sensor-normal','sensor-low','sensor-empty','sensor-full');
+    const text = String(value || '').toLowerCase();
+    if(id === 'WaterLevelSensorUpper'){
+      card.classList.add('sensor-upper', text.includes('достиг') ? 'sensor-reached' : 'sensor-below');
+    } else if(id === 'WaterLevelSensorLower'){
+      const low = text.includes('подтвержд') || text.includes('/10') || text.includes('низ');
+      card.classList.add('sensor-lower', low ? 'sensor-low' : 'sensor-normal');
+    } else if(id === 'WaterLevelSensorDrain'){
+      card.classList.add('sensor-drain', text.includes('заполн') ? 'sensor-full' : 'sensor-empty');
+    }
+  }
+
   const updateStat = (id, value)=>{
     const el = document.getElementById(id);
     if(el) el.innerText = value;
+    updateLevelSensorVisual(id, value);
   };
 
   function setRs485RelayButton(btn, isOn){
@@ -4350,12 +4424,17 @@ function setImg(x){
           int valInt = valStr.toInt();
           if(valInt < minGraphUpdateInterval) valInt = minGraphUpdateInterval;
           if(valInt > maxGraphUpdateInterval) valInt = maxGraphUpdateInterval;
-          GraphSettings cfg{static_cast<unsigned long>(valInt), maxPoints};
+          int preservedMaxPoints = maxGraphPoints; // При сохранении только интервала не сбрасываем Max Points до глобальных 30.
+          auto runtimeCfg = seriesConfig.find(series);
+          if(runtimeCfg != seriesConfig.end() && runtimeCfg->second.maxPoints > 0) preservedMaxPoints = runtimeCfg->second.maxPoints;
+          GraphSettings cfg{static_cast<unsigned long>(valInt), preservedMaxPoints};
           loadGraphSettings(series, cfg);
           cfg.updateInterval = valInt;
+          if(cfg.maxPoints < minGraphPoints) cfg.maxPoints = preservedMaxPoints;
+          if(cfg.maxPoints > maxGraphPoints) cfg.maxPoints = maxGraphPoints;
           saveGraphSettings(series, cfg);
           seriesConfig[series].updateInterval = cfg.updateInterval;
-          if(seriesConfig[series].maxPoints == 0) seriesConfig[series].maxPoints = cfg.maxPoints;
+          seriesConfig[series].maxPoints = cfg.maxPoints;
           seriesLastUpdate[series] = 0;
         }
         else if(key.startsWith("graphMaxPoints_")) {
