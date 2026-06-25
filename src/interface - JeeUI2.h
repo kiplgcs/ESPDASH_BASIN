@@ -221,7 +221,7 @@ UI_COLOR("LEDColor", LEDColor, "🎨 Цвет подсветки");
     UI_BUTTON("Power_Topping", Power_Topping, "gray", "🚰 Включить/Отключить соленоид долива воды");
     UI_DISPLAY("PoolWaterLevelStageInfo", PoolWaterLevelStageInfo, "📍 Текущий этап контроля уровня");
     UI_RANGE("ToppingWorkMinutes", ToppingWorkMinutes, 5, 60, 1, "🚰 Долив: работа клапана, мин");
-    UI_RANGE("ToppingPauseMinutes", ToppingPauseMinutes, 5, 60, 1, "⏸️ Долив: пауза между доливами, мин");
+    UI_RANGE("ToppingPauseMinutes", ToppingPauseMinutes, 5, 60, 1, "⏸️ Долив: пауза между порциями до верхнего уровня, мин");
     UI_DISPLAY("PoolWaterLevelLogicInfo", PoolWaterLevelLogicInfo, "ℹ️ Логика контроля уровня в бассейне");
 
     // Контроль слива бассейна в яму
