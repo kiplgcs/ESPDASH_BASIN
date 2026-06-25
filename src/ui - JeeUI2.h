@@ -178,7 +178,7 @@ public:
         GraphConfig cfg = parseGraphConfig(config, id); // парсит конфигурацию графика
         addElement("displayGraph", id, label, config); // регистрирует график в UI
         std::function<float()> getter = buildGetter(cfg, nullptr); // строит функцию получения данных по ключу
-        registerGraphSource(id, getter, cfg.valueKey, updateInterval, cfg.points); // регистрирует источник данных графика
+        registerGraphSource(id, getter, cfg.valueKey, defaultGraphUpdateInterval, cfg.points); // Новые графики по умолчанию пишут точку раз в 60 минут.
     }
 
     void displayGraph(const String &id, const String &label, const String &config, float &source){ // добавляет график с явным источником данных
@@ -186,7 +186,7 @@ public:
         registerGraphInput(cfg.valueKey, source); // регистрирует переменную как источник данных
         addElement("displayGraph", id, label, config); // добавляет график в UI
         std::function<float()> getter = buildGetter(cfg, &source); // строит getter напрямую от переменной
-        registerGraphSource(id, getter, cfg.valueKey, updateInterval, cfg.points); // подключает источник к графику
+        registerGraphSource(id, getter, cfg.valueKey, defaultGraphUpdateInterval, cfg.points); // Новые графики по умолчанию пишут точку раз в 60 минут.
     }
 
 private:
@@ -274,8 +274,8 @@ private:
 
   GraphConfig parseGraphConfig(const String &config, const String &fallbackId){ // разбирает строку конфигурации графика
         int defaultPoints = maxPoints > 0 ? maxPoints : 30; // количество точек по умолчанию или глобальное ограничение
-        unsigned long defaultPeriod = 600000; // 10 минут по умолчанию
-        unsigned long defaultStep = 1000;     // 1 секунда по умолчанию
+        unsigned long defaultPeriod = maxGraphUpdateInterval; // Максимальный период выбора графика по умолчанию: 12 часов.
+        unsigned long defaultStep = minGraphUpdateInterval; // Минимальный шаг графика по умолчанию: 5 секунд.
         GraphConfig cfg{fallbackId, defaultPoints, defaultPeriod, defaultStep}; // инициализирует конфигурацию начальными значениями
         int start = 0; // позиция начала парсинга строки
         while(start < config.length()){ // проходит по всей строке конфигурации

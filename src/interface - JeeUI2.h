@@ -35,14 +35,16 @@ inline void interface(){ // Декларатиынве функции интер
     UI_PAGE();
     UI_IMAGE("Image1", "/Basin.jpg", "width:250%;height:800; x:-80%;y:100%;");
     
-    UI_TEXT("OverlayPoolTemp", OverlayPoolTemp, "x:55%;y:300;fontSize:14;color:#00ff00");
-    UI_TEXT("OverlayHeaterTemp", OverlayHeaterTemp, "x:69%;y:350;fontSize:14;color:#00ff00");
-    UI_TEXT("OverlayLevelUpper", OverlayLevelUpper, "x:36%;y:240;fontSize:13;color:#00ff00");
-    UI_TEXT("OverlayLevelLower", OverlayLevelLower, "x:36%;y:290;fontSize:13;color:#00ff00");
+    UI_TEXT("OverlayPoolTemp", OverlayPoolTemp, "x:62%;y:300;fontSize:14;color:#00ff00");
+    UI_TEXT("OverlayHeaterTemp", OverlayHeaterTemp, "x:78%;y:355;fontSize:14;color:#00ff00");
+    UI_TEXT("OverlayLevelUpper", OverlayLevelUpper, "x:41%;y:240;fontSize:13;color:#00ff00");
+    UI_TEXT("OverlayLevelLower", OverlayLevelLower, "x:41%;y:290;fontSize:13;color:#00ff00");
    
-    UI_TEXT("OverlayPh", OverlayPh, "x:780;y:400;fontSize:13;color:#00ff00");
-    UI_TEXT("OverlayChlorine", OverlayChlorine, "x:920;y:400;fontSize:13;color:#00ff00");
-    UI_TEXT("OverlayFilterState", OverlayFilterState, "x:395;y:470;fontSize:12;color:#00ff00");
+    UI_TEXT("OverlayPh", OverlayPh, "x:61%;y:400;fontSize:13;color:#00ff00");
+    UI_TEXT("OverlayChlorine", OverlayChlorine, "x:72%;y:400;fontSize:13;color:#00ff00");
+    UI_TEXT("OverlayFilterState", OverlayFilterState, "x:32%;y:470;fontSize:12;color:#00ff00");
+    UI_TEXT("OverlayDrainPit", OverlayDrainPit, "x:84%;y:595;fontSize:12;color:#00ff00");
+    UI_TEXT("OverlayLight", OverlayLight, "x:82%;y:90;fontSize:12;color:#00ff00");
 
     
                             // // Controls tab
@@ -156,9 +158,7 @@ inline void interface(){ // Декларатиынве функции интер
                                      {"on", "Лампа включена постоянно"},
                                      {"auto", "Включение по датчику освещенности (<20%)"},
                                      {"timer", "Включение по таймеру"}}), "💡 Режим света", onSetLampChange);
-    // UI_NUMBER("Lumen_Ul", Lumen_Ul, "Освещенность на улице, %", false);
-    static String Lumen_Ul_str = String(Lumen_Ul); 
-    UI_TEXT("Lumen_Ul", Lumen_Ul_str, "🔆 Освещенность на улице, %");
+    UI_DISPLAY_INT("Lumen_Ul", Lumen_Ul, "🔆 Освещенность на улице, %");
 
         UI_TIMER("LampTimer", "⏲️ Таймер лампы", LampTimerON, LampTimerOFF, onLampTimerChange);
 
@@ -219,6 +219,7 @@ UI_COLOR("LEDColor", LEDColor, "🎨 Цвет подсветки");
     UI_DISPLAY_BOOL("WaterLevelSensorLower", WaterLevelSensorLower, "🛟🔽 Датчик уровня бассейна (нижний, DI1)", "контакт нижнего датчика замкнут", "уровень выше нижнего датчика");
     UI_DISPLAY_BOOL("Power_Topping_State", Power_Topping_State, "🚰 Состояние соленоида долива воды", "✅ Включен", "⏹️ Откл.");
     UI_BUTTON("Power_Topping", Power_Topping, "gray", "🚰 Включить/Отключить соленоид долива воды");
+    UI_DISPLAY("PoolWaterLevelStageInfo", PoolWaterLevelStageInfo, "📍 Текущий этап контроля уровня");
     UI_RANGE("ToppingWorkMinutes", ToppingWorkMinutes, 5, 60, 1, "🚰 Долив: работа клапана, мин");
     UI_RANGE("ToppingPauseMinutes", ToppingPauseMinutes, 5, 60, 1, "⏸️ Долив: пауза между доливами, мин");
     UI_DISPLAY("PoolWaterLevelLogicInfo", PoolWaterLevelLogicInfo, "ℹ️ Логика контроля уровня в бассейне");
@@ -228,6 +229,7 @@ UI_COLOR("LEDColor", LEDColor, "🎨 Цвет подсветки");
     UI_DISPLAY_BOOL("WaterLevelSensorDrain", WaterLevelSensorDrain, "🛟⏬ Датчик уровня в яме слива (DI3)", "яма не заполнена", "яма заполнена");
     UI_DISPLAY_BOOL("Power_Drain_State", Power_Drain_State, "🧯 Режим слива (насос)", "✅ Активен", "⏹️ Неактивен");
     UI_BUTTON("Power_Drain", Power_Drain, "gray", "🧯 СЛИВ ВОДЫ ИЗ БАССЕЙНА В ЯМУ");
+    UI_DISPLAY("DrainPitStageInfo", DrainPitStageInfo, "📍 Текущий этап слива");
     UI_RANGE("DrainWorkMinutes", DrainWorkMinutes, 1, 30, 1, "⏱️ Слив: работа порции, мин");
     UI_RANGE("DrainPauseMinutes", DrainPauseMinutes, 1, 30, 1, "⏸️ Слив: пауза между порциями, мин");
     UI_RANGE("DrainCyclesTarget", DrainCyclesTarget, 1, 30, 1, "🔁 Слив: количество порций");
@@ -243,7 +245,7 @@ UI_COLOR("LEDColor", LEDColor, "🎨 Цвет подсветки");
 
     UI_GRAPH_SOURCE("FloatTrend3", "📈 Температура бассейна",
     "value:Temperatura;updatePeriod_of_Time:60;updateStep:5;maxPoints:100;width:100%;height:240;"
-    "xLabel:Time;yLabel:Temperature;pointColor:#6b66ff;lineColor:#ff5e5e;"
+    "xLabel:t;yLabel:°C;pointColor:#6b66ff;lineColor:#ff5e5e;"
     "lineWidth:1;pointRadius:3;smooth:false", DS1);
 
     UI_RANGE("Sider_heat", Sider_heat, 5, 35, 1, "🎯 Уставка нагрева");
@@ -275,7 +277,7 @@ UI_COLOR("LEDColor", LEDColor, "🎨 Цвет подсветки");
 
     UI_GRAPH_SOURCE("FloatPH", "📊 PH воды",
     "value:PH;updatePeriod_of_Time:60;updateStep:5;maxPoints:100;width:100%;height:400;"
-    "xLabel:Time;yLabel:PH;pointColor:#6b66ff;lineColor:#ff5e5e;"
+    "xLabel:t;yLabel:pH;pointColor:#6b66ff;lineColor:#ff5e5e;"
     "lineWidth:1;pointRadius:3;smooth:false", PH);
 
     UI_DISPLAY_BOOL("Power_ACO", Power_ACO, "🧴 Дозатор ACO", "✅ Работа", "⏹️ Откл.");
@@ -301,26 +303,8 @@ UI_COLOR("LEDColor", LEDColor, "🎨 Цвет подсветки");
        UI_SELECT_CB("ACO_Work", ACO_Work, dosingOptions, "⏳ Период дозирования ACO", onAcoDosingPeriodChange);
        UI_DISPLAY("PhLogicInfo", PhLogicInfo, "ℹ️ Логика pH и RS485");
 
-        // График тренда измеренной температуры:
-    //  - "FloatTrend1" — внутреннее имя источника данных (ID графика), которым библиотека связывает график с данными.
-    //  - "Temperature1 Trend" — заголовок графика, показываемый в веб-интерфейсе.
-    //  - Строка настроек:
-    //      value:Temperatura          — имя переменной/ключа данных, выводимой на график.
-    //      updatePeriod_of_Time:60    — максимальный период обновления, задаётся в минутах (значение конвертируется в мс и
-    //                                     ограничивает выпадающий список Update Interval; отдельно добавляется пункт 1 секунда).
-    //      updateStep:10               — шаг изменения периода обновления в выпадающем списке, задаётся в минутах (переводится в
-    //                                     миллисекунды; минимальная опция в списке всё равно остаётся 1 секунда).
-    //      maxPoints:30               — максимальное количество точек на графике по умолчанию и верхняя граница выбора в UI.
-    //      width:100%                 — ширина графика относительно контейнера.
-    //      height:240                 — высота графика в пикселях.
-    //      xLabel:Time                — подпись оси X.
-    //      yLabel:Temperature         — подпись оси Y.
-    //      pointColor:#6b66ff         — цвет точек.
-    //      lineColor:#ff5e5e          — цвет линии.
-    //      lineWidth:1                — толщина линии.
-    //      pointRadius:3              — радиус точек.
-    //      smooth:false               — отключено сглаживание линий (ступенчатый вывод).
-    //  - Temperatura — переменная-источник, из которой читается значение для построения графика.
+        // Все Web-графики используют общие ограничения: минимум 5 секунд, максимум 12 часов,
+        // значение по умолчанию 60 минут, а длинные подписи осей заменены короткими обозначениями.
 
         
      UI_POPUP_BEGIN("Cal_PH", "🧪 Калибровка датчика PH", "🪟 Открыть окно калибровки датчика PH");
@@ -349,7 +333,7 @@ UI_COLOR("LEDColor", LEDColor, "🎨 Цвет подсветки");
 
     UI_GRAPH_SOURCE("FloatСl", "📊 Хлор в воде, ppmCl",
     "value:ppmCl;updatePeriod_of_Time:60;updateStep:5;maxPoints:100;width:100%;height:400;"
-    "xLabel:Time;yLabel:Хлор,мг/л;pointColor:#6b66ff;lineColor:#ff5e5e;"
+    "xLabel:t;yLabel:ppm;pointColor:#6b66ff;lineColor:#ff5e5e;"
     "lineWidth:1;pointRadius:3;smooth:false", ppmCl);
 
     UI_DISPLAY_INT("corrected_ORP_Eh_mV", corrected_ORP_Eh_mV, "📟 ORP, мВ");

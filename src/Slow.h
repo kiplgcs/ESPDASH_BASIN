@@ -246,12 +246,13 @@ switch (flag_slow) {
   case 2: 
 
   //Lumen_Ul = readAnalog(36);
-  Lumen_Ul = analogRead(3); // GPIO1  GPIO2  GPIO3  GPIO4  GPIO5  GPIO6  GPIO7  GPIO8  GPIO9  GPIO10
+  // GPIO3 подтянут к GND, а датчик подает 3.3 В: 0 В = 0%, 3.3 В = 100%.
+  Lumen_Ul_Raw = analogRead(3); // Сохраняем сырой АЦП, чтобы видеть реальный сигнал датчика при диагностике.
   //jee.var("Lumen_Ul", String(Lumen_Ul));
   // if(Lumen_Ul != Saved_Lumen_Ul) {Saved_Lumen_Ul = Lumen_Ul;
-  Lumen_Ul  = map(Lumen_Ul, 4095, 0, 100, 0); // Переводим диаппазон люменов в диаппазон процентов
+  Lumen_Ul = constrain(map(Lumen_Ul_Raw, 0, 4095, 0, 100), 0, 100); // Переводим диапазон ADC ESP32 в проценты освещенности.
 
-  InfoString2 = "Освещенность = " + String(Lumen_Ul) + " %";  
+  InfoString2 = "Освещенность = " + String(Lumen_Ul) + " % (ADC " + String(Lumen_Ul_Raw) + ")";  
 
     //  jee.var("Lumen_Ul", ""); //освещенность на улице в процентах
     //  delay(5);

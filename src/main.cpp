@@ -115,6 +115,12 @@ void setup() {
   Serial.printf("[BOOT] Chip model: %s | Cores: %u | Revision: %u\n",
                 ESP.getChipModel(), ESP.getChipCores(), ESP.getChipRevision());
 
+  pinMode(3, INPUT); // GPIO3 используется как аналоговый вход датчика освещенности с внешней подтяжкой к GND.
+  analogReadResolution(12); // Для датчика освещенности используем шкалу ADC 0..4095.
+#ifdef ARDUINO_ARCH_ESP32
+  analogSetPinAttenuation(3, ADC_11db); // Диапазон ADC до 3.3 В, чтобы датчик не упирался в 100% слишком рано.
+#endif
+
   // Подключение к Wi-Fi с использованием сохранённых данных и кнопок
   StoredAPSSID = loadValue<String>("apSSID", String(apSSID));
   StoredAPPASS = loadValue<String>("apPASS", String(apPASS));
@@ -381,10 +387,14 @@ loop_CL2(2100); // Обработка логики хлора
    
   OverlayPoolTemp = "🌡 Бассейн: " + formatTemperatureString(DS1, DS1Available);
   OverlayHeaterTemp = "♨️ После нагревателя: " + formatTemperatureString(DS2, DS2Available);
-  OverlayLevelUpper = String("🛟 Верхний уровень: ") + (PoolUpperLevelReachedConfirmed ? "достигнут" : "ниже верхнего");
-  OverlayLevelLower = String("🛟 Нижний уровень: ") + (PoolLowerLevelLowConfirmed ? "критически низкий" : "выше нижнего");
+  OverlayLevelUpper = String("🛟 Верхний: ") + (PoolUpperLevelReachedConfirmed ? "достигнут" : "ниже");
+  OverlayLevelLower = String("🛟 Нижний: ") + (PoolLowerLevelLowConfirmed ? "низкий" : "норма");
   OverlayPh = "🧪 pH: " + String(PH, 2);
   OverlayChlorine = "🧴 Cl: " + String(ppmCl, 3) + " ppm";
+  OverlayDrainPit = String("🧯 Яма: ") + (DrainPitFullConfirmed ? "заполнена" : "свободна");
+  OverlayLight = "🔆 Свет: " + String(Lumen_Ul) + "%";
+  PoolWaterLevelStageInfo = buildPoolWaterLevelStageInfo(); // Обновляем строку этапа уровня для Web и MQTT-совместимых UI-значений.
+  DrainPitStageInfo = buildDrainPitStageInfo(); // Обновляем строку этапа слива для Web и MQTT-совместимых UI-значений.
   // OverlayFilterState = String("🧽 Фильтр: ") + (Power_Clean ? "Промывка" : (Power_Filtr ? "Фильтрация" : "Остановлен"));
   String filterStateDetails;
   if (Power_Clean || CleanSequenceActive) {
