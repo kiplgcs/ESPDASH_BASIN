@@ -805,9 +805,13 @@ void TimerControlRelay(int interval) {
     // Активация дозации NaOCl по датчику хлора с гистерезисом CL
     static unsigned long lastMillisH2O2 = 0;
     static bool clDosingActive = false;
-    if (!NaOCl_H2O2_Control || !dosingFlowAllowed) {
+    const bool phAllowsChlorineDosing = (PH >= PH_Lower && PH <= PH_Upper); // Хлор разрешен только когда pH находится в заданном рабочем диапазоне.
+    if (!NaOCl_H2O2_Control || !dosingFlowAllowed || !phAllowsChlorineDosing) {
       clDosingActive = false;
       manageTimer(H2O2_Work, Power_H2O2 = false, false, lastMillisH2O2, Info_H2O2);
+      if (NaOCl_H2O2_Control && dosingFlowAllowed && !phAllowsChlorineDosing) {
+        snprintf(Info_H2O2, 50, "pH wait"); // Показываем причину блокировки NaOCl: сначала нужно вернуть pH в норму.
+      }
           } else {
       if (!clDosingActive && ppmCl < CL_Lower) clDosingActive = true; // Хлор нужен только ниже нижнего предела.
       if (clDosingActive && ppmCl >= CL_Upper) clDosingActive = false; // Дозирование прекращаем при достижении верхнего предела.

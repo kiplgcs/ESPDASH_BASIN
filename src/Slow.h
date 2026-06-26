@@ -13,14 +13,15 @@ void slow(int interval){ // Обратная связь для редкого о
 // //---------------------------------------------------------------------------------
 // //---------------------------------------------------------------------------------
 
-// Page id comes from Nextion page events handled by NextionListen().
-// Polling dp/dim with readNumber() blocks the loop and can overwrite active edits.
+// Номер страницы берем из событий NextionListen(), а не опрашиваем dp в цикле.
+// Nx_dim_id обновляется локально при отправке dim=3/45; readNumber("dim") здесь не нужен и может тормозить UART.
 if (myNex.currentPageId >= 0 && myNex.currentPageId < 50) {
   Nx_page_id = myNex.currentPageId;
 }
 period_slow_Time = 1000;
 
 #if 0
+// Старый блок оставлен только для истории: частое чтение dp/dim с Nextion блокирует основной цикл ESP32.
 Nx_page_id = myNex.readNumber("dp"); //Текущий номер страницы открыты на Nextion
 
 Nx_dim_id = myNex.readNumber("dim"); //Текущее - считанное значение яркости Nextion экрана для изменеия скорости обновления данных на экране

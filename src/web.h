@@ -314,7 +314,7 @@ inline String PoolWaterLevelStageInfo; // Текущий этап контрол
 inline String DrainPitStageInfo; // Текущий этап слива в яму с таймерами для Web.
 inline String CleanLogicInfo = "Промывка: реле 9 насос, реле 10 компрессор, реле 11 клапан FILTRATION, реле 12 клапан BACKWASH, реле 13 сброс песка. Последовательность: останов насоса, воздух, перевод клапанов, обратная промывка, возврат в фильтрацию, краткий сброс песка.";
 inline String PhLogicInfo = "pH: насос кислоты ACO подключен к реле 7. При pH выше верхнего предела реле включается только импульсом 5 секунд; повтор задается списком. Остановка контроля при pH ниже нижнего предела или выключенной фильтрации.";
-inline String ClLogicInfo = "CL: насос NaOCl подключен к реле 6. При хлоре ниже нижнего предела реле включается только импульсом 5 секунд; повтор задается списком. Остановка контроля при хлоре выше верхнего предела или выключенной фильтрации.";
+inline String ClLogicInfo = "CL: насос NaOCl подключен к реле 6. При хлоре ниже нижнего предела реле включается только импульсом 5 секунд; повтор задается списком. Хлор не подается, пока pH вне заданного диапазона. Остановка контроля при хлоре выше верхнего предела или выключенной фильтрации.";
 inline String RelayShortInfo = "RS485: реле 9 насос фильтрации, 6 NaOCl, 7 ACO, 14 долив, входы 1/2/3 уровни воды.";
 inline String Rs485UsageInfo = "Задействовано: R1 лампа бассейна; R2 питание WS2815; R6 насос NaOCl; R7 насос ACO; R9 насос фильтрации/слив; R10 компрессор клапанов; R11 клапан FILTRATION; R12 клапан BACKWASH; R13 сброс песка; R14 клапан долива; R15 теплый пол; R16 улица. Свободны/резерв: R3, R4, R5, R8. Входы: IN1 нижний уровень бассейна, IN2 верхний уровень бассейна, IN3 верхний уровень сливной ямы, IN4-IN16 свободны.";
 
@@ -1372,18 +1372,18 @@ private:
       return String(Lumen_Ul);
     });
     registerUiValueProvider("WaterLevelSensorUpper", [](){ // На Web показываем смысл, а не сырой замкнутый контакт DI2.
-      return PoolUpperLevelReachedConfirmed ? String("верхний уровень достигнут") : String("уровень ниже верхнего датчика");
+      return PoolUpperLevelReachedConfirmed ? String("уровень достиг верхнего датчика") : String("уровень ниже верхнего датчика");
     });
     registerUiValueProvider("WaterLevelSensorLower", [](){ // Нижний датчик требует 10 последовательных подтверждений.
-      if(PoolLowerLevelLowConfirmed) return String("нижний уровень подтвержден");
+      if(PoolLowerLevelLowConfirmed) return String("уровень ниже нижнего датчика");
       if(poolLowerLevelLowRaw()){
-        String msg = String("подтверждение нижнего уровня ") + String(PoolLowerLevelLowSamples) + String("/10"); // Собираем строку явно, чтобы lambda возвращала именно String.
+        String msg = String("уровень ниже нижнего датчика, проверка ") + String(PoolLowerLevelLowSamples) + String("/10"); // Собираем строку явно, чтобы lambda возвращала именно String.
         return msg;
       }
       return String("уровень выше нижнего датчика");
     });
     registerUiValueProvider("WaterLevelSensorDrain", [](){ // Для ямы DI3 инвертирован: разомкнутый контакт означает верхний уровень воды.
-      return DrainPitFullConfirmed ? String("яма заполнена") : String("яма не заполнена");
+      return DrainPitFullConfirmed ? String("уровень достиг датчика ямы") : String("уровень ниже датчика ямы");
     });
 
     // Кнопки промывки должны отражать и логику автоматики, и фактическое состояние реле.
@@ -1588,7 +1588,7 @@ private:
       ".graph-table-wrap table{margin-top:0;border-collapse:separate;border-spacing:0;}"  // Таблица графика без сдвига заголовка при sticky.
       ".graph-table-wrap thead th{position:sticky;top:0;z-index:3;background:#303030;box-shadow:0 2px 0 #444;}"  // Фиксация заголовка таблицы графика
       ".level-sensor-card{display:grid;grid-template-columns:104px minmax(0,1fr);gap:14px;align-items:center;min-height:128px;}" // Карточка уровнемера с наглядной пиктограммой.
-      ".level-sensor-visual{display:flex;align-items:center;justify-content:center;}" // Контейнер пиктограммы уровнемера.
+      ".level-sensor-visual{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;}" // Контейнер пиктограммы уровнемера и текстового статуса контакта.
       ".sensor-tank{position:relative;width:78px;height:112px;border:2px solid #5f7d95;border-radius:10px 10px 14px 14px;background:linear-gradient(180deg,#07111b,#0b1721);box-shadow:inset 0 0 14px rgba(0,0,0,0.65),0 10px 22px rgba(0,0,0,0.35);overflow:hidden;}" // Бак уровнемера.
       ".sensor-tank:before{content:'';position:absolute;left:8px;right:8px;top:8px;height:14px;border-radius:50%;background:rgba(255,255,255,0.08);z-index:2;}" // Блик на баке.
       ".sensor-water{position:absolute;left:7px;right:7px;bottom:7px;height:58%;border-radius:8px 8px 12px 12px;background:linear-gradient(180deg,#36ccff,#0878c7);box-shadow:0 -6px 16px rgba(63,207,255,0.3);transition:height .25s ease,background .25s ease;}" // Вода в пиктограмме уровнемера.
@@ -1597,6 +1597,20 @@ private:
       ".sensor-mark.high{top:24px}.sensor-mark.low{bottom:28px}" // Верхняя и нижняя отметки.
       ".sensor-probe{position:absolute;right:12px;top:10px;bottom:10px;width:4px;border-radius:4px;background:#b7c8d8;z-index:5;}" // Направляющая поплавкового датчика.
       ".sensor-float{position:absolute;right:5px;width:18px;height:18px;border-radius:50%;background:#ffd166;border:2px solid #ffe9a8;box-shadow:0 0 10px rgba(255,209,102,0.55);z-index:6;transition:bottom .25s ease,background .25s ease;}" // Поплавок датчика.
+      ".sensor-state-badge{position:absolute;left:8px;top:8px;width:24px;height:24px;border-radius:50%;background:#22c55e;border:2px solid #d9ffe5;box-shadow:0 0 12px rgba(34,197,94,0.55);z-index:8;display:flex;align-items:center;justify-content:center;color:#04140a;font-weight:900;font-size:16px;}" // Значок внутри пиктограммы: форма меняется вместе со сработкой контакта.
+      ".sensor-state-badge:before{content:'✓';}" // Зеленая галочка означает, что контакт уровнемера не сработал.
+      ".sensor-state-chip{width:98px;min-height:28px;display:flex;align-items:center;justify-content:center;gap:6px;border-radius:8px;border:1px solid rgba(186,255,206,0.5);background:rgba(34,197,94,0.16);color:#baffce;font-size:.67em;font-weight:900;letter-spacing:.02em;text-transform:uppercase;text-align:center;}" // Подпись под пиктограммой не требует знания цветов.
+      ".sensor-state-icon{position:relative;width:17px;height:17px;display:inline-flex;align-items:center;justify-content:center;flex:0 0 17px;border-radius:50%;background:#22c55e;color:#031107;font-weight:900;}" // Малый значок статуса контакта.
+      ".sensor-state-icon:before{content:'✓';line-height:1;}" // В норме показываем галочку.
+      ".sensor-state-text:before{content:'норма';}" // Базовая подпись под пиктограммой, конкретное слово уточняется классом датчика.
+      ".sensor-upper.sensor-below .sensor-state-badge,.sensor-lower.sensor-low .sensor-state-badge,.sensor-drain.sensor-full .sensor-state-badge{clip-path:polygon(50% 0,100% 92%,0 92%);border-radius:0;background:#ffb547;border-color:#ffe4a8;color:#1b1000;box-shadow:0 0 14px rgba(255,181,71,0.65);}" // Сработавший контакт показываем треугольником предупреждения.
+      ".sensor-upper.sensor-below .sensor-state-badge:before,.sensor-lower.sensor-low .sensor-state-badge:before,.sensor-drain.sensor-full .sensor-state-badge:before{content:'!';transform:translateY(2px);}" // Внутри предупреждения ставим восклицательный знак.
+      ".sensor-upper.sensor-below .sensor-state-chip,.sensor-lower.sensor-low .sensor-state-chip,.sensor-drain.sensor-full .sensor-state-chip{border-color:rgba(255,181,71,0.75);background:rgba(255,181,71,0.18);color:#ffe2a6;}" // Подпись сработавшего контакта выделяем не только цветом, но и текстом.
+      ".sensor-upper.sensor-below .sensor-state-icon,.sensor-lower.sensor-low .sensor-state-icon,.sensor-drain.sensor-full .sensor-state-icon{clip-path:polygon(50% 0,100% 92%,0 92%);border-radius:0;background:#ffb547;color:#1b1000;}" // Малый значок также меняет форму.
+      ".sensor-upper.sensor-below .sensor-state-icon:before,.sensor-lower.sensor-low .sensor-state-icon:before,.sensor-drain.sensor-full .sensor-state-icon:before{content:'!';transform:translateY(2px);}" // Восклицательный знак в малом предупреждении.
+      ".sensor-upper.sensor-reached .sensor-state-text:before,.sensor-drain.sensor-full .sensor-state-text:before{content:'достиг';}" // Короткая подпись для достигнутой верхней отметки.
+      ".sensor-upper.sensor-below .sensor-state-text:before,.sensor-lower.sensor-low .sensor-state-text:before,.sensor-drain.sensor-empty .sensor-state-text:before{content:'ниже';}" // Короткая подпись для уровня ниже датчика.
+      ".sensor-lower.sensor-normal .sensor-state-text:before{content:'выше';}" // Для нижнего датчика нормой является уровень выше датчика.
       ".level-sensor-info label{margin-bottom:8px;color:#dce6f2;font-weight:700;}" // Заголовок карточки уровнемера.
       ".level-sensor-status{font-size:1.12em;line-height:1.35;color:#fff;font-weight:800;}" // Текст статуса уровнемера.
       ".level-sensor-hint{margin-top:6px;color:#9fb4c8;font-size:0.82em;}" // Короткая подсказка к пиктограмме.
@@ -2261,8 +2275,8 @@ private:
                   html += "<div class='level-sensor-card "+levelSensorStateClass(e.id)+"' data-level-sensor='"+e.id+"'>";
                   html += "<div class='level-sensor-visual' aria-hidden='true'><div class='sensor-tank'>"
                           "<div class='sensor-mark high'></div><div class='sensor-mark low'></div>"
-                          "<div class='sensor-water'></div><div class='sensor-probe'></div><div class='sensor-float'></div>"
-                          "</div></div>";
+                          "<div class='sensor-water'></div><div class='sensor-probe'></div><div class='sensor-float'></div><div class='sensor-state-badge'></div>"
+                          "</div><div class='sensor-state-chip'><span class='sensor-state-icon'></span><span class='sensor-state-text'></span></div></div>";
                   html += "<div class='level-sensor-info'><label>"+e.label+"</label>"
                           "<div id='"+e.id+"' class='level-sensor-status'>"+val+"</div>"
                           "<div class='level-sensor-hint'>"+levelSensorHint(e.id)+"</div></div>";
@@ -2985,10 +2999,10 @@ function toggleSidebar(){
     if(id === 'WaterLevelSensorUpper'){
       card.classList.add('sensor-upper', text.includes('достиг') ? 'sensor-reached' : 'sensor-below');
     } else if(id === 'WaterLevelSensorLower'){
-      const low = text.includes('подтвержд') || text.includes('/10') || text.includes('низ');
+      const low = text.includes('ниже нижнего') || text.includes('/10') || text.includes('подтвержд');
       card.classList.add('sensor-lower', low ? 'sensor-low' : 'sensor-normal');
     } else if(id === 'WaterLevelSensorDrain'){
-      card.classList.add('sensor-drain', text.includes('заполн') ? 'sensor-full' : 'sensor-empty');
+      card.classList.add('sensor-drain', text.includes('достиг') || text.includes('яма заполнена') ? 'sensor-full' : 'sensor-empty');
     }
   }
 
