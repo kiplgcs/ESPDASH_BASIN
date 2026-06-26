@@ -115,7 +115,7 @@ void setup() {
   Serial.printf("[BOOT] Chip model: %s | Cores: %u | Revision: %u\n",
                 ESP.getChipModel(), ESP.getChipCores(), ESP.getChipRevision());
 
-  pinMode(3, INPUT); // GPIO3 используется как аналоговый вход датчика освещенности с внешней подтяжкой к GND.
+  pinMode(3, INPUT_PULLDOWN); // GPIO3 используется как аналоговый вход датчика освещенности; внутренняя подтяжка вниз страхует обрыв внешнего GND.
   analogReadResolution(12); // Для датчика освещенности используем шкалу ADC 0..4095.
 #ifdef ARDUINO_ARCH_ESP32
   analogSetPinAttenuation(3, ADC_11db); // Диапазон ADC до 3.3 В, чтобы датчик не упирался в 100% слишком рано.

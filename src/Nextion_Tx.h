@@ -682,7 +682,7 @@ if (Nx_page_id == 9 && !nextionDispensersWriteHoldActive() && (forceDispensersSy
 }
 
 if (Nx_page_id == 9 && !nextionDispensersWriteHoldActive() && (forceDispensersSync || ACO_Work != Saved_ACO_Work) && !triggerRestartNextion) {Saved_ACO_Work = ACO_Work;
-  myNex.writeNum("Dispensers.cb0.val", ACO_Work - 1); 
+  myNex.writeNum("Dispensers.cb0.val", nextionDosingComboIndexFromMode(ACO_Work)); // В Nextion пишем индекс строки, а не внутренний код периода.
 }
 
 if (Nx_page_id == 9 && !nextionDispensersWriteHoldActive() && (forceDispensersSync || Saved_NaOCl_H2O2_Control != NaOCl_H2O2_Control) && !triggerRestartNextion) {
@@ -691,7 +691,7 @@ if (Nx_page_id == 9 && !nextionDispensersWriteHoldActive() && (forceDispensersSy
 }
 
 if (Nx_page_id == 9 && !nextionDispensersWriteHoldActive() && (forceDispensersSync || H2O2_Work != Saved_H2O2_Work) && !triggerRestartNextion) {Saved_H2O2_Work = H2O2_Work;
-  myNex.writeNum("Dispensers.cb1.val", H2O2_Work - 1); 
+  myNex.writeNum("Dispensers.cb1.val", nextionDosingComboIndexFromMode(H2O2_Work)); // В Nextion пишем индекс строки, а не внутренний код периода.
 }
 
 static float Saved_PH_Lower_Nextion = -100.0f;
@@ -699,18 +699,19 @@ static float Saved_PH_Upper_Nextion = -100.0f;
 static float Saved_CL_Lower_Nextion = -100.0f;
 static float Saved_CL_Upper_Nextion = -100.0f;
 if (Nx_page_id == 9 && !nextionDispensersWriteHoldActive() && !triggerRestartNextion && (forceDispensersSync || Saved_PH_Lower_Nextion != PH_Lower || Saved_PH_Upper_Nextion != PH_Upper || Saved_CL_Lower_Nextion != CL_Lower || Saved_CL_Upper_Nextion != CL_Upper)) {
+  normalizeChemicalLimits(); // Перед выводом на Nextion гарантируем допустимые пределы pH/CL.
   Saved_PH_Lower_Nextion = PH_Lower;
   Saved_PH_Upper_Nextion = PH_Upper;
   Saved_CL_Lower_Nextion = CL_Lower;
   Saved_CL_Upper_Nextion = CL_Upper;
-  myNex.writeNum("Dispensers.n0.val", (int)PH_Lower);
-  myNex.writeNum("Dispensers.n1.val", ((int)round(PH_Lower * 10.0f)) % 10);
-  myNex.writeNum("Dispensers.n2.val", (int)PH_Upper);
-  myNex.writeNum("Dispensers.n3.val", ((int)round(PH_Upper * 10.0f)) % 10);
-  myNex.writeNum("Dispensers.n6.val", (int)CL_Lower);
-  myNex.writeNum("Dispensers.n7.val", ((int)round(CL_Lower * 10.0f)) % 10);
-  myNex.writeNum("Dispensers.n4.val", (int)CL_Upper);
-  myNex.writeNum("Dispensers.n5.val", ((int)round(CL_Upper * 10.0f)) % 10);
+  myNex.writeNum("Dispensers.n0.val", nextionTenthsWhole(PH_Lower));
+  myNex.writeNum("Dispensers.n1.val", nextionTenthsDigit(PH_Lower));
+  myNex.writeNum("Dispensers.n2.val", nextionTenthsWhole(PH_Upper));
+  myNex.writeNum("Dispensers.n3.val", nextionTenthsDigit(PH_Upper));
+  myNex.writeNum("Dispensers.n6.val", nextionTenthsWhole(CL_Lower));
+  myNex.writeNum("Dispensers.n7.val", nextionTenthsDigit(CL_Lower));
+  myNex.writeNum("Dispensers.n4.val", nextionTenthsWhole(CL_Upper));
+  myNex.writeNum("Dispensers.n5.val", nextionTenthsDigit(CL_Upper));
 }
 if (Nx_page_id == 9 && !triggerRestartNextion) SavedNxDispensersPageId = 9; // После всех записей считаем страницу дозаторов синхронизированной.
 

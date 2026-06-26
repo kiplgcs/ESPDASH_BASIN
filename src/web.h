@@ -372,6 +372,55 @@ inline int sanitizeDosingPeriodValue(int value) { // Приводим выбра
   }
 }
 
+inline int nextionDosingComboIndexFromMode(int mode) { // Nextion ComboBox хранит индекс строки, а ESP32 хранит код периода дозирования.
+  switch (sanitizeDosingPeriodValue(mode)) { // Индексы строго соответствуют порядку строк в HMI-файле Nextion.
+    case 1: return 0; // 5 сек / 15 сек.
+    case 2: return 1; // 5 сек / 60 сек.
+    case 3: return 2; // 5 сек / 5 мин.
+    case 4: return 3; // 5 сек / 15 мин.
+    case 5: return 4; // 5 сек / 30 мин.
+    case 6: return 5; // 5 сек / 1 час.
+    case 8: return 6; // 5 сек / 2 часа.
+    case 9: return 7; // 5 сек / 3 часа.
+    case 10: return 8; // 5 сек / 4 часа.
+    case 11: return 9; // 5 сек / 6 часов.
+    case 12: return 10; // 5 сек / 8 часов.
+    case 13: return 11; // 5 сек / 12 часов.
+    case 7: return 12; // 5 сек / 24 часа.
+    default: return 2; // Безопасный индекс дефолта 5 сек / 5 минут.
+  }
+}
+
+inline int dosingModeFromNextionComboIndex(int index) { // Преобразуем индекс ComboBox Nextion обратно в рабочий код ESP32.
+  switch (index) { // Нельзя использовать index + 1, потому что 24 часа в HMI стоит последней строкой.
+    case 0: return 1; // 5 сек / 15 сек.
+    case 1: return 2; // 5 сек / 60 сек.
+    case 2: return 3; // 5 сек / 5 мин.
+    case 3: return 4; // 5 сек / 15 мин.
+    case 4: return 5; // 5 сек / 30 мин.
+    case 5: return 6; // 5 сек / 1 час.
+    case 6: return 8; // 5 сек / 2 часа.
+    case 7: return 9; // 5 сек / 3 часа.
+    case 8: return 10; // 5 сек / 4 часа.
+    case 9: return 11; // 5 сек / 6 часов.
+    case 10: return 12; // 5 сек / 8 часов.
+    case 11: return 13; // 5 сек / 12 часов.
+    case 12: return 7; // 5 сек / 24 часа.
+    default: return 3; // Любой битый индекс возвращаем к дефолту 5 сек / 5 минут.
+  }
+}
+
+inline int nextionTenthsWhole(float value) { // Целая часть для пары Nextion Number-компонентов с шагом 0.1.
+  const int scaled = static_cast<int>(round(value * 10.0f)); // Округляем один раз, чтобы целая и десятая часть не расходились.
+  return scaled / 10; // Для 1.96 вернется 2, а не 1.
+}
+
+inline int nextionTenthsDigit(float value) { // Десятая часть для пары Nextion Number-компонентов с шагом 0.1.
+  int scaled = static_cast<int>(round(value * 10.0f)); // Используем тот же принцип округления, что и для целой части.
+  if (scaled < 0) scaled = -scaled; // Защита от случайного отрицательного ввода.
+  return scaled % 10; // Возвращаем только одну цифру десятых.
+}
+
 inline unsigned long dosingPeriodMsFromMode(int mode) { // Переводим код периода дозирования в миллисекунды.
   switch (sanitizeDosingPeriodValue(mode)) { // Сначала нормализуем код, чтобы не получить нулевой период.
     case 1: return 15UL * 1000UL; // 15 секунд.
@@ -431,8 +480,14 @@ inline void normalizeChemicalLimits() { // Исправляем поврежде
   PH_Upper = clampFloatSetting(PH_Upper, 6.0f, 9.0f, 7.6f); // Держим верхний pH в физически разумном диапазоне.
   CL_Lower = clampFloatSetting(CL_Lower, 0.0f, 10.0f, 1.0f); // Держим нижний CL в безопасном диапазоне ввода.
   CL_Upper = clampFloatSetting(CL_Upper, 0.0f, 10.0f, 3.0f); // Держим верхний CL в безопасном диапазоне ввода.
-  if (PH_Lower >= PH_Upper) PH_Upper = clampFloatSetting(PH_Lower + 0.1f, 6.0f, 9.0f, 7.6f); // Верхний pH всегда должен быть выше нижнего.
-  if (CL_Lower >= CL_Upper) CL_Upper = clampFloatSetting(CL_Lower + 0.1f, 0.0f, 10.0f, 3.0f); // Верхний CL всегда должен быть выше нижнего.
+  if (PH_Lower >= PH_Upper) { // Верхний pH всегда должен быть выше нижнего, даже если нижний уперся в максимум.
+    if (PH_Lower >= 8.9f) PH_Lower = 8.9f; // Оставляем место для минимального шага 0.1 pH.
+    PH_Upper = clampFloatSetting(PH_Lower + 0.1f, 6.0f, 9.0f, 7.6f); // Восстанавливаем корректный гистерезис.
+  }
+  if (CL_Lower >= CL_Upper) { // Верхний CL всегда должен быть выше нижнего, иначе дозатор не имеет зоны остановки.
+    if (CL_Lower >= 9.9f) CL_Lower = 9.9f; // Оставляем место для минимального шага 0.1 ppm.
+    CL_Upper = clampFloatSetting(CL_Lower + 0.1f, 0.0f, 10.0f, 3.0f); // Восстанавливаем корректный гистерезис CL.
+  }
   PH_setting = PH_Upper; // Синхронизируем старую переменную с новым верхним пределом pH.
 }
 
@@ -4285,7 +4340,7 @@ window.addEventListener('resize', ()=>{
 
     }).catch(()=>{}).finally(()=>{ liveInFlight = false; });
   }
-setInterval(fetchLive, 1000);
+setInterval(fetchLive, 2000); // Фоновый live-опрос раз в 2 секунды снижает нагрузку на ESP32 и ускоряет Web UI.
 setInterval(tickPageDateTime, 1000);
 setInterval(checkEspLiveTimeout, 500);
 checkEspLiveTimeout();
@@ -4378,17 +4433,15 @@ function setImg(x){
 
       //Вывод информации из EEPROM  на WEB страницу
         if(key=="ACO_Work"){
-          ACO_Work = valStr.toInt();
-          if(ACO_Work < 1) ACO_Work = 1;
-          if(ACO_Work > 13) ACO_Work = 13;
+          ACO_Work = sanitizeDosingPeriodValue(valStr.toInt()); // Web тоже сохраняет только разрешенный код периода.
+          holdNextionDispensersReads(); // После Web-изменения не даем старому значению Nextion сразу перетереть ESP32.
           saveValue<int>("ACO_Work", ACO_Work);
           r->send(200,"text/plain","OK");
           return;
         }
         if(key=="H2O2_Work"){
-          H2O2_Work = valStr.toInt();
-          if(H2O2_Work < 1) H2O2_Work = 1;
-          if(H2O2_Work > 13) H2O2_Work = 13;
+          H2O2_Work = sanitizeDosingPeriodValue(valStr.toInt()); // Web тоже сохраняет только разрешенный код периода.
+          holdNextionDispensersReads(); // После Web-изменения не даем старому значению Nextion сразу перетереть ESP32.
           saveValue<int>("H2O2_Work", H2O2_Work);
           r->send(200,"text/plain","OK");
           return;

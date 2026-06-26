@@ -32,6 +32,12 @@ int Nx_page_id = 0; //Текущий номер страницы открыты 
 int Nx_dim_id = 50; //Текущее - считанное значение яркости Nextion экрана для изменеия скорости обновления данных на экране
 int in_hours, in_minutes; char buffer[6];
 
+constexpr unsigned long NEXTION_IDLE_DIM_MS = 5UL * 60UL * 1000UL; // Через 5 минут простоя приглушаем экран Nextion.
+constexpr uint8_t NEXTION_DIM_ACTIVE = 45; // Рабочая яркость Nextion после касания.
+constexpr uint8_t NEXTION_DIM_IDLE = 3; // Яркость Nextion при простое.
+unsigned long NextionLastActivityMs = 0; // Время последнего события от сенсорного экрана Nextion.
+bool NextionScreenDimmed = false; // Флаг нужен, чтобы не слать dim=3 постоянно.
+
 constexpr uint8_t NX_ASYNC_GROUP_NONE = 0;
 constexpr uint8_t NX_ASYNC_GROUP_DISPENSERS = 1;
 constexpr uint8_t NX_ASYNC_GROUP_FILTR_SWITCHES = 2;
@@ -59,6 +65,38 @@ uint8_t NxFiltrSwitchPollIndex = 0;
 
 inline bool nextionAsyncReadActive() {
   return NxAsyncNumberReadState.active;
+}
+
+inline void markNextionActivity() { // Любой trigger/page от Nextion считаем касанием или активностью пользователя.
+  NextionLastActivityMs = millis(); // Обновляем момент последней активности без блокирующих чтений dim/dp.
+  if (NextionScreenDimmed) { // Если экран уже был приглушен, сразу возвращаем рабочую яркость.
+    myNex.writeStr("dim=" + String(NEXTION_DIM_ACTIVE)); // Возвращаем яркость Nextion до 45%.
+    Nx_dim_id = NEXTION_DIM_ACTIVE; // Держим локальное состояние яркости синхронным с отправленной командой.
+    NextionScreenDimmed = false; // Повторно dim=45 не отправляем, пока экран снова не приглушится.
+  }
+}
+
+inline void serviceNextionIdleBrightness() { // Неблокирующий контроль затемнения Nextion при простое.
+  if (NextionLastActivityMs == 0) NextionLastActivityMs = millis(); // Первый запуск считаем активностью после старта ESP32.
+  if (NxAsyncNumberReadState.active || MySerial.available() > 0) return; // Не вмешиваем dim-команду в активный обмен UART.
+  if (!NextionScreenDimmed && static_cast<unsigned long>(millis() - NextionLastActivityMs) >= NEXTION_IDLE_DIM_MS) {
+    myNex.writeStr("dim=" + String(NEXTION_DIM_IDLE)); // Через 5 минут без событий опускаем яркость до 3%.
+    Nx_dim_id = NEXTION_DIM_IDLE; // Запоминаем отправленную яркость локально.
+    NextionScreenDimmed = true; // До следующего касания больше не шлем dim=3.
+  }
+}
+
+inline bool consumeNextionNativeTouchEvent() { // Обрабатываем штатные touch-пакеты Nextion, если они включены в HMI/sendxy.
+  if (!MySerial.available()) return false; // Нет байтов для разбора.
+  const uint8_t firstByte = static_cast<uint8_t>(MySerial.peek()); // Смотрим тип пакета, не удаляя его из буфера.
+  uint8_t packetLength = 0; // Длина известного штатного пакета Nextion.
+  if (firstByte == 0x65) packetLength = 7; // Touch Event: 0x65 page component event FF FF FF.
+  else if (firstByte == 0x67 || firstByte == 0x68) packetLength = 9; // Touch Coordinate: 0x67/0x68 xH xL yH yL event FF FF FF.
+  else return false; // Остальные байты обрабатываются обычным протоколом или отбрасываются ниже.
+  if (MySerial.available() < packetLength) return false; // Ждем полный пакет, чтобы не съесть половину события.
+  for (uint8_t i = 0; i < packetLength; ++i) MySerial.read(); // Удаляем штатный touch-пакет из RX-буфера.
+  markNextionActivity(); // Любой штатный touch-пакет возвращает яркость и сбрасывает таймер простоя.
+  return true;
 }
 
 inline void resetNextionAsyncNumberRead() {
@@ -238,6 +276,14 @@ inline void serviceNextionSerial(uint8_t maxOperations = 24) {
   }
 
   for (uint8_t i = 0; i < maxOperations && MySerial.available(); ++i) {
+    if (!NxAsyncNumberReadState.active) { // Штатные touch-пакеты разбираем только вне числового ответа get.
+      const uint8_t firstByte = static_cast<uint8_t>(MySerial.peek()); // Проверяем, не начинается ли буфер с touch-события.
+      if (firstByte == 0x65 || firstByte == 0x67 || firstByte == 0x68) {
+        if (consumeNextionNativeTouchEvent()) continue; // Касания Nextion без printh тоже считаем активностью.
+        break; // Если пакет еще не полный, не съедаем первый байт и ждем следующий проход.
+      }
+    }
+
     if (NxAsyncNumberReadState.active && static_cast<uint8_t>(MySerial.peek()) != '#') {
       processNextionAsyncNumberByte();
       continue;
@@ -247,6 +293,7 @@ inline void serviceNextionSerial(uint8_t maxOperations = 24) {
       if (MySerial.available() <= 2) break;
       if (NxAsyncNumberReadState.active) resetNextionAsyncNumberRead();
       myNex.NextionListen();
+      markNextionActivity(); // После обработки события Nextion обновляем таймер простоя и возвращаем яркость при касании.
     } else {
       MySerial.read();
     }
@@ -255,6 +302,7 @@ inline void serviceNextionSerial(uint8_t maxOperations = 24) {
   if (myNex.currentPageId >= 0 && myNex.currentPageId < 50) {
     Nx_page_id = myNex.currentPageId;
   }
+  serviceNextionIdleBrightness(); // Проверяем затемнение без чтения dim из Nextion.
 }
 
 inline void pollNextionDispensersSettingsAsync() {
@@ -301,6 +349,11 @@ void setup_Nextion(){
   myNex.lastCurrentPageId = 1;  // При первом запуске цикла currentPageId и lastCurrentPageId
                                 // должны иметь разные значения из-за запуска функции firstRefresh()
   myNex.writeStr("page 0");     // Для синхронизации страницы Nextion в случае сброса на Arduino
+  myNex.writeStr("sendxy=1");   // Просим Nextion присылать координаты касаний, чтобы любое касание возвращало яркость экрана.
+  myNex.writeStr("dim=" + String(NEXTION_DIM_ACTIVE)); // После старта держим экран Nextion на рабочей яркости 45%.
+  Nx_dim_id = NEXTION_DIM_ACTIVE; // Синхронизируем локальную переменную яркости с отправленной командой.
+  NextionLastActivityMs = millis(); // Старт ESP считаем активностью, чтобы затемнение началось только через 5 минут.
+  NextionScreenDimmed = false; // После старта экран не считается приглушенным.
   //triggerRestartNextion = true; //Флаг чтения всех необходимых переменных из Nextion, после перезагрузки контроллера.
 
   //Прерываем по пину  RX порта для выполнения функции получения данных для монитора Nextion
@@ -858,12 +911,11 @@ void trigger22(){holdNextionDispensersWrites(); read_Dispensers_sw0_sw1();}
 // } 
 
 void read_Dispensers_cb0(){ // Колбэк-функция обработки значения cb0
-    uint32_t rawValue = myNex.readNumber("Dispensers.cb0.val"); // Повторно читаем исходное значение без смещения
+    uint32_t rawValue = myNex.readNumber("Dispensers.cb0.val"); // Читаем индекс выбранной строки ComboBox Nextion.
     if(rawValue == 777777) return; // Выход из функции при получении служебного/ошибочного значения - чтобы не помещало правильной работе логики
-    int nextValue = static_cast<int>(rawValue) + 1; // Преобразуем в int и увеличиваем на 1
-    if(nextValue < 1) nextValue = 1; // Ограничение минимального значения
-    if(nextValue > 13) nextValue = 13; // Ограничение максимального значения
+    int nextValue = dosingModeFromNextionComboIndex(static_cast<int>(rawValue)); // Индекс строки переводим в код периода ESP32.
     Saved_ACO_Work = ACO_Work = nextValue; // Сохраняем итоговое корректное значение
+    holdNextionDispensersWrites(6000); // Даем Nextion время закрыть список, чтобы ESP32 не вернул старое значение.
     saveValue<int>("ACO_Work", ACO_Work); // Записываем значение в энергонезависимую память
 }
 void trigger23(){holdNextionDispensersWrites(); read_Dispensers_cb0();}
@@ -899,12 +951,11 @@ void trigger24(){holdNextionDispensersWrites(); read_Dispensers_sw2_sw3();}
 // } 
 
 void read_Dispensers_cb1(){ // Колбэк-функция обработки значения cb1
-    uint32_t rawValue = myNex.readNumber("Dispensers.cb1.val"); // Читаем значение cb1 из Nextion
+    uint32_t rawValue = myNex.readNumber("Dispensers.cb1.val"); // Читаем индекс выбранной строки ComboBox Nextion.
     if(rawValue == 777777) return; // Выходим из функции при служебном/ошибочном значении
-    int nextValue = static_cast<int>(rawValue) + 1; // Преобразуем значение в int и увеличиваем на 1
-    if(nextValue < 1) nextValue = 1; // Ограничиваем минимальное допустимое значение
-    if(nextValue > 13) nextValue = 13; // Ограничиваем максимальное допустимое значение
+    int nextValue = dosingModeFromNextionComboIndex(static_cast<int>(rawValue)); // Индекс строки переводим в код периода ESP32.
     Saved_H2O2_Work = H2O2_Work = nextValue; // Сохраняем скорректированное значение в рабочие переменные
+    holdNextionDispensersWrites(6000); // Даем Nextion время закрыть список, чтобы ESP32 не вернул старое значение.
     saveValue<int>("H2O2_Work", H2O2_Work); // Записываем значение в энергонезависимую память
 }
 
@@ -1132,17 +1183,25 @@ triggerActivated_Nextion = false; //Деактивируем вызов из loo
     case 21:  break;
     case 22:  break;
     case 23: 
-    Saved_ACO_Work = ACO_Work = myNex.readNumber("Dispensers.cb0.val") +1;  //Отложенное повторное выполнение через 1 секунду
-    if(ACO_Work < 1) ACO_Work = 1;
-    saveValue<int>("ACO_Work", ACO_Work);
+    {
+      uint32_t rawValue = myNex.readNumber("Dispensers.cb0.val"); // Старый отложенный путь оставлен совместимым с корректным маппингом.
+      if(rawValue != 777777) {
+        Saved_ACO_Work = ACO_Work = dosingModeFromNextionComboIndex(static_cast<int>(rawValue)); // Индекс ComboBox переводим через таблицу.
+        saveValue<int>("ACO_Work", ACO_Work);
+      }
+    }
     //Serial.println(ACO_Work);
     // jee.var("ACO_Work", String(ACO_Work));
     break;
     case 24:  break;
     case 25: 
-    Saved_H2O2_Work = H2O2_Work = myNex.readNumber("Dispensers.cb1.val") +1;  //Отложенное повторное выполнение через 1 секунду
-    if(H2O2_Work < 1) H2O2_Work = 1;
-    saveValue<int>("H2O2_Work", H2O2_Work);
+    {
+      uint32_t rawValue = myNex.readNumber("Dispensers.cb1.val"); // Старый отложенный путь оставлен совместимым с корректным маппингом.
+      if(rawValue != 777777) {
+        Saved_H2O2_Work = H2O2_Work = dosingModeFromNextionComboIndex(static_cast<int>(rawValue)); // Индекс ComboBox переводим через таблицу.
+        saveValue<int>("H2O2_Work", H2O2_Work);
+      }
+    }
     //Serial.println(H2O2_Work);
     // jee.var("H2O2_Work", String(H2O2_Work));
     break;
