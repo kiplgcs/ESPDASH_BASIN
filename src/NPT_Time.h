@@ -66,6 +66,49 @@ inline int normalizeGmtOffset(int offset) {
   return offset;
 }
 
+inline bool isValidGmtOffsetValue(int offset) { // Проверяем часовой пояс до применения, чтобы случайный UART-мусор не менял GMT.
+  return offset >= -12 && offset <= 14; // Диапазон Nextion/ESP для часовых поясов.
+}
+
+void applyGmtOffsetValue(int offset, bool shiftCurrentTime); // Объявление нужно для подтвержденного применения GMT ниже.
+
+inline GmtOffsetSyncResult applyConfirmedGmtOffsetFromNextionValue(int nextionOffset, bool shiftCurrentTime = true) {
+  static int pendingOffset = 1000; // Кандидат GMT из Nextion, который ждет второго подтверждения.
+  static uint8_t pendingCount = 0; // Количество одинаковых чтений подряд для кандидата.
+
+  GmtOffsetSyncResult result; // Возвращаем состояние, чтобы вызывающий код мог понять, был ли сдвиг.
+  result.oldOffset = normalizeGmtOffset(gmtOffset_correct); // Текущий GMT ESP до проверки.
+  if (!isValidGmtOffsetValue(nextionOffset)) {
+    pendingOffset = 1000; // Невалидный ответ сбрасывает кандидата.
+    pendingCount = 0; // Одиночный мусор не должен накапливаться.
+    return result; // Не применяем значение вне диапазона.
+  }
+
+  result.valid = true; // Nextion вернул число в допустимом диапазоне.
+  result.newOffset = normalizeGmtOffset(nextionOffset); // Нормализуем значение перед сравнением.
+  if (result.newOffset == result.oldOffset) {
+    pendingOffset = 1000; // Текущее значение совпало с ESP, кандидат больше не нужен.
+    pendingCount = 0; // Сбрасываем счетчик подтверждения.
+    return result; // Изменения нет.
+  }
+
+  if (pendingOffset == result.newOffset) {
+    if (pendingCount < 2) pendingCount++; // Нужно два одинаковых чтения подряд.
+  } else {
+    pendingOffset = result.newOffset; // Новый кандидат GMT.
+    pendingCount = 1; // Первое чтение только запоминаем.
+  }
+
+  if (pendingCount < 2) return result; // Не применяем GMT по одному чтению, чтобы не ловить случайные 0/7.
+
+  result.changed = true; // Значение подтверждено двумя одинаковыми чтениями.
+  result.shiftSeconds = static_cast<long>(result.newOffset - result.oldOffset) * 3600L; // Сдвиг локального времени.
+  pendingOffset = 1000; // После применения сбрасываем кандидата.
+  pendingCount = 0; // Следующее изменение снова потребует подтверждения.
+  applyGmtOffsetValue(result.newOffset, shiftCurrentTime); // Применяем значение Nextion и при необходимости сдвигаем время ESP.
+  return result;
+}
+
 
 bool isValidDateTime(int year, int month, int day, int hour, int minute, int second) {
   if (year < 2024 || year > 2040) return false;
@@ -156,19 +199,14 @@ void applyGmtOffsetFromEsp(int offset, bool shiftCurrentTime = true) {
 }
 
 GmtOffsetSyncResult applyGmtOffsetFromNextion(bool shiftCurrentTime = true) {
-  GmtOffsetSyncResult result; // Возвращаем состояние, чтобы вызывающий код мог понять, был ли сдвиг времени.
-  result.oldOffset = normalizeGmtOffset(gmtOffset_correct);
   const int nextionOffset = myNex.readNumber("pageRTC.n5.val"); // Редко читаем GMT offset из Nextion.
   if (nextionOffset == kNextionInvalidValue) {
-    return result; // Если Nextion не ответил, оставляем текущий часовой пояс ESP.
+    GmtOffsetSyncResult result; // Если Nextion не ответил, оставляем текущий часовой пояс ESP.
+    result.oldOffset = normalizeGmtOffset(gmtOffset_correct);
+    return result;
   }
 
-  result.valid = true;
-  result.newOffset = normalizeGmtOffset(nextionOffset);
-  result.changed = result.newOffset != result.oldOffset;
-  result.shiftSeconds = static_cast<long>(result.newOffset - result.oldOffset) * 3600L;
-  applyGmtOffsetValue(result.newOffset, shiftCurrentTime); // Применяем значение Nextion и при необходимости сдвигаем время ESP.
-  return result;
+  return applyConfirmedGmtOffsetFromNextionValue(nextionOffset, shiftCurrentTime); // GMT из Nextion принимаем только после подтверждения.
 }
 
 bool getCurrentHourMinute(int &currentHour, int &currentMinute) {

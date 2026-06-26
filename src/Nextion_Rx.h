@@ -41,6 +41,8 @@ bool NextionScreenDimmed = false; // Флаг нужен, чтобы не сла
 constexpr uint8_t NX_ASYNC_GROUP_NONE = 0;
 constexpr uint8_t NX_ASYNC_GROUP_DISPENSERS = 1;
 constexpr uint8_t NX_ASYNC_GROUP_FILTR_SWITCHES = 2;
+constexpr uint8_t NX_ASYNC_GROUP_DISPENSERS_CONTROLS = 3;
+constexpr uint8_t NX_ASYNC_GROUP_GMT_OFFSET = 4;
 
 struct NextionAsyncNumberRead {
   bool active = false;
@@ -62,6 +64,11 @@ unsigned long NxFiltrSwitchPollRequestUntil = 0;
 unsigned long NxFiltrWriteHoldUntil = 0;
 unsigned long NxLastFiltrSwitchPollMs = 0;
 uint8_t NxFiltrSwitchPollIndex = 0;
+unsigned long NxDispensersControlPollRequestUntil = 0;
+unsigned long NxNextDispensersControlPollAt = 0;
+uint8_t NxDispensersControlPollIndex = 0;
+unsigned long NxGmtOffsetPollRequestUntil = 0;
+unsigned long NxNextGmtOffsetPollAt = 0;
 
 inline bool nextionAsyncReadActive() {
   return NxAsyncNumberReadState.active;
@@ -127,6 +134,28 @@ inline void requestNextionFiltrSwitchPoll(unsigned long pollMs = 1800) {
 inline bool nextionFiltrSwitchPollRequested() {
   return NxFiltrSwitchPollRequestUntil != 0 &&
          static_cast<long>(millis() - NxFiltrSwitchPollRequestUntil) < 0;
+}
+
+inline void requestNextionDispensersControlPoll(unsigned long pollMs = 7000, unsigned long firstDelayMs = 350) {
+  Nx_page_id = 9; // Если пришел trigger дозаторов, считаем страницу Dispensers активной даже до обработки page-event.
+  NxDispensersControlPollRequestUntil = millis() + pollMs; // Несколько секунд читаем controls после события, чтобы ComboBox успел закрыться.
+  NxNextDispensersControlPollAt = millis() + firstDelayMs; // Первое чтение откладываем, иначе Nextion часто возвращает старый индекс.
+  NxDispensersControlPollIndex = 0; // Начинаем цикл с sw0/cb0.
+}
+
+inline bool nextionDispensersControlPollRequested() {
+  return NxDispensersControlPollRequestUntil != 0 &&
+         static_cast<long>(millis() - NxDispensersControlPollRequestUntil) < 0;
+}
+
+inline void requestNextionGmtOffsetPoll(unsigned long pollMs = 2500, unsigned long firstDelayMs = 300) {
+  NxGmtOffsetPollRequestUntil = millis() + pollMs; // После изменения GMT читаем несколько раз для подтверждения.
+  NxNextGmtOffsetPollAt = millis() + firstDelayMs; // Не читаем значение в тот же момент, когда Nextion еще обновляет поле.
+}
+
+inline bool nextionGmtOffsetPollRequested() {
+  return NxGmtOffsetPollRequestUntil != 0 &&
+         static_cast<long>(millis() - NxGmtOffsetPollRequestUntil) < 0;
 }
 
 inline float nextionComposeTenths(uint8_t wholeIndex, uint8_t tenthIndex, float fallback) {
@@ -207,6 +236,54 @@ inline void applyNextionFiltrSwitchAsyncValue(uint8_t target, uint32_t value) {
   }
 }
 
+inline void applyNextionDispensersControlAsyncValue(uint8_t target, uint32_t value) {
+  bool changed = false; // Флаг нужен, чтобы продлить запрет обратной записи только при реальном изменении.
+
+  if (target == 0) { // sw0: включение контроля pH/ACO.
+    const bool nextValue = value != 0;
+    if (PH_Control_ACO != nextValue) {
+      Saved_PHControlACO = PH_Control_ACO = nextValue; // Синхронизируем рабочую и сохраненную копию.
+      saveValue<int>("PH_Control_ACO", PH_Control_ACO ? 1 : 0); // Сохраняем выбор Nextion в NVS.
+      changed = true;
+    }
+  } else if (target == 1) { // cb0: период дозирования кислоты.
+    const int nextionIndex = static_cast<int>(value);
+    if (!isValidNextionDosingComboIndex(nextionIndex)) return; // Мусорный индекс не должен менять период.
+    const int nextValue = dosingModeFromNextionComboIndex(nextionIndex);
+    if (ACO_Work != nextValue) {
+      Saved_ACO_Work = ACO_Work = nextValue; // Nextion хранит индекс строки, ESP32 хранит код периода.
+      saveValue<int>("ACO_Work", ACO_Work); // Сохраняем подтвержденный период.
+      changed = true;
+    }
+  } else if (target == 2) { // sw2: включение контроля хлора/NaOCl.
+    const bool nextValue = value != 0;
+    if (NaOCl_H2O2_Control != nextValue) {
+      Saved_NaOCl_H2O2_Control = NaOCl_H2O2_Control = nextValue; // Синхронизируем рабочую и сохраненную копию.
+      saveValue<int>("NaOCl_H2O2_Control", NaOCl_H2O2_Control ? 1 : 0); // Сохраняем выбор Nextion в NVS.
+      changed = true;
+    }
+  } else if (target == 3) { // cb1: период дозирования хлора.
+    const int nextionIndex = static_cast<int>(value);
+    if (!isValidNextionDosingComboIndex(nextionIndex)) return; // Мусорный индекс не должен менять период.
+    const int nextValue = dosingModeFromNextionComboIndex(nextionIndex);
+    if (H2O2_Work != nextValue) {
+      Saved_H2O2_Work = H2O2_Work = nextValue; // Nextion хранит индекс строки, ESP32 хранит код периода.
+      saveValue<int>("H2O2_Work", H2O2_Work); // Сохраняем подтвержденный период.
+      changed = true;
+    }
+  }
+
+  if (changed) holdNextionDispensersWrites(9000); // После принятия Nextion-команды долго не возвращаем старое значение на экран.
+}
+
+inline void applyNextionGmtOffsetAsyncValue(uint32_t value) {
+  const int nextionOffset = static_cast<int>(value); // Значение GMT из pageRTC.n5.val.
+  GmtOffsetSyncResult gmtOffsetSync = applyConfirmedGmtOffsetFromNextionValue(nextionOffset, true); // Применяем только два одинаковых чтения подряд.
+  if (gmtOffsetSync.changed) {
+    syncNextionRtcFromEpoch(getCurrentEpoch()); // После подтвержденной смены GMT обновляем RTC Nextion пересчитанным временем.
+  }
+}
+
 inline void beginNextionAsyncNumberRead(const char* component, uint8_t target, uint8_t group = NX_ASYNC_GROUP_DISPENSERS) {
   if (NxAsyncNumberReadState.active || MySerial.available() > 0) return;
   NxAsyncNumberReadState.active = true;
@@ -258,6 +335,10 @@ inline bool processNextionAsyncNumberByte() {
           applyNextionDispensersAsyncValue(target, readValue);
         } else if (group == NX_ASYNC_GROUP_FILTR_SWITCHES) {
           applyNextionFiltrSwitchAsyncValue(target, readValue);
+        } else if (group == NX_ASYNC_GROUP_DISPENSERS_CONTROLS) {
+          applyNextionDispensersControlAsyncValue(target, readValue);
+        } else if (group == NX_ASYNC_GROUP_GMT_OFFSET) {
+          applyNextionGmtOffsetAsyncValue(readValue);
         }
       }
     } else {
@@ -307,6 +388,7 @@ inline void serviceNextionSerial(uint8_t maxOperations = 24) {
 
 inline void pollNextionDispensersSettingsAsync() {
   if (Nx_page_id != 9 || nextionDispensersReadHoldActive() || NxAsyncNumberReadState.active || MySerial.available() > 0) return;
+  if (nextionDispensersControlPollRequested()) return; // После действий пользователя сначала подтверждаем sw/cb, затем читаем пределы pH/CL.
   if (static_cast<unsigned long>(millis() - NxLastDispensersAsyncPollMs) < 250UL) return;
   static const char* components[] = {
     "Dispensers.n0.val", "Dispensers.n1.val",
@@ -317,6 +399,21 @@ inline void pollNextionDispensersSettingsAsync() {
   NxLastDispensersAsyncPollMs = millis();
   beginNextionAsyncNumberRead(components[NxDispensersAsyncPollIndex], NxDispensersAsyncPollIndex, NX_ASYNC_GROUP_DISPENSERS);
   NxDispensersAsyncPollIndex = (NxDispensersAsyncPollIndex + 1) % 8;
+}
+
+inline void pollNextionDispensersControlsAsync() {
+  if (!nextionDispensersControlPollRequested()) return; // Без события Nextion не трогаем controls, чтобы не грузить UART.
+  if (Nx_page_id != 9 || nextionDispensersReadHoldActive() || NxAsyncNumberReadState.active || MySerial.available() > 0) return;
+  if (static_cast<long>(millis() - NxNextDispensersControlPollAt) < 0) return; // Ждем отложенное окно после выбора ComboBox.
+  static const char* components[] = {
+    "Dispensers.sw0.val",
+    "Dispensers.cb0.val",
+    "Dispensers.sw2.val",
+    "Dispensers.cb1.val"
+  };
+  beginNextionAsyncNumberRead(components[NxDispensersControlPollIndex], NxDispensersControlPollIndex, NX_ASYNC_GROUP_DISPENSERS_CONTROLS);
+  NxDispensersControlPollIndex = (NxDispensersControlPollIndex + 1) % 4; // Читаем по одному компоненту за проход.
+  NxNextDispensersControlPollAt = millis() + 250UL; // Пауза между get-командами, чтобы Nextion не терял ответы.
 }
 
 inline void pollNextionFiltrSwitchesAsync() {
@@ -333,6 +430,14 @@ inline void pollNextionFiltrSwitchesAsync() {
   NxLastFiltrSwitchPollMs = millis();
   beginNextionAsyncNumberRead(components[NxFiltrSwitchPollIndex], NxFiltrSwitchPollIndex, NX_ASYNC_GROUP_FILTR_SWITCHES);
   NxFiltrSwitchPollIndex = (NxFiltrSwitchPollIndex + 1) % 4;
+}
+
+inline void pollNextionGmtOffsetAsync() {
+  if (!nextionGmtOffsetPollRequested()) return; // GMT читаем серией только после события pageRTC.
+  if (NxAsyncNumberReadState.active || MySerial.available() > 0) return;
+  if (static_cast<long>(millis() - NxNextGmtOffsetPollAt) < 0) return; // Ждем, пока поле Nextion обновится.
+  beginNextionAsyncNumberRead("pageRTC.n5.val", 0, NX_ASYNC_GROUP_GMT_OFFSET); // Читаем GMT без блокировки loop().
+  NxNextGmtOffsetPollAt = millis() + 500UL; // Два одинаковых чтения подряд подтвердят смену часового пояса.
 }
 
 // void ActivUARTInterrupt() {//Прерывание по Rx для получения данных от Nextion монитора - отключено потому что и так работает все хорошо.
@@ -893,13 +998,9 @@ void trigger20(){read_heat_sw0();}
 // }
 // void trigger22(){read_Dispensers_sw0_sw1();} 
 void read_Dispensers_sw0_sw1(){
-    uint32_t rawValue = myNex.readNumber("Dispensers.sw0.val");
-    if(rawValue == 777777) return;
-    Saved_PHControlACO = PH_Control_ACO = rawValue != 0;
-    holdNextionDispensersWrites();
-    saveValue<int>("PH_Control_ACO", PH_Control_ACO ? 1 : 0);
+    requestNextionDispensersControlPoll(); // Читаем sw0 асинхронно после завершения события Nextion.
 }
-void trigger22(){holdNextionDispensersWrites(); read_Dispensers_sw0_sw1();}
+void trigger22(){holdNextionDispensersWrites(9000); read_Dispensers_sw0_sw1();}
 // // printh 23 02 54 17  - Dispensers  свчитываем состояние ComboBox cb0.txt
 // void read_Dispensers_cb0(){
 //     //Отложенное повторное выполнение через 2 секунды - выполняем NextionDelay();
@@ -911,14 +1012,9 @@ void trigger22(){holdNextionDispensersWrites(); read_Dispensers_sw0_sw1();}
 // } 
 
 void read_Dispensers_cb0(){ // Колбэк-функция обработки значения cb0
-    uint32_t rawValue = myNex.readNumber("Dispensers.cb0.val"); // Читаем индекс выбранной строки ComboBox Nextion.
-    if(rawValue == 777777) return; // Выход из функции при получении служебного/ошибочного значения - чтобы не помещало правильной работе логики
-    int nextValue = dosingModeFromNextionComboIndex(static_cast<int>(rawValue)); // Индекс строки переводим в код периода ESP32.
-    Saved_ACO_Work = ACO_Work = nextValue; // Сохраняем итоговое корректное значение
-    holdNextionDispensersWrites(6000); // Даем Nextion время закрыть список, чтобы ESP32 не вернул старое значение.
-    saveValue<int>("ACO_Work", ACO_Work); // Записываем значение в энергонезависимую память
+    requestNextionDispensersControlPoll(); // ComboBox читаем отложенно: сразу после выбора Nextion часто возвращает старый индекс.
 }
-void trigger23(){holdNextionDispensersWrites(); read_Dispensers_cb0();}
+void trigger23(){holdNextionDispensersWrites(9000); read_Dispensers_cb0();}
 // // printh 23 02 54 18 - Dispensers  свчитываем состояние n4 / n5
 // void read_Dispensers_sw2_sw3(){
 //     Saved_NaOCl_H2O2_Control = NaOCl_H2O2_Control = myNex.readNumber("Dispensers.sw2.val"); delay(10);
@@ -930,13 +1026,9 @@ void trigger23(){holdNextionDispensersWrites(); read_Dispensers_cb0();}
 // }
 // void trigger24(){read_Dispensers_sw2_sw3();} 
 void read_Dispensers_sw2_sw3(){
-    uint32_t rawValue = myNex.readNumber("Dispensers.sw2.val");
-    if(rawValue == 777777) return;
-    Saved_NaOCl_H2O2_Control = NaOCl_H2O2_Control = rawValue != 0;
-    holdNextionDispensersWrites();
-    saveValue<int>("NaOCl_H2O2_Control", NaOCl_H2O2_Control ? 1 : 0);
+    requestNextionDispensersControlPoll(); // Читаем sw2 асинхронно после завершения события Nextion.
 }
-void trigger24(){holdNextionDispensersWrites(); read_Dispensers_sw2_sw3();}
+void trigger24(){holdNextionDispensersWrites(9000); read_Dispensers_sw2_sw3();}
 
 // // printh 23 02 54 19 - Dispensers  свчитываем состояние n4 / n5
 // void read_Dispensers_cb1(){
@@ -951,15 +1043,10 @@ void trigger24(){holdNextionDispensersWrites(); read_Dispensers_sw2_sw3();}
 // } 
 
 void read_Dispensers_cb1(){ // Колбэк-функция обработки значения cb1
-    uint32_t rawValue = myNex.readNumber("Dispensers.cb1.val"); // Читаем индекс выбранной строки ComboBox Nextion.
-    if(rawValue == 777777) return; // Выходим из функции при служебном/ошибочном значении
-    int nextValue = dosingModeFromNextionComboIndex(static_cast<int>(rawValue)); // Индекс строки переводим в код периода ESP32.
-    Saved_H2O2_Work = H2O2_Work = nextValue; // Сохраняем скорректированное значение в рабочие переменные
-    holdNextionDispensersWrites(6000); // Даем Nextion время закрыть список, чтобы ESP32 не вернул старое значение.
-    saveValue<int>("H2O2_Work", H2O2_Work); // Записываем значение в энергонезависимую память
+    requestNextionDispensersControlPoll(); // ComboBox читаем отложенно: сразу после выбора Nextion часто возвращает старый индекс.
 }
 
-void trigger25(){holdNextionDispensersWrites(); read_Dispensers_cb1();}
+void trigger25(){holdNextionDispensersWrites(9000); read_Dispensers_cb1();}
 
 inline float readDispensersTenths(const char* wholeComponent, const char* tenthComponent, float fallback){
     uint32_t wholeRaw = myNex.readNumber(wholeComponent); // Читаем целую часть без дополнительного delay.
@@ -1092,10 +1179,7 @@ void trigger34(){read_set_topping_controls();} // Триггер Nextion для 
 //     if(gmtOffset_correct > 1 && gmtOffset_correct < 10){jee.var("gmtOffset_correct", String(gmtOffset_correct)); }
 // }
 void trigger31(){
-  GmtOffsetSyncResult gmtOffsetSync = applyGmtOffsetFromNextion(true); // Nextion изменил GMT: сразу применяем часовой пояс в ESP и сдвигаем локальное время.
-  if (gmtOffsetSync.changed) {
-    syncNextionRtcFromEpoch(getCurrentEpoch()); // После сдвига GMT сразу возвращаем в Nextion пересчитанное локальное RTC-время.
-  }
+  requestNextionGmtOffsetPoll(); // Nextion изменил GMT: читаем значение позже и подтверждаем двумя одинаковыми ответами.
 }
 
 
@@ -1183,25 +1267,13 @@ triggerActivated_Nextion = false; //Деактивируем вызов из loo
     case 21:  break;
     case 22:  break;
     case 23: 
-    {
-      uint32_t rawValue = myNex.readNumber("Dispensers.cb0.val"); // Старый отложенный путь оставлен совместимым с корректным маппингом.
-      if(rawValue != 777777) {
-        Saved_ACO_Work = ACO_Work = dosingModeFromNextionComboIndex(static_cast<int>(rawValue)); // Индекс ComboBox переводим через таблицу.
-        saveValue<int>("ACO_Work", ACO_Work);
-      }
-    }
+    requestNextionDispensersControlPoll(); // Старый отложенный путь тоже только планирует безопасное чтение ComboBox.
     //Serial.println(ACO_Work);
     // jee.var("ACO_Work", String(ACO_Work));
     break;
     case 24:  break;
     case 25: 
-    {
-      uint32_t rawValue = myNex.readNumber("Dispensers.cb1.val"); // Старый отложенный путь оставлен совместимым с корректным маппингом.
-      if(rawValue != 777777) {
-        Saved_H2O2_Work = H2O2_Work = dosingModeFromNextionComboIndex(static_cast<int>(rawValue)); // Индекс ComboBox переводим через таблицу.
-        saveValue<int>("H2O2_Work", H2O2_Work);
-      }
-    }
+    requestNextionDispensersControlPoll(); // Старый отложенный путь тоже только планирует безопасное чтение ComboBox.
     //Serial.println(H2O2_Work);
     // jee.var("H2O2_Work", String(H2O2_Work));
     break;

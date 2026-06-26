@@ -61,6 +61,26 @@ int getSubstring(const String& input, int start, int end) {
     return result;
 }
 
+constexpr uint16_t NX_COLOR_GREEN = 2016; // Зеленый RGB565 для нормального состояния уровнемера.
+constexpr uint16_t NX_COLOR_YELLOW = 65504; // Желтый RGB565 для предупреждения по верхнему уровню.
+constexpr uint16_t NX_COLOR_RED = 63488; // Красный RGB565 для аварийного/сработавшего уровня.
+constexpr uint16_t NX_COLOR_WHITE = 65535; // Белый RGB565 для символа внутри индикатора.
+
+inline void writeNextionLevelIndicator(const String &component, bool active, uint16_t activeColor, uint16_t normalColor) {
+  myNex.writeNum("set_topping." + component + ".val", active ? 1 : 0); // Галочка/состояние самого индикатора.
+  myNex.writeNum("set_topping." + component + ".bco", active ? activeColor : normalColor); // Цвет фона делает пиктограмму понятной.
+  myNex.writeNum("set_topping." + component + ".pco", NX_COLOR_WHITE); // Символ индикатора оставляем контрастным.
+}
+
+inline void writeNextionLevelIndicators() {
+  const bool upperBelow = WaterLevelSensorUpper; // Верхний контакт замкнут, когда уровень ниже верхнего датчика.
+  const bool lowerLow = WaterLevelSensorLower; // Нижний контакт замкнут, когда уровень ниже нижнего датчика.
+  const bool drainFull = DrainPitFullConfirmed; // Яма заполнена, когда семантический верхний уровень подтвержден.
+  writeNextionLevelIndicator("c0", upperBelow, NX_COLOR_YELLOW, NX_COLOR_GREEN); // c0: верхний датчик бассейна.
+  writeNextionLevelIndicator("c1", lowerLow, NX_COLOR_RED, NX_COLOR_GREEN); // c1: нижний датчик бассейна.
+  writeNextionLevelIndicator("c2", drainFull, NX_COLOR_RED, NX_COLOR_GREEN); // c2: верхний датчик сливной ямы.
+}
+
 
 
 
@@ -617,9 +637,7 @@ if (Nx_page_id == 6 && !triggerRestartNextion &&
   myNex.writeNum("set_topping.sw0.val", Activation_Water_Level ? 1 : 0); // sw0: контроль уровня.
   myNex.writeNum("set_topping.sw1.val", Power_Drain ? 1 : 0); // sw1: слив.
   myNex.writeNum("set_topping.sw2.val", Power_Topping ? 1 : 0); // sw2: клапан долива.
-  myNex.writeNum("set_topping.c0.val", WaterLevelSensorUpper ? 1 : 0); // c0: верхний уровень бассейна.
-  myNex.writeNum("set_topping.c1.val", WaterLevelSensorLower ? 1 : 0); // c1: нижний уровень бассейна.
-  myNex.writeNum("set_topping.c2.val", WaterLevelSensorDrain ? 1 : 0); // c2: верхний уровень сливной ямы.
+  writeNextionLevelIndicators(); // c0/c1/c2: меняем именно пиктограммы уровнемеров, а не только текст.
   myNex.writeStr("set_topping.t0.txt", nextionKoi8R(currentWaterText)); // t0: понятная строка этапа работы.
 }
 #endif // Конец синхронизации set_topping без фонового переключения страниц.

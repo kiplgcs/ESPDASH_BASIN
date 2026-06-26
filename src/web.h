@@ -391,6 +391,10 @@ inline int nextionDosingComboIndexFromMode(int mode) { // Nextion ComboBox хр�
   }
 }
 
+inline bool isValidNextionDosingComboIndex(int index) { // Проверяем, что индекс ComboBox реально существует в HMI.
+  return index >= 0 && index <= 12; // В списке дозирования 13 строк: индексы Nextion 0...12.
+}
+
 inline int dosingModeFromNextionComboIndex(int index) { // Преобразуем индекс ComboBox Nextion обратно в рабочий код ESP32.
   switch (index) { // Нельзя использовать index + 1, потому что 24 часа в HMI стоит последней строкой.
     case 0: return 1; // 5 сек / 15 сек.

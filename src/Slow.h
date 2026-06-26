@@ -146,9 +146,7 @@ if(Nx_page_id == 4){
 }
 
 if(Nx_page_id == 6){
-  myNex.writeNum("set_topping.c0.val", WaterLevelSensorUpper ? 1 : 0); // c0: верхний уровень бассейна.
-  myNex.writeNum("set_topping.c1.val", WaterLevelSensorLower ? 1 : 0); // c1: нижний уровень бассейна.
-  myNex.writeNum("set_topping.c2.val", WaterLevelSensorDrain ? 1 : 0); // c2: верхний уровень сливной ямы.
+  writeNextionLevelIndicators(); // c0/c1/c2: меняем цвет/состояние самих пиктограмм уровнемеров.
   myNex.writeStr("set_topping.t0.txt", nextionKoi8R(waterLevelNextionText())); // t0: понятная строка текущего этапа.
 }
 

@@ -266,8 +266,13 @@ void loop() {
 
     acoServiceLoop(); // Обработка ручного импульса ACO по состоянию
   h2o2ServiceLoop(); // Обработка ручного импульса H2O2 по состоянию
+  serviceNextionSerial(32); // Сначала разгружаем UART Nextion, чтобы пользовательские события не ждали NTP/датчики.
+  pollNextionDispensersControlsAsync(); // Приоритетно принимаем изменения с экрана дозаторов.
+  pollNextionGmtOffsetAsync(); // Приоритетно принимаем подтвержденный GMT с Nextion.
   // Обновление времени через NTP/Nextion/память
-  NPT_Time(period_get_NPT_Time);
+  if (!nextionAsyncReadActive() && MySerial.available() == 0) { // RTC/NTP не должны вклиниваться в активный обмен Nextion.
+    NPT_Time(period_get_NPT_Time);
+  }
   CurrentTime = getCurrentDateTime();   // Получение текущего времени
 
 TimerControlRelay(1000);  // Контроль дозаторов и таймеров раз в 1 секунду, чтобы импульс насоса не растягивался.
@@ -283,8 +288,10 @@ loop_CL2(2100); // Обработка логики хлора
   if (!nextionAsyncReadActive()) {
     Nextion_Transmit(500); // Отправка в Nextion по очереди
   }
+  pollNextionDispensersControlsAsync();
   pollNextionDispensersSettingsAsync();
   pollNextionFiltrSwitchesAsync();
+  pollNextionGmtOffsetAsync();
   //if(Power_Clean){Power_Filtr = false;} //преимущество очистки - отключаем фильтрацию в любом случае (даже если включен по таймерам), если подошло время очистки фильтра
   // Проверяем, активирован ли триггер (без блокирующих delay)
   static unsigned long nextionDelayAt = 0;
@@ -320,8 +327,10 @@ loop_CL2(2100); // Обработка логики хлора
  ///****************************  Nextion - проверка прихода данных Tx/Rx ****************************************/
   // Ограничиваем количество чтений за итерацию, чтобы не блокировать основной цикл при шуме на линии
   serviceNextionSerial(32);
+  pollNextionDispensersControlsAsync();
   pollNextionDispensersSettingsAsync();
   pollNextionFiltrSwitchesAsync();
+  pollNextionGmtOffsetAsync();
  /**************************** *********************************************************************/
   // Nextion_Transmit(500); // Отправка в Nextion по очереди
   // if(Power_Clean){Power_Filtr = false;} //преимущество очистки - отключаем фильтрацию в любом случае (даже если включен по таймерам), если подошло время очистки фильтра
