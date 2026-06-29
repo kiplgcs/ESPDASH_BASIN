@@ -340,7 +340,7 @@ UI_COLOR("LEDColor", LEDColor, "🎨 Цвет подсветки");
     UI_CHECKBOX("NaOCl_H2O2_Control", NaOCl_H2O2_Control, "🧪 Контроль хлора (NaOCl)");
         UI_NUMBER("CL_Lower", CL_Lower, "⬇️ Нижний предел CL, мг/л", true);
     UI_NUMBER("CL_Upper", CL_Upper, "⬆️ Верхний предел CL, мг/л", true);
-    UI_NUMBER("ORP_setting", ORP_setting, "⬇️ Нижний предел ORP, мВ", false);
+    UI_DISPLAY("ClLimitRecommendationInfo", ClLimitRecommendationInfo, "ℹ️ Уставки CL"); // Показывает короткие рекомендуемые диапазоны для чистой воды, лета и зелени.
     UI_SELECT_CB("H2O2_Work", H2O2_Work, dosingOptions, "⏳ Период дозирования NaOCl", onH2O2DosingPeriodChange);
     UI_DISPLAY("ClLogicInfo", ClLogicInfo, "ℹ️ Логика CL и RS485");
 

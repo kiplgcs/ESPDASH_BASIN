@@ -78,6 +78,12 @@ inline void clearDosingEventsAfterGraphSample(const String &series, bool pointAd
   if(series == "FloatСl") PendingH2O2DosingGraphEvents = 0; // События NaOCl уже записаны в точку хлора.
 }
 
+inline void syncChlorineOrpGraphRuntimeSettings(){ // Синхронизирует скрытую ORP-серию с видимым графиком ppmCl без расширения формата точки.
+  auto chlorineSettings = seriesConfig.find(chlorinePpmGraphSeriesId()); // Берем текущие настройки видимого хлорного графика.
+  if(chlorineSettings == seriesConfig.end()) return; // Если UI еще не зарегистрировал график, синхронизацию пропускаем.
+  seriesConfig[chlorineOrpGraphSeriesId()] = chlorineSettings->second; // Скрытая серия ORP пишет точки с тем же интервалом и лимитом.
+}
+
 
 /* ---------- Setup ---------- */
 void setup() {
@@ -200,6 +206,7 @@ void setup() {
   loadGraph();
 
   dash.begin(); // Запуск дашборда
+  registerGraphSource(chlorineOrpGraphSeriesId(), [](){ return static_cast<float>(corrected_ORP_Eh_mV); }, "", defaultGraphUpdateInterval, maxGraphPoints); // Скрыто пишем ORP для таблицы хлорного графика стандартным форматом time,value,events.
 
 
   setup_Modbus();
@@ -557,6 +564,7 @@ loop_CL2(2100); // Обработка логики хлора
   loop_WS2815(); // Перед возможными SPIFFS-записями даем ленте шанс выдать очередной кадр.
   captureDosingPumpGraphEvents(); // Перед записью точки фиксируем включения дозаторов для меток на PH/CL.
   addGraphPoint(CurrentTime, RandomVal); // Обновление графика RandomVal
+  syncChlorineOrpGraphRuntimeSettings(); // Перед записью точек держим ORP-историю синхронной с графиком ppmCl.
   for(auto &entry : graphValueProviders){
     float graphValue = entry.second(); // Читаем значение один раз, чтобы событие и точка относились к одному измерению.
     uint16_t graphEvents = dosingEventsForGraphSeries(entry.first); // Для PH/CL добавляем число включений дозатора за интервал.

@@ -193,6 +193,7 @@ String ClCalibrationGuide = "Промойте электрод, опустите
 String ClCalibrationFormula = ""; // Живая строка с формулой расчета поправки ORP.
 String ClCalibrationStatus = ""; // Живая строка со сравнением сохраненной и расчетной поправки ORP.
 String ClCalibrationTemperatureInfo = ""; // Живая строка с температурой и pH, влияющими на расчет ppmCl.
+String ClLimitRecommendationInfo = "Чистый: низ 1.0, верх 1.5 мг/л. Лето/солнце/нагрузка: низ 1.5, верх 2.0-2.5. Зеленеет: не лечить автоматикой; шок вручную по DPD, затем вернуть."; // Краткая подсказка по уставкам CL рядом с настройками дозирования.
 
 int Saved_gmtOffset_correct, gmtOffset_correct; // Корректировка часового пояса призапросен времени из Интернета
 
@@ -319,7 +320,7 @@ inline String PoolWaterLevelStageInfo; // Текущий этап контрол
 inline String DrainPitStageInfo; // Текущий этап слива в яму с таймерами для Web.
 inline String CleanLogicInfo = "Промывка: реле 9 насос, реле 10 компрессор, реле 11 клапан FILTRATION, реле 12 клапан BACKWASH, реле 13 сброс песка. Последовательность: останов насоса, воздух, перевод клапанов, обратная промывка, возврат в фильтрацию, краткий сброс песка.";
 inline String PhLogicInfo = "pH: насос кислоты ACO подключен к реле 7. При pH выше верхнего предела реле включается только импульсом 5 секунд; повтор задается списком. Остановка контроля при pH ниже нижнего предела или выключенной фильтрации.";
-inline String ClLogicInfo = "CL: насос NaOCl подключен к реле 6. При хлоре ниже нижнего предела реле включается только импульсом 5 секунд; повтор задается списком. Хлор не подается, пока pH вне заданного диапазона. Остановка контроля при хлоре выше верхнего предела или выключенной фильтрации.";
+inline String ClLogicInfo = "CL: насос NaOCl на реле 6. Управление идет по нижнему/верхнему CL; отдельный ORP-порог в веб-настройках не нужен. Хлор подается импульсом 5 секунд, только при нормальном pH, потоке и фильтрации."; // Коротко объясняет текущую логику дозирования CL без старого ORP-порога.
 inline String RelayShortInfo = "RS485: реле 9 насос фильтрации, 6 NaOCl, 7 ACO, 14 долив, входы 1/2/3 уровни воды.";
 inline String Rs485UsageInfo = "Задействовано: R1 лампа бассейна; R2 питание WS2815; R6 насос NaOCl; R7 насос ACO; R9 насос фильтрации/слив; R10 компрессор клапанов; R11 клапан FILTRATION; R12 клапан BACKWASH; R13 сброс песка; R14 клапан долива; R15 теплый пол; R16 улица. Свободны/резерв: R3, R4, R5, R8. Входы: IN1 нижний уровень бассейна, IN2 верхний уровень бассейна, IN3 верхний уровень сливной ямы, IN4-IN16 свободны.";
 
@@ -3901,10 +3902,21 @@ function resizeCustomGraphs(){
   });
 }
 
+function isChlorineGraph(canvas){ // Определяет график хлора по подписи оси и имени серии.
+  if(!canvas) return false; // Без canvas нельзя надежно определить тип графика.
+  const yLabel = (canvas.dataset.yLabel || '').toLowerCase(); // Берем подпись Y из data-атрибутов графика.
+  const series = (canvas.dataset.series || '').toLowerCase(); // Берем имя серии из data-атрибутов графика.
+  return yLabel.includes('хлор') || yLabel.includes('cl') || yLabel.includes('ppm') || series.includes('floatcl'); // Хлорный график показывает ppmCl.
+} // Завершаем helper определения хлорного графика.
+
 function populateGraphTable(tableId, data){
   if(!tableId || !data) return;
   const table = document.getElementById(tableId);
   if(!table) return;
+  const tableCanvas = customGraphCanvases.find(canvas=>canvas.dataset.tableId === tableId); // Находим canvas, которому принадлежит таблица.
+  const chlorineTable = isChlorineGraph(tableCanvas); // Для хлорного графика таблица получает дополнительную колонку ORP.
+  const headerRow = table.querySelector('thead tr'); // Получаем строку заголовков таблицы.
+  if(headerRow) headerRow.innerHTML = '<th>№</th><th>Дата и время</th><th>Значение</th>' + (chlorineTable ? '<th>ORP, мВ</th>' : '') + '<th>События</th>'; // Заголовки пересобираются под тип графика.
   const tbody = table.querySelector('tbody');
   if(!tbody) return;
   tbody.innerHTML = '';
@@ -3913,7 +3925,8 @@ function populateGraphTable(tableId, data){
     const tr = document.createElement('tr');
     const events = Number(point.events || 0);
     const eventText = events > 0 ? ('x' + events) : '';
-     tr.innerHTML = '<td>'+row+'</td><td>'+point.time+'</td><td>'+point.value+'</td><td>'+eventText+'</td>';
+    const orpText = chlorineTable ? (typeof point.orp !== 'undefined' ? point.orp : '--') : ''; // ORP берется из скрытой серии; старые точки без ORP показывают прочерк.
+     tr.innerHTML = '<td>'+row+'</td><td>'+point.time+'</td><td>'+point.value+'</td>' + (chlorineTable ? '<td>'+orpText+'</td>' : '') + '<td>'+eventText+'</td>'; // Формируем строку таблицы с ORP только для хлорного графика.
     tbody.appendChild(tr);
   }
 }
@@ -3933,6 +3946,7 @@ function formatGraphHeadline(canvas, value){
   if(yLabel.includes('temperature') || yLabel.includes('темпер')) unit = '°C';
   else if(yLabel.includes('ph') || series.includes('ph')) unit = ' pH';
   else if(yLabel.includes('хлор') || yLabel.includes('cl') || yLabel.includes('ppm')) unit = ' ppm';
+  if(isChlorineGraph(canvas) && typeof canvas.dataset.liveOrp !== 'undefined') return formatGraphNumber(value) + unit + ' | ORP ' + formatGraphNumber(canvas.dataset.liveOrp) + ' мВ'; // У хлора рядом с online ppm показываем текущий ORP.
   return formatGraphNumber(value) + unit;
 }
 
@@ -4399,6 +4413,7 @@ window.addEventListener('resize', ()=>{
       const key = canvas.dataset.valueName;
       if(!key || typeof j[key] === 'undefined') return;
       canvas.dataset.liveValue = j[key];
+      if(isChlorineGraph(canvas) && typeof j.corrected_ORP_Eh_mV !== 'undefined') canvas.dataset.liveOrp = j.corrected_ORP_Eh_mV; // Для online-подписи хлорного графика держим рядом текущий ORP.
       const cached = graphDataCache.get(canvas);
       if(cached && cached.points) drawCustomGraph(canvas, cached.points);
     });
@@ -5025,10 +5040,26 @@ function setImg(x){
         if(it != customGraphSeries.end() && !it->second.empty()) points = &it->second;
         else points = &emptySeries;
       }
+      const vector<GraphPoint> *orpPoints = nullptr; // Для хлорного графика отдельно подключаем скрытую ORP-серию без изменения формата GraphPoint.
+      if(isChlorinePpmGraphSeries(series)){ // ORP нужен только для таблицы видимого графика ppmCl.
+        auto orpIt = customGraphSeries.find(chlorineOrpGraphSeriesId()); // Ищем скрытую серию ORP, записанную тем же стандартным форматом.
+        if(orpIt != customGraphSeries.end() && !orpIt->second.empty()) orpPoints = &orpIt->second; // Используем ORP только когда серия уже накопила точки.
+      } // Завершаем выбор ORP-серии.
+      auto findOrpForPoint = [&](const GraphPoint &point, int pointIndex)->String { // Находит ORP для строки таблицы хлора по времени или позиции.
+        if(!orpPoints || orpPoints->empty()) return ""; // Если ORP-истории еще нет, в таблице будет прочерк.
+        for(const auto &orpPoint : *orpPoints){ // Сначала ищем точное совпадение времени точки ppmCl и ORP.
+          if(orpPoint.time == point.time) return String(orpPoint.value, 0); // Совпавшее время дает самый честный ORP для этой строки.
+        } // Завершаем точный поиск по времени.
+        int offsetFromEnd = static_cast<int>(points->size()) - 1 - pointIndex; // При разной длине серий выравниваем последние точки по правому краю.
+        int orpIndex = static_cast<int>(orpPoints->size()) - 1 - offsetFromEnd; // Вычисляем индекс ORP-точки с таким же смещением от конца.
+        if(orpIndex < 0 || orpIndex >= static_cast<int>(orpPoints->size())) return ""; // Если соответствующей ORP-точки нет, не подставляем неверное значение.
+        return String((*orpPoints)[orpIndex].value, 0); // Возвращаем ORP в мВ без дробной части.
+      }; // Завершаем локальный поиск ORP для таблицы.
       String s="[";
       for(int i=0;i<points->size();i++){
         s+="{\"time\":\""+(*points)[i].time+"\",\"value\":"+String((*points)[i].value);
         if((*points)[i].events > 0) s+=",\"events\":"+String((*points)[i].events); // Передаем счетчик дозирований только там, где он есть.
+        if(orpPoints){ String orpValue = findOrpForPoint((*points)[i], i); if(orpValue.length()) s+=",\"orp\":"+orpValue; } // Для таблицы хлора добавляем ORP из отдельной серии.
         s+="}";
         if(i<points->size()-1) s+=",";
       }

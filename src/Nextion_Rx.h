@@ -137,7 +137,6 @@ inline bool nextionFiltrSwitchPollRequested() {
 }
 
 inline void requestNextionDispensersControlPoll(unsigned long pollMs = 7000, unsigned long firstDelayMs = 350) {
-  Nx_page_id = 9; // Если пришел trigger дозаторов, считаем страницу Dispensers активной даже до обработки page-event.
   NxDispensersControlPollRequestUntil = millis() + pollMs; // Несколько секунд читаем controls после события, чтобы ComboBox успел закрыться.
   NxNextDispensersControlPollAt = millis() + firstDelayMs; // Первое чтение откладываем, иначе Nextion часто возвращает старый индекс.
   NxDispensersControlPollIndex = 0; // Начинаем цикл с sw0/cb0.
@@ -1000,7 +999,7 @@ void trigger20(){read_heat_sw0();}
 void read_Dispensers_sw0_sw1(){
     requestNextionDispensersControlPoll(); // Читаем sw0 асинхронно после завершения события Nextion.
 }
-void trigger22(){holdNextionDispensersWrites(9000); read_Dispensers_sw0_sw1();}
+void trigger22(){Nx_page_id = 9; holdNextionDispensersWrites(9000); read_Dispensers_sw0_sw1();} // Trigger с реальной страницы дозаторов подтверждает, что можно читать ее controls.
 // // printh 23 02 54 17  - Dispensers  свчитываем состояние ComboBox cb0.txt
 // void read_Dispensers_cb0(){
 //     //Отложенное повторное выполнение через 2 секунды - выполняем NextionDelay();
@@ -1014,7 +1013,7 @@ void trigger22(){holdNextionDispensersWrites(9000); read_Dispensers_sw0_sw1();}
 void read_Dispensers_cb0(){ // Колбэк-функция обработки значения cb0
     requestNextionDispensersControlPoll(); // ComboBox читаем отложенно: сразу после выбора Nextion часто возвращает старый индекс.
 }
-void trigger23(){holdNextionDispensersWrites(9000); read_Dispensers_cb0();}
+void trigger23(){Nx_page_id = 9; holdNextionDispensersWrites(9000); read_Dispensers_cb0();} // Trigger ComboBox ACO приходит со страницы дозаторов и разрешает безопасный опрос controls.
 // // printh 23 02 54 18 - Dispensers  свчитываем состояние n4 / n5
 // void read_Dispensers_sw2_sw3(){
 //     Saved_NaOCl_H2O2_Control = NaOCl_H2O2_Control = myNex.readNumber("Dispensers.sw2.val"); delay(10);
@@ -1028,7 +1027,7 @@ void trigger23(){holdNextionDispensersWrites(9000); read_Dispensers_cb0();}
 void read_Dispensers_sw2_sw3(){
     requestNextionDispensersControlPoll(); // Читаем sw2 асинхронно после завершения события Nextion.
 }
-void trigger24(){holdNextionDispensersWrites(9000); read_Dispensers_sw2_sw3();}
+void trigger24(){Nx_page_id = 9; holdNextionDispensersWrites(9000); read_Dispensers_sw2_sw3();} // Trigger sw2 приходит со страницы дозаторов и не дает скрытой странице выключать NaOCl.
 
 // // printh 23 02 54 19 - Dispensers  свчитываем состояние n4 / n5
 // void read_Dispensers_cb1(){
@@ -1046,7 +1045,7 @@ void read_Dispensers_cb1(){ // Колбэк-функция обработки з
     requestNextionDispensersControlPoll(); // ComboBox читаем отложенно: сразу после выбора Nextion часто возвращает старый индекс.
 }
 
-void trigger25(){holdNextionDispensersWrites(9000); read_Dispensers_cb1();}
+void trigger25(){Nx_page_id = 9; holdNextionDispensersWrites(9000); read_Dispensers_cb1();} // Trigger ComboBox NaOCl приходит со страницы дозаторов и разрешает безопасный опрос controls.
 
 inline float readDispensersTenths(const char* wholeComponent, const char* tenthComponent, float fallback){
     uint32_t wholeRaw = myNex.readNumber(wholeComponent); // Читаем целую часть без дополнительного delay.
@@ -1333,11 +1332,13 @@ read_lamp_sw0_sw1_sw2();
 // read_Dispensers_cb0();
 // read_Dispensers_sw2_sw3();
 // read_Dispensers_cb1();
-read_Dispensers_sw0_sw1();
-read_Dispensers_cb0();
-read_Dispensers_sw2_sw3();
-read_Dispensers_cb1();
-read_Dispensers_PH_CL_limits();
+if(Nx_page_id == 9){ // Массовое чтение дозаторов безопасно только когда Nextion реально находится на странице Dispensers.
+read_Dispensers_sw0_sw1(); // Читаем sw0 только с активной страницы дозаторов.
+read_Dispensers_cb0(); // Читаем период ACO только с активной страницы дозаторов.
+read_Dispensers_sw2_sw3(); // Читаем контроль NaOCl только с активной страницы дозаторов, чтобы скрытая страница не записала 0.
+read_Dispensers_cb1(); // Читаем период NaOCl только с активной страницы дозаторов.
+read_Dispensers_PH_CL_limits(); // Читаем пределы pH/CL только с активной страницы дозаторов.
+} // Завершаем защитный блок чтения страницы Dispensers.
 // // Saved_PHControlACO = PH_Control_ACO = myNex.readNumber("Dispensers.sw0.val"); jee.var("PH_Control_ACO", PH_Control_ACO ? "true" : "false"); delay(10);//Контроль PH  
 // // Saved_Activation_Timer_ACO = Activation_Timer_ACO = myNex.readNumber("Dispensers.sw1.val"); jee.var("Activation_Timer_ACO", String(Activation_Timer_ACO ? "true" : "false" ));  delay(10);  //Работа перельстатического насоса
 // // Saved_ACO_Work = ACO_Work = myNex.readNumber("Dispensers.cb0.val") +1; jee.var("ACO_Work", String(ACO_Work));  delay(10);  // Как часто включается перельстатический насос

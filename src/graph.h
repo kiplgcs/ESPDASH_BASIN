@@ -38,6 +38,9 @@ inline const unsigned long defaultGraphUpdateInterval = 60UL * 60UL * 1000UL; //
 inline const unsigned long graphSaveIntervalMs = 15000; // SPIFFS сохраняем реже, чтобы flash-записи не рвали плавность RGB.
 inline const int minGraphPoints = 1; // минимальное допустимое количество точек
 inline const int maxGraphPoints = 100; // максимальное допустимое количество точек
+inline const char* chlorinePpmGraphSeriesId(){ return "FloatСl"; } // ID видимого графика хлора ppmCl; буква С здесь кириллическая, как в UI.
+inline const char* chlorineOrpGraphSeriesId(){ return "FloatClOrp"; } // ID скрытой серии ORP, которая не меняет формат точки графика.
+inline bool isChlorinePpmGraphSeries(const String &series){ return series == chlorinePpmGraphSeriesId(); } // Проверяем, что запрошена видимая серия хлора.
 
 inline String graphDataPath(const String &series){ // формирует путь к файлу данных графика
   return "/graph_" + sanitizeSeriesId(series) + ".dat"; // имя файла на основе серии
