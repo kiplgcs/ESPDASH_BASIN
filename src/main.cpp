@@ -396,8 +396,8 @@ loop_CL2(2100); // Обработка логики хлора
    
   OverlayPoolTemp = "🌡 Бассейн: " + formatTemperatureString(DS1, DS1Available);
   OverlayHeaterTemp = "♨️ После нагревателя: " + formatTemperatureString(DS2, DS2Available);
-  OverlayLevelUpper = String("🛟 Верхний: ") + (PoolUpperLevelReachedConfirmed ? "достигнут" : "ниже");
-  OverlayLevelLower = String("🛟 Нижний: ") + (PoolLowerLevelLowConfirmed ? "низкий" : "норма");
+  OverlayLevelUpper = String("🛟 Верхний: ") + (PoolUpperLevelReachedConfirmed ? "достиг датчика" : "ниже датчика");
+  OverlayLevelLower = String("🛟 Нижний: ") + (PoolLowerLevelLowConfirmed ? "ниже датчика" : "выше датчика");
   OverlayPh = "🧪 pH: " + String(PH, 2);
   OverlayChlorine = "🧴 Cl: " + String(ppmCl, 3) + " ppm";
   OverlayDrainPit = String("🧯 Яма: ") + (DrainPitFullConfirmed ? "заполнена" : "свободна");

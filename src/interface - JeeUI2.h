@@ -34,6 +34,7 @@ inline void interface(){ // Декларатиынве функции интер
     // Общая информация по бассейну
     UI_PAGE();
     UI_IMAGE("Image1", "/Basin.jpg", "width:250%;height:800; x:-80%;y:100%;");
+    UI_IMAGE("PoolLevelIcon", "/level_between_levels.png", "width:86;height:86;left:41%;top:172px;border-radius:8px;box-shadow:0 8px 18px rgba(0,0,0,0.35);pointer-events:none;");
     
     UI_TEXT("OverlayPoolTemp", OverlayPoolTemp, "x:62%;y:300;fontSize:14;color:#00ff00");
     UI_TEXT("OverlayHeaterTemp", OverlayHeaterTemp, "x:78%;y:355;fontSize:14;color:#00ff00");

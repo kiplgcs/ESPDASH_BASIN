@@ -2,7 +2,10 @@
 //////////////////////////////////////////////*************slow()**************///////////////////////////////////////////////////////////////
 //////////////////////////////////////////////*************slow()**************///////////////////////////////////////////////////////////////
 int flag_slow = 0; //Флаг общей отправки данных обратной связи
-int period_slow_Time = 1000; // Базовый период 1 секунда нужен для быстрой синхронизации Web <-> Nextion по pH/CL и статусам дозаторов.
+constexpr int NEXTION_SYNC_ACTIVE_MS = 1000; // При рабочей яркости Nextion синхронизируем экран раз в секунду.
+constexpr int NEXTION_SYNC_DIMMED_MS = 5000; // При приглушенном Nextion синхронизируем реже, чтобы снизить нагрузку на ESP32.
+constexpr int NEXTION_DIM_SLEEP_THRESHOLD = 10; // Яркость 3% и близкие значения считаем спящим режимом HMI.
+int period_slow_Time = NEXTION_SYNC_ACTIVE_MS; // Период slow() выбирается по локальному Nx_dim_id без readNumber("dim").
 int flag_WiFi = 1; // для switch - вывод информации в одно поле поочерди 
 
 void slow(int interval){ // Обратная связь для редкого обновления данных - раз в XXX сек 
@@ -18,7 +21,8 @@ void slow(int interval){ // Обратная связь для редкого о
 if (myNex.currentPageId >= 0 && myNex.currentPageId < 50) {
   Nx_page_id = myNex.currentPageId;
 }
-period_slow_Time = 1000;
+const bool nextionDimmedMode = (Nx_dim_id <= NEXTION_DIM_SLEEP_THRESHOLD); // В спящем режиме HMI оператор не работает с экраном.
+period_slow_Time = nextionDimmedMode ? NEXTION_SYNC_DIMMED_MS : NEXTION_SYNC_ACTIVE_MS; // Меняем частоту обновления без блокирующего чтения dim.
 
 #if 0
 // Старый блок оставлен только для истории: частое чтение dp/dim с Nextion блокирует основной цикл ESP32.
@@ -36,7 +40,7 @@ period_slow_Time = 1000;
 
 
 //Если находимся на "page0" то обновляем компоненты только на этой страницу
-if(Power_ACO || Power_H2O2 || ManualPulse_ACO_Active || ManualPulse_H2O2_Active){period_slow_Time = 1000;} // Во время дозирования обновляем Nextion раз в секунду.
+if(Power_ACO || Power_H2O2 || ManualPulse_ACO_Active || ManualPulse_H2O2_Active){period_slow_Time = NEXTION_SYNC_ACTIVE_MS;} // Во время дозирования обновляем Nextion раз в секунду.
 
 if(Nx_page_id == 0){
   myNex.writeNum("page0.b0.pic", Lamp ? 2 : 1);
