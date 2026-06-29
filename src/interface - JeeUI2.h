@@ -330,8 +330,6 @@ UI_COLOR("LEDColor", LEDColor, "🎨 Цвет подсветки");
     //Контроль хлора CL (ACO)
     UI_PAGE();
     
-    // UI_DISPLAY_FLOAT("ppmCl", ppmCl, "🧴 Свободный хлор, мг/л");
-
     UI_GRAPH_SOURCE("FloatСl", "📊 Хлор в воде, ppmCl",
     "value:ppmCl;updatePeriod_of_Time:60;updateStep:5;maxPoints:100;width:100%;height:400;"
     "xLabel:t;yLabel:ppm;pointColor:#6b66ff;lineColor:#ff5e5e;"
@@ -348,12 +346,16 @@ UI_COLOR("LEDColor", LEDColor, "🎨 Цвет подсветки");
 
 
 
-        UI_POPUP_BEGIN("CL", "Калибровка датчика хлора", "Открыть окно калибровки датчика CL хлора}");
-            static String Cl_Cal_str = String(corrected_ORP_Eh_mV) + "-" + String(CalRastvor256mV) + "=" + String(CalRastvor256mV - corrected_ORP_Eh_mV);   
-            UI_NUMBER("Cl_Cal", Cl_Cal_str, "📐 ORP - ORPCal = калибровочный коэффициент", true);
-            UI_NUMBER("CalRastvor256mV", CalRastvor256mV, "🧪 ОВП калибровочного раствора - мВ", false);
-            UI_NUMBER("Calibration_ORP_mV", Calibration_ORP_mV, "📏 Калибровочный коэффициент - мВ", false);
-            UI_BUTTON_DEFAULT("Power_H2O2_Button", ManualPulse_H2O2_Request, "gray", "🧴 Проверка работы перельстатического насоса подачи хлора (вручную)", 0); // Хлор/NaOCl управляется насосом H2O2 на реле 6.
+        UI_POPUP_BEGIN("CL", "Калибровка ORP датчика хлора", "🧪 Калибровка ORP"); // Открывает компактное окно калибровки ORP-101.
+            UI_DISPLAY("ClCalibrationGuide", ClCalibrationGuide, "ℹ️ Порядок калибровки"); // Показывает краткую последовательность действий с ORP-раствором.
+            UI_DISPLAY_INT("ClCalibrationCorrectedOrp", corrected_ORP_Eh_mV, "📟 Текущий ORP, мВ"); // Показывает итоговый ORP, который идет в расчет ppmCl.
+            UI_DISPLAY_INT("ClCalibrationTempOrp", corr_ORP_temper_mV, "📐 ORP без калибровочной поправки, мВ"); // Показывает базовое значение для расчета новой поправки.
+            UI_NUMBER("CalRastvor256mV", CalRastvor256mV, "🧪 ORP калибровочного раствора, мВ", false); // Позволяет указать фактический ORP раствора.
+            UI_DISPLAY("ClCalibrationFormula", ClCalibrationFormula, "📐 Расчет поправки"); // Показывает формулу рекомендуемой поправки.
+            UI_NUMBER("Calibration_ORP_mV", Calibration_ORP_mV, "📏 Ввести поправку ORP, мВ", false); // Позволяет сохранить смещение ORP вручную.
+            UI_DISPLAY("ClCalibrationStatus", ClCalibrationStatus, "✅ Контроль поправки"); // Показывает сохраненную и рекомендуемую поправку.
+            UI_DISPLAY("ClCalibrationTemperatureInfo", ClCalibrationTemperatureInfo, "🌡 Условия измерения"); // Показывает температуру DS1 и текущий pH для контроля расчета.
+            UI_BUTTON_DEFAULT("Power_H2O2_Button", ManualPulse_H2O2_Request, "gray", "🧴 Тест насоса NaOCl: включить на 5 секунд", 0); // Хлор/NaOCl управляется насосом H2O2 на реле 6 и ручной тест сам отключается через 5 секунд.
         UI_POPUP_END();
 
     // Контроль температуры в помещении

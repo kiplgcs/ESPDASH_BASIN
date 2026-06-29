@@ -189,6 +189,10 @@ float Temper_Reference = 20.0f; // Температура при котором 
 bool Act_PH = false; //Активация калибровки
 bool Act_Cl = false; //Активация калибровки
 int analogValuePH_Comp; //корректированное значение АЦП после компенсации по температуре
+String ClCalibrationGuide = "Промойте электрод, опустите в ORP-раствор, дождитесь стабильных мВ и внесите рассчитанную поправку."; // Короткая инструкция для popup калибровки ORP.
+String ClCalibrationFormula = ""; // Живая строка с формулой расчета поправки ORP.
+String ClCalibrationStatus = ""; // Живая строка со сравнением сохраненной и расчетной поправки ORP.
+String ClCalibrationTemperatureInfo = ""; // Живая строка с температурой и pH, влияющими на расчет ppmCl.
 
 int Saved_gmtOffset_correct, gmtOffset_correct; // Корректировка часового пояса призапросен времени из Интернета
 
@@ -285,7 +289,7 @@ float PH_Upper = 7.6f; // Верхний предел pH: выше этого з
 
 // ===== Настройки пределов CL/ORP =====
 float CL_Lower = 1.0f; // Нижний предел свободного хлора, ppm: ниже включается дозатор NaOCl
-float CL_Upper = 3.0f; // Верхний предел свободного хлора, ppm: выше дозатор NaOCl выключается
+float CL_Upper = 2.5f; // Верхний предел свободного хлора, ppm: выше дозатор NaOCl выключается; 2.5 соответствует максимуму ORP-таблицы.
 int ORP_setting = 500; // Нижний предел ORP оставлен для совместимости и контроля по мВ
 
 unsigned long NextionDispensersWriteHoldUntil = 0;
@@ -483,15 +487,15 @@ inline void persistChangedChemicalLimits(float oldPHLower, float oldPHUpper, flo
 inline void normalizeChemicalLimits() { // Исправляем поврежденные или перевернутые пределы pH/CL.
   PH_Lower = clampFloatSetting(PH_Lower, 6.0f, 9.0f, 7.2f); // Держим нижний pH в физически разумном диапазоне.
   PH_Upper = clampFloatSetting(PH_Upper, 6.0f, 9.0f, 7.6f); // Держим верхний pH в физически разумном диапазоне.
-  CL_Lower = clampFloatSetting(CL_Lower, 0.0f, 10.0f, 1.0f); // Держим нижний CL в безопасном диапазоне ввода.
-  CL_Upper = clampFloatSetting(CL_Upper, 0.0f, 10.0f, 3.0f); // Держим верхний CL в безопасном диапазоне ввода.
+  CL_Lower = clampFloatSetting(CL_Lower, 0.2f, 2.5f, 1.0f); // Держим нижний CL в пределах ORP-таблицы 0.2-2.5 ppm.
+  CL_Upper = clampFloatSetting(CL_Upper, 0.2f, 2.5f, 2.5f); // Держим верхний CL в пределах ORP-таблицы, чтобы дозатор мог остановиться.
   if (PH_Lower >= PH_Upper) { // Верхний pH всегда должен быть выше нижнего, даже если нижний уперся в максимум.
     if (PH_Lower >= 8.9f) PH_Lower = 8.9f; // Оставляем место для минимального шага 0.1 pH.
     PH_Upper = clampFloatSetting(PH_Lower + 0.1f, 6.0f, 9.0f, 7.6f); // Восстанавливаем корректный гистерезис.
   }
   if (CL_Lower >= CL_Upper) { // Верхний CL всегда должен быть выше нижнего, иначе дозатор не имеет зоны остановки.
-    if (CL_Lower >= 9.9f) CL_Lower = 9.9f; // Оставляем место для минимального шага 0.1 ppm.
-    CL_Upper = clampFloatSetting(CL_Lower + 0.1f, 0.0f, 10.0f, 3.0f); // Восстанавливаем корректный гистерезис CL.
+    if (CL_Lower >= 2.4f) CL_Lower = 2.4f; // Оставляем место для минимального шага 0.1 ppm внутри ORP-таблицы.
+    CL_Upper = clampFloatSetting(CL_Lower + 0.1f, 0.2f, 2.5f, 2.5f); // Восстанавливаем корректный гистерезис CL в табличном диапазоне.
   }
   PH_setting = PH_Upper; // Синхронизируем старую переменную с новым верхним пределом pH.
 }
@@ -1360,6 +1364,20 @@ private:
     registerUiValueProvider("Power_H2O2_Button", [](){ // кнопка H2O2 реагирует на импульсы
       return (Power_H2O2 || ManualPulse_H2O2_Active || ManualPulse_H2O2_Request) ? String("1") : String("0");
     });
+    registerUiValueProvider("ClCalibrationGuide", [](){ // Формирует актуальную инструкцию для окна калибровки ORP.
+      return String("Промойте ORP-101, поместите в раствор, дождитесь стабильного значения и введите рассчитанную поправку."); // Показывает короткий порядок действий без редактируемого поля.
+    }); // Завершает регистрацию инструкции калибровки ORP.
+    registerUiValueProvider("ClCalibrationFormula", [](){ // Формирует живую формулу расчета калибровочного смещения.
+      const int recommendedOffset = CalRastvor256mV - corr_ORP_temper_mV; // Считает новую абсолютную поправку от ORP до калибровочного смещения.
+      return String("Новая поправка = ") + String(CalRastvor256mV) + " мВ - " + String(corr_ORP_temper_mV) + " мВ = " + String(recommendedOffset) + " мВ"; // Возвращает понятную формулу для ручного ввода.
+    }); // Завершает регистрацию формулы калибровки ORP.
+    registerUiValueProvider("ClCalibrationStatus", [](){ // Формирует статус текущей и рекомендуемой поправки.
+      const int recommendedOffset = CalRastvor256mV - corr_ORP_temper_mV; // Повторно считает рекомендуемую поправку для статуса.
+      return String("Сейчас сохранено ") + String(Calibration_ORP_mV) + " мВ. Если ORP стабилен, введите " + String(recommendedOffset) + " мВ."; // Показывает, что именно нужно сравнить перед сохранением.
+    }); // Завершает регистрацию статуса калибровки ORP.
+    registerUiValueProvider("ClCalibrationTemperatureInfo", [](){ // Формирует диагностическую строку температуры и pH для расчета хлора.
+      return String("Вода: ") + formatTemperatureString(DS1, DS1Available) + "; pH " + String(PH, 2) + "; CL считается после калибровки по таблице pH+ORP."; // Показывает входные параметры, влияющие на расчет ppm.
+    }); // Завершает регистрацию температурной диагностики ORP/CL.
     registerUiValueProvider("Activation_Water_Level", [](){
       return Activation_Water_Level ? String("1") : String("0");
     });
@@ -1791,6 +1809,19 @@ private:
       ".dash-modal[data-popup='Cal_PH'] .popup-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:28px 14px;align-items:stretch;} "
       ".dash-modal[data-popup='Cal_PH'] .popup-grid .card{width:auto;min-width:0;} "
       ".dash-modal[data-popup='Cal_PH'] .popup-grid .card:nth-child(1),.dash-modal[data-popup='Cal_PH'] .popup-grid .card:nth-child(n+6){grid-column:1/-1;} "
+      ".dash-modal[data-popup='CL'] .dash-modal-content{width:min(760px,95vw);border-radius:12px;background:#161a20;border-color:rgba(112,180,218,0.24);} " // Ограничивает ширину окна ORP и делает его спокойнее визуально.
+      ".dash-modal[data-popup='CL'] .dash-modal-header{padding:14px 18px;background:#141820;border-bottom-color:rgba(255,255,255,0.08);} " // Выделяет заголовок окна без лишней декоративности.
+      ".dash-modal[data-popup='CL'] .dash-modal-body{padding:14px;background:#11151b;} " // Делает внутренний фон окна единым и не перегруженным.
+      ".dash-modal[data-popup='CL'] .popup-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:stretch;} " // Раскладывает важные поля калибровки в компактную сетку.
+      ".dash-modal[data-popup='CL'] .popup-grid .card{width:auto;min-width:0;margin-bottom:0;border-radius:10px;padding:12px 14px;background:#1b1d21;border-color:rgba(255,255,255,0.08);box-shadow:0 8px 18px rgba(0,0,0,0.32);} " // Делает карточки калибровки компактными и ровными.
+      ".dash-modal[data-popup='CL'] .card:has(#ClCalibrationGuide),.dash-modal[data-popup='CL'] .card:has(#ClCalibrationFormula),.dash-modal[data-popup='CL'] .card:has(#ClCalibrationStatus),.dash-modal[data-popup='CL'] .card:has(#ClCalibrationTemperatureInfo),.dash-modal[data-popup='CL'] .card:has(#Power_H2O2_Button){grid-column:1/-1;} " // Растягивает пояснения, статус и сервисную кнопку на всю ширину.
+      ".dash-modal[data-popup='CL'] .card label{font-size:0.74rem;line-height:1.3;color:#aab8c7;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;} " // Делает подписи компактными и профессиональными.
+      ".dash-modal[data-popup='CL'] #ClCalibrationCorrectedOrp,.dash-modal[data-popup='CL'] #ClCalibrationTempOrp{font-size:2rem;line-height:1.1;font-weight:800;color:#f6fbff;font-variant-numeric:tabular-nums;} " // Выделяет два главных ORP-значения.
+      ".dash-modal[data-popup='CL'] #ClCalibrationGuide,.dash-modal[data-popup='CL'] #ClCalibrationTemperatureInfo,.dash-modal[data-popup='CL'] #ClCalibrationStatus{font-size:0.98rem;line-height:1.45;color:#d8e4f2;} " // Делает справочные строки читаемыми без крупного набора.
+      ".dash-modal[data-popup='CL'] #ClCalibrationFormula{font-family:'JetBrains Mono','SFMono-Regular',Consolas,monospace;font-size:0.98rem;line-height:1.45;color:#f7fbff;background:#0d1117;border:1px solid rgba(112,180,218,0.24);border-radius:8px;padding:10px 12px;} " // Оформляет формулу как расчетный блок.
+      ".dash-modal[data-popup='CL'] input{margin-bottom:0;background:#0d1117;border-color:rgba(255,255,255,0.16);font-size:1rem;font-variant-numeric:tabular-nums;} " // Убирает лишний нижний отступ и делает ввод ORP аккуратнее.
+      ".dash-modal[data-popup='CL'] .dash-btn{width:100%;margin-top:0;border-radius:8px;} " // Делает кнопку проверки насоса ровной по ширине окна.
+      "@media (max-width:640px){.dash-modal[data-popup='CL'] .popup-grid{grid-template-columns:1fr;}.dash-modal[data-popup='CL'] #ClCalibrationCorrectedOrp,.dash-modal[data-popup='CL'] #ClCalibrationTempOrp{font-size:1.6rem;}} " // Переводит окно ORP в один столбец на телефоне.
 
             ".network-row{display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:12px 14px;background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,0.05);color:#e9ecf4;text-align:left;cursor:pointer;transition:background 0.12s ease;} " // Строка сети Wi-Fi
       ".network-row:hover{background:rgba(255,255,255,0.04);} " // Hover подсветка строки сети
@@ -3448,7 +3479,7 @@ const refreshThemeColorUI = (val)=>{
   document.body.style.background = colorValue;
 };
 
-const chemicalInputIds = new Set(['PH_Lower','PH_Upper','CL_Lower','CL_Upper','PH_setting','PH1','PH2','PH1_CAL','PH2_CAL','Temper_Reference','Temper_PH']);
+const chemicalInputIds = new Set(['PH_Lower','PH_Upper','CL_Lower','CL_Upper','PH_setting','PH1','PH2','PH1_CAL','PH2_CAL','Temper_Reference','Temper_PH','CalRastvor256mV','Calibration_ORP_mV']); // Держим ручной ввод калибровки ORP от перезаписи live-обновлением.
 const rs485InputIds = new Set(['Rs485Enabled','Rs485BoardType','Rs485BaudRate','Rs485UartMode','Rs485SlaveId','Rs485PollIntervalMs']);
 
 // Очистка флага ручного изменения через delay (по умолчанию 600 мс)
@@ -4023,38 +4054,29 @@ function drawCustomGraph(canvas,data){
     ctx.fill();
   }
 
-  const eventName = graphEventShortName(canvas);
-  ctx.save();
-  ctx.font = '700 12px "Inter", "Segoe UI", system-ui, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  for(let i=0;i<pointsToDraw.length;i++){
-    const events = Number(pointsToDraw[i].events || 0);
-    if(!events) continue;
-    const {x, y} = graphPointPosition(metrics, i);
-    const label = eventName + ' x' + events;
-    const labelWidth = ctx.measureText(label).width + 12;
-    const labelY = Math.max(plotTop + 14, Math.min(plotBottom - 12, y - 22));
-    ctx.strokeStyle = 'rgba(255, 209, 102, 0.72)';
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([5, 5]);
-    ctx.beginPath();
-    ctx.moveTo(x, plotTop);
-    ctx.lineTo(x, plotBottom);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillStyle = 'rgba(255, 209, 102, 0.16)';
-    ctx.fillRect(x - labelWidth / 2, labelY - 10, labelWidth, 20);
-    ctx.strokeStyle = 'rgba(255, 209, 102, 0.85)';
-    ctx.strokeRect(x - labelWidth / 2, labelY - 10, labelWidth, 20);
-    ctx.fillStyle = 'rgba(255, 240, 190, 0.96)';
-    ctx.fillText(label, x, labelY);
-    ctx.fillStyle = 'rgba(255, 209, 102, 0.95)';
-    ctx.beginPath();
-    ctx.arc(x, y, 5, 0, 2*Math.PI);
-    ctx.fill();
-  }
-  ctx.restore();
+  ctx.save(); // Сохраняем состояние canvas перед рисованием отметок дозирования.
+  for(let i=0;i<pointsToDraw.length;i++){ // Проходим по всем точкам графика для поиска событий дозирования.
+    const events = Number(pointsToDraw[i].events || 0); // Берем количество срабатываний насоса, привязанных к точке.
+    if(!events) continue; // Пропускаем точки без срабатываний, чтобы не перегружать график.
+    const {x, y} = graphPointPosition(metrics, i); // Получаем координаты точки с событием.
+    const markerRadius = Math.min(7, 4 + events); // Увеличиваем маркер при нескольких срабатываниях, но не делаем его огромным.
+    ctx.strokeStyle = 'rgba(255, 209, 102, 0.45)'; // Используем приглушенный цвет линии события, чтобы она не спорила с данными.
+    ctx.lineWidth = 1; // Делаем линию события тонкой.
+    ctx.setLineDash([3, 7]); // Пунктир показывает служебное событие без плотной заливки.
+    ctx.beginPath(); // Начинаем вертикальную отметку события.
+    ctx.moveTo(x, plotTop); // Ведем отметку от верхней границы области графика.
+    ctx.lineTo(x, plotBottom); // Доводим отметку до нижней границы области графика.
+    ctx.stroke(); // Рисуем вертикальную отметку дозирования.
+    ctx.setLineDash([]); // Возвращаем сплошную линию для маркера.
+    ctx.fillStyle = 'rgba(255, 209, 102, 0.92)'; // Заполняем маленький маркер события теплым цветом.
+    ctx.strokeStyle = 'rgba(5, 7, 10, 0.95)'; // Добавляем темную обводку, чтобы маркер читался на линии графика.
+    ctx.lineWidth = 2; // Обводка маркера должна быть заметной, но компактной.
+    ctx.beginPath(); // Начинаем круглый маркер события.
+    ctx.arc(x, y, markerRadius, 0, 2*Math.PI); // Рисуем маркер прямо на точке дозирования.
+    ctx.fill(); // Заливаем маркер события.
+    ctx.stroke(); // Обводим маркер события.
+  } // Завершаем обход событий дозирования.
+  ctx.restore(); // Возвращаем состояние canvas после служебных отметок.
 
   const labelOffsets = [-14, 10, -24, 6];
   const labelStride = Math.max(1, Math.ceil(pointsToDraw.length * 54 / Math.max(plotWidth, 1)));
@@ -4358,10 +4380,18 @@ window.addEventListener('resize', ()=>{
     if(typeof j.Power_ACO !== 'undefined') updateStat('Power_ACO', j.Power_ACO);
     if(typeof j.ppmCl !== 'undefined') updateStat('ppmCl', j.ppmCl);
     if(typeof j.corrected_ORP_Eh_mV !== 'undefined') updateStat('corrected_ORP_Eh_mV', j.corrected_ORP_Eh_mV);
+    if(typeof j.ClCalibrationGuide !== 'undefined') updateStat('ClCalibrationGuide', j.ClCalibrationGuide); // Обновляем инструкцию в popup калибровки ORP.
+    if(typeof j.ClCalibrationTempOrp !== 'undefined') updateStat('ClCalibrationTempOrp', j.ClCalibrationTempOrp); // Обновляем ORP после температурной поправки.
+    if(typeof j.ClCalibrationCorrectedOrp !== 'undefined') updateStat('ClCalibrationCorrectedOrp', j.ClCalibrationCorrectedOrp); // Обновляем итоговый ORP после калибровки.
+    if(typeof j.ClCalibrationTemperatureInfo !== 'undefined') updateStat('ClCalibrationTemperatureInfo', j.ClCalibrationTemperatureInfo); // Обновляем диагностическую строку температуры и pH.
+    if(typeof j.ClCalibrationFormula !== 'undefined') updateStat('ClCalibrationFormula', j.ClCalibrationFormula); // Обновляем формулу рекомендуемой поправки.
+    if(typeof j.ClCalibrationStatus !== 'undefined') updateStat('ClCalibrationStatus', j.ClCalibrationStatus); // Обновляем статус сохраненной и расчетной поправки.
     if(typeof j.NaOCl_H2O2_Control !== 'undefined') updateCheckboxValue('NaOCl_H2O2_Control', j.NaOCl_H2O2_Control);
         if(typeof j.CL_Lower !== 'undefined') updateInputValue('CL_Lower', j.CL_Lower);
     if(typeof j.CL_Upper !== 'undefined') updateInputValue('CL_Upper', j.CL_Upper);
     if(typeof j.ORP_setting !== 'undefined') updateInputValue('ORP_setting', j.ORP_setting);
+    if(typeof j.CalRastvor256mV !== 'undefined') updateInputValue('CalRastvor256mV', j.CalRastvor256mV); // Обновляем ORP раствора, если пользователь сейчас не редактирует поле.
+    if(typeof j.Calibration_ORP_mV !== 'undefined') updateInputValue('Calibration_ORP_mV', j.Calibration_ORP_mV); // Обновляем сохраненную поправку ORP, если поле не в ручном вводе.
     if(typeof j.H2O2_Work !== 'undefined') updateSelectValue('H2O2_Work', j.H2O2_Work);
     if(typeof j.Power_H2O2 !== 'undefined') updateStat('Power_H2O2', j.Power_H2O2);
     if(typeof j.Temper_Reference !== 'undefined') updateInputValue('Temper_Reference', j.Temper_Reference);

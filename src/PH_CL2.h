@@ -270,24 +270,26 @@ float interpolateClValue(float pH, int orp) {
     }
 
     // Ограничиваем значение ORP в пределах допустимых значений
-    if (orp < orpTable[0][0]) {
+    if (orp < orpTable[0][12]) { // Ограничиваем ORP общим минимумом всей таблицы, а не только первым столбцом pH.
         orp = orpTable[0][0]; // Минимальное значение ORP
-    } else if (orp > orpTable[22][12]) {
+        orp = orpTable[0][12]; // Минимальный табличный ORP равен 487 мВ при pH 8.2.
+    } else if (orp > orpTable[22][0]) { // Ограничиваем ORP общим максимумом всей таблицы, а не последним столбцом pH.
         orp = orpTable[22][12]; // Максимальное значение ORP
+        orp = orpTable[22][0]; // Максимальный табличный ORP равен 841 мВ при pH 6.9.
     }
 
     int pH_index1 = 0, pH_index2 = 0;
 
     // Поиск ближайших индексов pH
     for (int i = 0; i < 12; i++) {
-        if (pHValues[i] <= pH && pHValues[i + 1] > pH) {
+        if (pHValues[i] <= pH && pHValues[i + 1] >= pH) { // Учитываем крайнее значение pH 8.2, чтобы не получить деление на ноль.
             pH_index1 = i;
             pH_index2 = i + 1;
             break;
         }
     }
 
-    float ppmCl1 = 0.0, ppmCl2 = 0.0;
+    float ppmCl1 = (orp <= orpTable[0][pH_index1]) ? ppmClValues[0] : ppmClValues[22], ppmCl2 = (orp <= orpTable[0][pH_index2]) ? ppmClValues[0] : ppmClValues[22]; // Задаем корректный минимум или максимум для ORP вне диапазона выбранных pH-столбцов.
 
     // Интерполяция по первому индексу pH
     for (int i = 0; i < 22; i++) {
@@ -300,7 +302,7 @@ float interpolateClValue(float pH, int orp) {
     // Интерполяция по второму индексу pH
     for (int i = 0; i < 22; i++) {
         if (orp >= orpTable[i][pH_index2] && orp <= orpTable[i + 1][pH_index2]) {
-            ppmCl2 = ppmClValues[i] + (ppmClValues[i + 1] - ppmClValues[i]) * (orp - orpTable[i + 1][pH_index2]) / (orpTable[i + 1][pH_index2] - orpTable[i][pH_index2]);
+            ppmCl2 = ppmClValues[i] + (ppmClValues[i + 1] - ppmClValues[i]) * (orp - orpTable[i][pH_index2]) / (orpTable[i + 1][pH_index2] - orpTable[i][pH_index2]); // Интерполируем от нижней ORP-точки второго pH-столбца, как и в первом столбце.
             break;
         }
     }
