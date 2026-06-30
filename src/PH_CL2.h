@@ -315,6 +315,39 @@ float interpolateClValue(float pH, int orp) {
 
 
 // Функция для калибровки ORP сенсора
+int interpolateOrpForClTarget(float pH, float ppmTarget) { // Считает табличный ORP для заданного pH и целевого ppmCl.
+    if (pH < pHValues[0]) pH = pHValues[0]; // Ограничиваем pH нижней границей таблицы.
+    if (pH > pHValues[12]) pH = pHValues[12]; // Ограничиваем pH верхней границей таблицы.
+    if (ppmTarget < ppmClValues[0]) ppmTarget = ppmClValues[0]; // Ограничиваем ppm нижней границей таблицы.
+    if (ppmTarget > ppmClValues[22]) ppmTarget = ppmClValues[22]; // Ограничиваем ppm верхней границей таблицы.
+    int pH_index1 = 0; // Индекс нижнего pH-столбца для интерполяции.
+    int pH_index2 = 1; // Индекс верхнего pH-столбца для интерполяции.
+    for (int i = 0; i < 12; i++) { // Ищем соседние pH-столбцы таблицы.
+        if (pHValues[i] <= pH && pHValues[i + 1] >= pH) { // Подходит интервал, внутри которого находится текущий pH.
+            pH_index1 = i; // Запоминаем нижний pH-столбец.
+            pH_index2 = i + 1; // Запоминаем верхний pH-столбец.
+            break; // Дальше искать не нужно.
+        } // Завершаем проверку одного pH-интервала.
+    } // Завершаем поиск pH-интервала.
+    int ppm_index1 = 0; // Индекс нижней строки ppm для интерполяции.
+    int ppm_index2 = 1; // Индекс верхней строки ppm для интерполяции.
+    for (int i = 0; i < 22; i++) { // Ищем соседние ppm-строки таблицы.
+        if (ppmClValues[i] <= ppmTarget && ppmClValues[i + 1] >= ppmTarget) { // Подходит интервал, внутри которого находится целевой ppm.
+            ppm_index1 = i; // Запоминаем нижнюю ppm-строку.
+            ppm_index2 = i + 1; // Запоминаем верхнюю ppm-строку.
+            break; // Дальше искать не нужно.
+        } // Завершаем проверку одного ppm-интервала.
+    } // Завершаем поиск ppm-интервала.
+    const float ppmSpan = ppmClValues[ppm_index2] - ppmClValues[ppm_index1]; // Считаем ширину ppm-интервала.
+    const float ppmRatio = ppmSpan == 0.0f ? 0.0f : (ppmTarget - ppmClValues[ppm_index1]) / ppmSpan; // Получаем долю целевого ppm внутри интервала.
+    const float orpAtPh1 = orpTable[ppm_index1][pH_index1] + (orpTable[ppm_index2][pH_index1] - orpTable[ppm_index1][pH_index1]) * ppmRatio; // Интерполируем ORP в нижнем pH-столбце.
+    const float orpAtPh2 = orpTable[ppm_index1][pH_index2] + (orpTable[ppm_index2][pH_index2] - orpTable[ppm_index1][pH_index2]) * ppmRatio; // Интерполируем ORP в верхнем pH-столбце.
+    const float pHSpan = pHValues[pH_index2] - pHValues[pH_index1]; // Считаем ширину pH-интервала.
+    const float pHRatio = pHSpan == 0.0f ? 0.0f : (pH - pHValues[pH_index1]) / pHSpan; // Получаем долю текущего pH внутри интервала.
+    const float orpResult = orpAtPh1 + (orpAtPh2 - orpAtPh1) * pHRatio; // Интерполируем ORP между двумя pH-столбцами.
+    return static_cast<int>(orpResult + 0.5f); // Возвращаем ORP в мВ с округлением до целого.
+} // Завершаем обратный расчет ppmCl в ORP.
+
 int calibrateSensor(int ORP_mV) {
     return ORP_mV + Calibration_ORP_mV; // Применяем калибровочное смещение
 }
@@ -380,8 +413,18 @@ void loop_CL2(int interval) {
   // Применение калибровочного смещения (мВ)
   corrected_ORP_Eh_mV = calibrateSensor(corr_ORP_temper_mV);
 
-    // Расчёт ppm Cl по ORP и pH
-    ppmCl = interpolateClValue(PH, corrected_ORP_Eh_mV);
+    const int minOrpForCurrentPh = interpolateOrpForClTarget(PH, ppmClValues[0]); // Нижняя ORP-граница таблицы для текущего pH и 0.2 ppm.
+    const int maxOrpForCurrentPh = interpolateOrpForClTarget(PH, ppmClValues[22]); // Верхняя ORP-граница таблицы для текущего pH и 2.5 ppm.
+    if (corrected_ORP_Eh_mV < minOrpForCurrentPh) { // Ниже таблицы точное ppm не вычисляем.
+      ClOrpRangeState = -1; // Web покажет <0.2 ppm и предупреждение о нижнем диапазоне.
+      ppmCl = ppmClValues[0]; // Для автоматики держим нижнюю числовую границу, чтобы гистерезис мог запустить дозатор.
+    } else if (corrected_ORP_Eh_mV > maxOrpForCurrentPh) { // Выше таблицы точное ppm не вычисляем.
+      ClOrpRangeState = 1; // Web покажет >2.5 ppm и предупреждение о верхнем диапазоне.
+      ppmCl = ppmClValues[22]; // Для автоматики держим верхнюю числовую границу, чтобы дозатор был остановлен.
+    } else { // Внутри таблицы можно честно интерполировать pH и ORP.
+      ClOrpRangeState = 0; // Web покажет обычное расчетное значение ppm.
+      ppmCl = interpolateClValue(PH, corrected_ORP_Eh_mV); // Расчет ppm Cl по ORP и pH только внутри табличного диапазона.
+    } // Завершаем выбор режима расчета ppmCl.
     //ppmCl = getClFromORP(PH, corrected_ORP_Eh_mV);
     
 

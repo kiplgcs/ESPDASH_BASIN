@@ -166,6 +166,7 @@ inline bool Rs485ManualRelayState[16] = {false};
 
 
 String formatTemperatureString(float value, bool available);
+int interpolateOrpForClTarget(float pH, float ppmTarget); // Возвращает табличный ORP для заданного pH и ppmCl, чтобы Web мог показать проверку пересчета.
 
 void onDs18Sensor0Select(const int &value); // Callback назначения найденного индекса на sensor0.
 void onDs18Sensor1Select(const int &value); // Callback назначения найденного индекса на sensor1.
@@ -193,7 +194,10 @@ String ClCalibrationGuide = "Промойте электрод, опустите
 String ClCalibrationFormula = ""; // Живая строка с формулой расчета поправки ORP.
 String ClCalibrationStatus = ""; // Живая строка со сравнением сохраненной и расчетной поправки ORP.
 String ClCalibrationTemperatureInfo = ""; // Живая строка с температурой и pH, влияющими на расчет ppmCl.
-String ClLimitRecommendationInfo = "Чистый: низ 1.0, верх 1.5 мг/л. Лето/солнце/нагрузка: низ 1.5, верх 2.0-2.5. Зеленеет: не лечить автоматикой; шок вручную по DPD, затем вернуть."; // Краткая подсказка по уставкам CL рядом с настройками дозирования.
+String ClLimitRecommendationInfo = "Чистый: низ 1.0-1.2, верх 1.5-1.8 ppm. Лето/нагрузка: низ 1.5, верх 2.0-2.5. Зеленеет: шок вручную; цель ORP около 650+ мВ."; // Краткая подсказка по уставкам CL рядом с настройками дозирования.
+String ClDosingStatusInfo = ""; // Живая строка диагностики, почему NaOCl сейчас работает или заблокирован.
+String ClOrpPpmTableInfo = ""; // Живая строка сверки ORP с ppmCl по текущему pH.
+int ClOrpRangeState = 0; // Диапазон ORP относительно таблицы: -1 ниже 0.2 ppm, 0 внутри, 1 выше 2.5 ppm.
 
 int Saved_gmtOffset_correct, gmtOffset_correct; // Корректировка часового пояса призапросен времени из Интернета
 
@@ -1365,6 +1369,23 @@ private:
     registerUiValueProvider("Power_H2O2_Button", [](){ // кнопка H2O2 реагирует на импульсы
       return (Power_H2O2 || ManualPulse_H2O2_Active || ManualPulse_H2O2_Request) ? String("1") : String("0");
     });
+    registerUiValueProvider("ClDosingStatusInfo", []() -> String { // Формирует короткую причину текущего состояния дозатора NaOCl.
+      if(!NaOCl_H2O2_Control) return String("NaOCl выключен: включите контроль хлора."); // Самая частая причина: чекбокс контроля отключен.
+      if(!FiltrationTimerActive) return String("NaOCl ждет таймер фильтрации."); // Химия разрешена только во время активного таймера фильтрации.
+      if(!Power_Filtr) return String("NaOCl ждет работающий насос фильтрации."); // Без потока воды дозирование запрещено.
+      if(PH < PH_Lower || PH > PH_Upper) return String("NaOCl ждет pH ") + String(PH_Lower, 2) + "-" + String(PH_Upper, 2) + "; сейчас " + String(PH, 2) + "."; // Хлор блокируется вне рабочего диапазона pH.
+      const String clText = ClOrpRangeState < 0 ? String("<0.2") : (ClOrpRangeState > 0 ? String(">2.5") : String(ppmCl, 2)); // Для статуса показываем диапазон, если ORP вышел за таблицу.
+      if(ppmCl <= CL_Lower) return String("NaOCl нужен: CL ") + clText + " <= " + String(CL_Lower, 2) + "; таймер " + String(Info_H2O2) + "."; // При нижнем пределе дозирование разрешено и обслуживается таймером импульсов.
+      if(ppmCl >= CL_Upper) return String("NaOCl стоп: CL ") + clText + " >= " + String(CL_Upper, 2) + "."; // Верхний предел останавливает дозирование до падения ниже нижнего.
+      return String("NaOCl в гистерезисе: CL ") + clText + ", таймер " + String(Info_H2O2) + "."; // Между пределами сохраняем текущее состояние гистерезиса.
+    }); // Завершает регистрацию диагностической строки NaOCl.
+    registerUiValueProvider("ClOrpPpmTableInfo", []() -> String { // Формирует короткую сверку ORP и ppmCl по текущему pH.
+      const int orp02 = interpolateOrpForClTarget(PH, 0.2f); // Считаем ORP для 0.2 ppm при текущем pH.
+      const int orp03 = interpolateOrpForClTarget(PH, 0.3f); // Считаем ORP для 0.3 ppm при текущем pH.
+      const int orp04 = interpolateOrpForClTarget(PH, 0.4f); // Считаем ORP для 0.4 ppm при текущем pH.
+      const String rangeText = ClOrpRangeState < 0 ? String("ORP ниже диапазона расчета.") : (ClOrpRangeState > 0 ? String("ORP выше диапазона расчета.") : String("ORP в диапазоне таблицы.")); // Поясняем, можно ли доверять числу ppm.
+      return String("pH ") + String(PH, 2) + ": 0.2≈" + String(orp02) + " мВ, 0.3≈" + String(orp03) + " мВ, 0.4≈" + String(orp04) + " мВ. " + rangeText; // Возвращаем компактную проверку таблицы.
+    }); // Завершает регистрацию сверки ORP/ppm.
     registerUiValueProvider("ClCalibrationGuide", [](){ // Формирует актуальную инструкцию для окна калибровки ORP.
       return String("Промойте ORP-101, поместите в раствор, дождитесь стабильного значения и введите рассчитанную поправку."); // Показывает короткий порядок действий без редактируемого поля.
     }); // Завершает регистрацию инструкции калибровки ORP.
@@ -3939,15 +3960,21 @@ function formatGraphNumber(value){
   return num.toFixed(digits).replace(/\.?0+$/, '');
 }
 
-function formatGraphHeadline(canvas, value){
+function formatGraphHeadline(canvas, value, useLiveRange=false){
   const yLabel = (canvas.dataset.yLabel || '').toLowerCase();
   const series = (canvas.dataset.series || '').toLowerCase();
   let unit = '';
   if(yLabel.includes('temperature') || yLabel.includes('темпер')) unit = '°C';
   else if(yLabel.includes('ph') || series.includes('ph')) unit = ' pH';
   else if(yLabel.includes('хлор') || yLabel.includes('cl') || yLabel.includes('ppm')) unit = ' ppm';
-  if(isChlorineGraph(canvas) && typeof canvas.dataset.liveOrp !== 'undefined') return formatGraphNumber(value) + unit + ' | ORP ' + formatGraphNumber(canvas.dataset.liveOrp) + ' мВ'; // У хлора рядом с online ppm показываем текущий ORP.
-  return formatGraphNumber(value) + unit;
+  let valueText = formatGraphNumber(value) + unit; // По умолчанию показываем обычное числовое значение графика.
+  if(useLiveRange && isChlorineGraph(canvas)){ // Диапазон <0.2/>2.5 применяем только к большому live-заголовку.
+    const rangeState = Number(canvas.dataset.clOrpRangeState || 0); // Читаем состояние выхода ORP за таблицу из live-ответа.
+    if(rangeState < 0) valueText = '<0.2 ppm'; // Ниже таблицы не выдумываем точное значение.
+    if(rangeState > 0) valueText = '>2.5 ppm'; // Выше таблицы не выдумываем точное значение.
+  } // Завершаем подмену live-значения хлора диапазоном.
+  if(isChlorineGraph(canvas) && typeof canvas.dataset.liveOrp !== 'undefined') return valueText + ' | ORP ' + formatGraphNumber(canvas.dataset.liveOrp) + ' мВ'; // У хлора рядом с online ppm показываем текущий ORP.
+  return valueText; // Возвращаем готовую строку заголовка графика.
 }
 
 function graphEventName(canvas){
@@ -4046,7 +4073,7 @@ function drawCustomGraph(canvas,data){
   ctx.shadowBlur = 22;
   ctx.fillStyle = 'rgba(26, 245, 255, 0.96)';
   const headlineValue = typeof canvas.dataset.liveValue !== 'undefined' ? canvas.dataset.liveValue : latest.value;
-  ctx.fillText(formatGraphHeadline(canvas, headlineValue), width / 2, Math.max(42, plotTop * 0.45));
+  ctx.fillText(formatGraphHeadline(canvas, headlineValue, true), width / 2, Math.max(42, plotTop * 0.45));
   ctx.restore();
 
   const lineColor = canvas.dataset.lineColor || '#4CAF50';
@@ -4414,6 +4441,7 @@ window.addEventListener('resize', ()=>{
       if(!key || typeof j[key] === 'undefined') return;
       canvas.dataset.liveValue = j[key];
       if(isChlorineGraph(canvas) && typeof j.corrected_ORP_Eh_mV !== 'undefined') canvas.dataset.liveOrp = j.corrected_ORP_Eh_mV; // Для online-подписи хлорного графика держим рядом текущий ORP.
+      if(isChlorineGraph(canvas) && typeof j.ClOrpRangeState !== 'undefined') canvas.dataset.clOrpRangeState = j.ClOrpRangeState; // Для online-подписи хлора держим состояние ниже/внутри/выше таблицы.
       const cached = graphDataCache.get(canvas);
       if(cached && cached.points) drawCustomGraph(canvas, cached.points);
     });
@@ -4846,6 +4874,7 @@ function setImg(x){
       doc["Temperatura"] = Temperatura; // Онлайн-значение для верхней подписи графика температуры
       doc["PH"] = PH; // Онлайн-значение для верхней подписи графика pH
       doc["ppmCl"] = ppmCl; // Онлайн-значение для верхней подписи графика хлора
+      doc["ClOrpRangeState"] = ClOrpRangeState; // Состояние диапазона ORP для подписи <0.2/>2.5 ppm на графике хлора.
             appendUiRegistryValues(doc);
       doc["PH_Lower"] = PH_Lower; // В live-ответе всегда отдаем актуальный нижний предел pH из рабочей переменной.
       doc["PH_Upper"] = PH_Upper; // В live-ответе всегда отдаем актуальный верхний предел pH из рабочей переменной.

@@ -813,6 +813,7 @@ void TimerControlRelay(int interval) {
         snprintf(Info_H2O2, 50, "pH wait"); // Показываем причину блокировки NaOCl: сначала нужно вернуть pH в норму.
       }
           } else {
+      if (!clDosingActive && ppmCl <= CL_Lower + 0.001f) clDosingActive = true; // Запускаем NaOCl на нижней границе с малым допуском float, когда ORP ниже диапазона и ppmCl зажат в 0.2.
       if (!clDosingActive && ppmCl < CL_Lower) clDosingActive = true; // Хлор нужен только ниже нижнего предела.
       if (clDosingActive && ppmCl >= CL_Upper) clDosingActive = false; // Дозирование прекращаем при достижении верхнего предела.
       manageTimer(H2O2_Work, Power_H2O2, clDosingActive, lastMillisH2O2, Info_H2O2);

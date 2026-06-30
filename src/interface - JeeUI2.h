@@ -341,6 +341,8 @@ UI_COLOR("LEDColor", LEDColor, "🎨 Цвет подсветки");
         UI_NUMBER("CL_Lower", CL_Lower, "⬇️ Нижний предел CL, мг/л", true);
     UI_NUMBER("CL_Upper", CL_Upper, "⬆️ Верхний предел CL, мг/л", true);
     UI_DISPLAY("ClLimitRecommendationInfo", ClLimitRecommendationInfo, "ℹ️ Уставки CL"); // Показывает короткие рекомендуемые диапазоны для чистой воды, лета и зелени.
+    UI_DISPLAY("ClDosingStatusInfo", ClDosingStatusInfo, "🔎 Статус NaOCl"); // Показывает короткую причину, почему дозатор работает или заблокирован.
+    UI_DISPLAY("ClOrpPpmTableInfo", ClOrpPpmTableInfo, "📐 ORP ↔ ppm"); // Показывает табличные ORP-границы для 0.2/0.3/0.4 ppm при текущем pH.
     UI_SELECT_CB("H2O2_Work", H2O2_Work, dosingOptions, "⏳ Период дозирования NaOCl", onH2O2DosingPeriodChange);
     UI_DISPLAY("ClLogicInfo", ClLogicInfo, "ℹ️ Логика CL и RS485");
 
