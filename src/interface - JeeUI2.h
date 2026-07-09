@@ -335,7 +335,10 @@ UI_COLOR("LEDColor", LEDColor, "🎨 Цвет подсветки");
     "xLabel:t;yLabel:ppm;pointColor:#6b66ff;lineColor:#ff5e5e;"
     "lineWidth:1;pointRadius:3;smooth:false", ppmCl);
 
-    UI_DISPLAY_INT("corrected_ORP_Eh_mV", corrected_ORP_Eh_mV, "📟 ORP, мВ");
+    UI_GRAPH_SOURCE("FloatClOrp", "📊 ORP датчика хлора, мВ", // Добавляем отдельный видимый график ORP сразу под ppm-графиком.
+    "value:corrected_ORP_Eh_mV_Graph;updatePeriod_of_Time:60;updateStep:5;maxPoints:100;width:100%;height:280;" // Пишем отфильтрованный ORP с тем же шагом и лимитом точек.
+    "xLabel:t;yLabel:mV;pointColor:#2dd4bf;lineColor:#38bdf8;" // Отличаем ORP-график спокойным голубым цветом.
+    "lineWidth:1;pointRadius:3;smooth:false", corrected_ORP_Eh_mV_Graph); // Передаем float-копию ORP, потому что графики работают с float-источником.
     UI_DISPLAY_BOOL("Power_H2O2", Power_H2O2, "🧴 Дозатор NaOCl", "✅ Работа", "⏹️ Откл.");
     UI_CHECKBOX("NaOCl_H2O2_Control", NaOCl_H2O2_Control, "🧪 Контроль хлора (NaOCl)");
         UI_NUMBER("CL_Lower", CL_Lower, "⬇️ Нижний предел CL, мг/л", true);

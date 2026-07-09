@@ -352,6 +352,56 @@ int calibrateSensor(int ORP_mV) {
     return ORP_mV + Calibration_ORP_mV; // Применяем калибровочное смещение
 }
 
+int filterOrpSpike(int candidateOrp) { // Фильтрует одиночные неправильные скачки ORP после температурной и калибровочной поправки.
+  static bool hasStableOrp = false; // Запоминает, есть ли уже опорное стабильное значение ORP.
+  static int stableOrp = 0; // Хранит последнее принятое стабильное значение ORP.
+  static int pendingOrp = 0; // Хранит кандидат на новое стабильное значение при большом скачке.
+  static uint8_t pendingCount = 0; // Считает, сколько раз подряд повторился большой скачок.
+  static int lastCalibrationOffset = 0; // Отслеживает смену калибровочной поправки, чтобы не считать ее выбросом.
+  const int maxSingleJumpMv = 120; // Разрешенный одиночный шаг ORP; больше считается подозрительным скачком.
+  const int pendingSimilarityMv = 25; // Допуск похожести повторных кандидатов, чтобы принять реальное новое значение.
+  const uint8_t confirmCount = 3; // Сколько похожих показаний подряд нужно для принятия большого изменения.
+  const int hardLowRejectMv = 100; // Явный нижний сбой для случаев вроде 41 мВ при нормальных 420-430 мВ.
+  Raw_ORP_Eh_mV = candidateOrp; // Сохраняем сырое откалиброванное значение для диагностики фильтра.
+  OrpRejected_mV = 0; // Сбрасываем последнее отброшенное значение, пока новый выброс не найден.
+  OrpSpikeRejected = false; // Сбрасываем флаг выброса перед проверкой текущего измерения.
+  if (!hasStableOrp || lastCalibrationOffset != Calibration_ORP_mV) { // Первое значение или новая калибровка принимаются как новая база.
+    hasStableOrp = true; // Помечаем, что стабильная база уже задана.
+    stableOrp = candidateOrp; // Принимаем текущее значение как стабильное.
+    pendingOrp = candidateOrp; // Синхронизируем ожидающий кандидат с принятой базой.
+    pendingCount = 0; // Сбрасываем счетчик подтверждения большого скачка.
+    lastCalibrationOffset = Calibration_ORP_mV; // Запоминаем текущую калибровочную поправку.
+    return stableOrp; // Возвращаем принятую базу без фильтрации.
+  } // Завершаем обработку первого значения или смены калибровки.
+  if (candidateOrp < hardLowRejectMv && stableOrp > 250) { // Очень низкий провал при нормальной базе считаем аппаратным выбросом.
+    OrpRejected_mV = candidateOrp; // Запоминаем отброшенный провал для вывода в диагностике.
+    OrpSpikeRejected = true; // Сообщаем Web, что последнее измерение было удержано фильтром.
+    pendingCount = 0; // Не накапливаем подтверждение для явного низкого сбоя.
+    return stableOrp; // Возвращаем предыдущее стабильное значение вместо провала.
+  } // Завершаем жесткую защиту от провалов ниже разумного диапазона.
+  const int deltaMv = abs(candidateOrp - stableOrp); // Считаем разницу между новым и стабильным ORP.
+  if (deltaMv <= maxSingleJumpMv) { // Небольшой шаг считаем нормальным изменением воды или датчика.
+    stableOrp = candidateOrp; // Принимаем новое значение как стабильное.
+    pendingOrp = candidateOrp; // Синхронизируем ожидающий кандидат с принятым значением.
+    pendingCount = 0; // Сбрасываем счетчик подтверждения большого скачка.
+    return stableOrp; // Возвращаем принятое нормальное значение.
+  } // Завершаем нормальный путь без выброса.
+  if (abs(candidateOrp - pendingOrp) <= pendingSimilarityMv) { // Большой скачок повторился около прежнего кандидата.
+    if (pendingCount < 255) pendingCount++; // Увеличиваем счетчик подтверждения без переполнения.
+  } else { // Большой скачок ушел в другое значение и начинает новую проверку.
+    pendingOrp = candidateOrp; // Запоминаем новый кандидат большого изменения.
+    pendingCount = 1; // Начинаем подтверждение нового кандидата с первого попадания.
+  } // Завершаем обновление кандидата большого скачка.
+  if (pendingCount >= confirmCount) { // Повторный большой скачок подтвердился несколько раз подряд.
+    stableOrp = candidateOrp; // Принимаем новое значение как реальное, а не как выброс.
+    pendingCount = 0; // Сбрасываем счетчик после принятия нового стабильного значения.
+    return stableOrp; // Возвращаем уже принятое большое изменение.
+  } // Завершаем проверку подтвержденного большого изменения.
+  OrpRejected_mV = candidateOrp; // Запоминаем отброшенный одиночный скачок для диагностики.
+  OrpSpikeRejected = true; // Сообщаем Web, что текущее значение удержано фильтром.
+  return stableOrp; // Возвращаем прежнее стабильное значение до подтверждения скачка.
+} // Завершает фильтр одиночных выбросов ORP.
+
  void btnCalCl(){
     //ESP.restart(); // Перезагрузить ESP32
     }
@@ -411,7 +461,9 @@ void loop_CL2(int interval) {
   corr_ORP_temper_mV = correctValueByTemperature(analogValueCL, temperature);
 
   // Применение калибровочного смещения (мВ)
-  corrected_ORP_Eh_mV = calibrateSensor(corr_ORP_temper_mV);
+  const int calibrated_ORP_Eh_mV = calibrateSensor(corr_ORP_temper_mV); // Получаем ORP после температурной и калибровочной поправки.
+  corrected_ORP_Eh_mV = filterOrpSpike(calibrated_ORP_Eh_mV); // Удерживаем одиночные неправильные скачки перед расчетом ppm и дозированием.
+  corrected_ORP_Eh_mV_Graph = static_cast<float>(corrected_ORP_Eh_mV); // Обновляем float-копию для отдельного ORP-графика Web.
 
     const int minOrpForCurrentPh = interpolateOrpForClTarget(PH, ppmClValues[0]); // Нижняя ORP-граница таблицы для текущего pH и 0.2 ppm.
     const int maxOrpForCurrentPh = interpolateOrpForClTarget(PH, ppmClValues[22]); // Верхняя ORP-граница таблицы для текущего pH и 2.5 ppm.

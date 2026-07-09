@@ -285,9 +285,11 @@ void manageTimer(int& mode,                 // Код периода дозир�
   const bool emergencyHold = (info == Info_ACO && DosingAcoEmergencyHoldUntil != 0 && static_cast<long>(now - DosingAcoEmergencyHoldUntil) < 0) ||
                              (info == Info_H2O2 && DosingH2O2EmergencyHoldUntil != 0 && static_cast<long>(now - DosingH2O2EmergencyHoldUntil) < 0); // Проверяем паузу после аварийного выключения конкретного насоса.
 
-  if (emergencyHold) { // Если аварийная пауза еще активна, насос не имеет права стартовать снова.
+  if (emergencyHold && activation && Power_Filtr) { // Если пауза активна, но дозирование все еще нужно, показываем ожидание до следующего импульса.
     power = false; // Снимаем команду с реле дозатора.
-    snprintf(info, 50, "OFF"); // Показываем короткое безопасное состояние.
+    unsigned long holdUntil = (info == Info_ACO) ? DosingAcoEmergencyHoldUntil : DosingH2O2EmergencyHoldUntil; // Выбираем окончание защитной паузы для нужного насоса.
+    unsigned long waitMs = (static_cast<long>(holdUntil - now) > 0) ? (holdUntil - now) : 0UL; // Считаем оставшееся время до следующего разрешенного старта.
+    formatDosingCountdown(info, 50, waitMs); // Показываем таймер вместо OFF, чтобы Web/Nextion не теряли обратный отсчет.
     return; // Выходим до обычной логики таймера.
   }
 
@@ -347,7 +349,7 @@ inline void enforceDosingHardLimit(){ // Аварийный ограничите
     DosingAcoEmergencyHoldUntil = now + dosingPeriodMsFromMode(ACO_Work); // Запрещаем мгновенный повторный старт до следующего периода.
     ModbusRelaySentKnown[6] = false; // Просим RS485 заново отправить OFF на реле 7.
     ModbusRelayNeedReadback = true; // После аварийного среза нужна свежая сверка реле.
-    snprintf(Info_ACO, 50, "OFF"); // На Web/Nextion сразу показываем безопасное состояние.
+    formatDosingCountdown(Info_ACO, 50, dosingPeriodMsFromMode(ACO_Work)); // После среза сразу показываем паузу до следующего импульса ACO.
     acoCommanded = false; // Обновляем локальное состояние после принудительного выключения.
   }
 
@@ -357,7 +359,7 @@ inline void enforceDosingHardLimit(){ // Аварийный ограничите
     DosingH2O2EmergencyHoldUntil = now + dosingPeriodMsFromMode(H2O2_Work); // Запрещаем мгновенный повторный старт до следующего периода.
     ModbusRelaySentKnown[5] = false; // Просим RS485 заново отправить OFF на реле 6.
     ModbusRelayNeedReadback = true; // После аварийного среза нужна свежая сверка реле.
-    snprintf(Info_H2O2, 50, "OFF"); // На Web/Nextion сразу показываем безопасное состояние.
+    formatDosingCountdown(Info_H2O2, 50, dosingPeriodMsFromMode(H2O2_Work)); // После среза сразу показываем паузу до следующего импульса NaOCl.
     h2o2Commanded = false; // Обновляем локальное состояние после принудительного выключения.
   }
 
@@ -808,7 +810,8 @@ void TimerControlRelay(int interval) {
     const bool phAllowsChlorineDosing = (PH >= PH_Lower && PH <= PH_Upper); // Хлор разрешен только когда pH находится в заданном рабочем диапазоне.
     if (!NaOCl_H2O2_Control || !dosingFlowAllowed || !phAllowsChlorineDosing) {
       clDosingActive = false;
-      manageTimer(H2O2_Work, Power_H2O2 = false, false, lastMillisH2O2, Info_H2O2);
+      Power_H2O2 = false; // При запрете дозирования выключаем только насос NaOCl, но не сам флаг контроля хлора.
+      manageTimer(H2O2_Work, Power_H2O2, false, lastMillisH2O2, Info_H2O2); // Таймер переводим в неактивное состояние без отключения NaOCl_H2O2_Control.
       if (NaOCl_H2O2_Control && dosingFlowAllowed && !phAllowsChlorineDosing) {
         snprintf(Info_H2O2, 50, "pH wait"); // Показываем причину блокировки NaOCl: сначала нужно вернуть pH в норму.
       }
