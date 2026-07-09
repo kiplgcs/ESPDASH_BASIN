@@ -114,7 +114,7 @@ void setup() {
   Serial.printf("[BOOT] Chip model: %s | Cores: %u | Revision: %u\n",
                 ESP.getChipModel(), ESP.getChipCores(), ESP.getChipRevision());
 
-  pinMode(3, INPUT_PULLDOWN); // GPIO3 используется как аналоговый вход датчика освещенности; внутренняя подтяжка вниз страхует обрыв внешнего GND.
+  pinMode(3, INPUT); // GPIO3 используется как чистый аналоговый вход датчика освещенности; внутренние подтяжки искажают ADC.
   analogReadResolution(12); // Для датчика освещенности используем шкалу ADC 0..4095.
 #ifdef ARDUINO_ARCH_ESP32
   analogSetPinAttenuation(3, ADC_11db); // Диапазон ADC до 3.3 В, чтобы датчик не упирался в 100% слишком рано.
@@ -279,8 +279,9 @@ updateCleanSequence(); // Обновление последовательнос�
 updateManualPumpPulses(); // Для прверки перельстатических насосов - счет таймера - 1 сек
 enforceDosingHardLimit(); // Дополнительный предохранитель: насосы PH/CL не могут держаться включенными дольше 5 секунд.
 ControlModbusRelay(40); // RS485 проверяем в 2 раза реже, чтобы не забивать цикл и UART Nextion.
-loop_PH(2000); // Обработка логики PH
-loop_CL2(2100); // Обработка логики хлора
+const bool calibrationFast = calibrationFastModeActive(); // Во время открытой калибровки читаем ADS чаще для видимой динамики.
+loop_PH(calibrationFast ? 250 : 2000); // Обработка логики PH
+loop_CL2(calibrationFast ? 300 : 2100); // Обработка логики хлора
 
 /**************************** *********************************************************************/
   serviceNextionSerial(32);

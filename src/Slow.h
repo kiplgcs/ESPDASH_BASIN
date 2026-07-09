@@ -249,7 +249,7 @@ switch (flag_slow) {
   case 2: {
 
   //Lumen_Ul = readAnalog(36);
-  // GPIO3 подтянут к GND, а датчик подает 3.3 В: 0 В = 0%, 3.3 В = 100%.
+  // GPIO3 работает как чистый аналоговый вход: 0 В = 0%, 3.3 В = 100%.
   uint32_t lumenRawSum = 0; // Усредняем несколько быстрых замеров ADC, чтобы не показывать случайный всплеск.
   for (uint8_t lumenSample = 0; lumenSample < 8; ++lumenSample) { // 8 замеров достаточно для диагностики и не тормозит loop.
     lumenRawSum += analogRead(3); // Читаем ADC GPIO3 без delay, чтобы синхронизация Nextion/Web не зависала.
@@ -259,7 +259,8 @@ switch (flag_slow) {
   // if(Lumen_Ul != Saved_Lumen_Ul) {Saved_Lumen_Ul = Lumen_Ul;
   Lumen_Ul = constrain(map(Lumen_Ul_Raw, 0, 4095, 0, 100), 0, 100); // Переводим диапазон ADC ESP32 в проценты освещенности.
 
-  InfoString2 = "Освещенность = " + String(Lumen_Ul) + " % (ADC " + String(Lumen_Ul_Raw) + ")";  
+  const float lumenVoltage = (static_cast<float>(Lumen_Ul_Raw) * 3.3f) / 4095.0f; // Диагностическое напряжение на GPIO3.
+  InfoString2 = "Освещенность = " + String(Lumen_Ul) + " % (ADC " + String(Lumen_Ul_Raw) + ", " + String(lumenVoltage, 2) + " В)";
   if (Lumen_Ul_Raw > 4000) InfoString2 += " - GPIO3 почти 3.3V"; // Если в темноте видно это сообщение, вход аппаратно удерживается высоким уровнем.
 
     //  jee.var("Lumen_Ul", ""); //освещенность на улице в процентах

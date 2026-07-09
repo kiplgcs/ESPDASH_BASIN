@@ -182,6 +182,17 @@ int Lumen_Ul, Saved_Lumen_Ul; //освещенность на улице
 int Lumen_Ul_Raw; // Сырое значение АЦП GPIO3 для диагностики датчика освещенности.
 //int Lumen_Ul_percent; //Освещенность в процентах
 
+inline unsigned long CalibrationFastRequestedAt = 0; // Последний запрос быстрого режима измерений из popup калибровки.
+inline constexpr unsigned long CalibrationFastHoldMs = 3000UL; // Быстрый режим держится коротко и продлевается live-запросами popup.
+
+inline void requestCalibrationFastMode(){
+  CalibrationFastRequestedAt = millis();
+}
+
+inline bool calibrationFastModeActive(){
+  return CalibrationFastRequestedAt != 0 && millis() - CalibrationFastRequestedAt <= CalibrationFastHoldMs;
+}
+
 float PH, Saved_PH; //Кислотность воды
 float PH1 = 4.1f, PH2 = 6.86f;          //Точки калибровки PH
 float PH1_CAL = 3500.0f, PH2_CAL = 2900.0f; //Значения для данных точек калибровки PH от 0 до 4095 (12бит)
@@ -1595,6 +1606,11 @@ private:
       ".rs485-input-chip.on{background:#0d4269;border-color:#318bd0;color:#fff;} "
       ".rs485-assignments{display:grid;grid-template-columns:repeat(2,minmax(260px,1fr));gap:8px;color:#d9e7ff;font-size:0.92rem;line-height:1.35;} "
       ".rs485-assignment{background:#121820;border:1px solid rgba(255,255,255,0.08);border-radius:7px;padding:8px 10px;} "
+      ".din-info-section{width:100%;box-sizing:border-box;clear:both;margin-top:18px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.10);} "
+      ".din-info-section .rs485-title{font-size:1.35rem;} "
+      ".din-info-section .rs485-image{max-height:330px;} "
+      ".din-info-section .rs485-spec-row{grid-template-columns:minmax(96px,130px) minmax(0,1fr);} "
+      ".din-info-section .rs485-spec-row span{min-width:0;overflow-wrap:anywhere;} "
       "@media (max-width:1050px){.rs485-board,.rs485-image-card{grid-template-columns:1fr;}.rs485-controls{grid-template-columns:repeat(2,minmax(140px,1fr));}.rs485-relay-grid,.rs485-input-grid,.rs485-assignments{grid-template-columns:repeat(2,minmax(140px,1fr));}} "
       "@media (max-width:640px){.rs485-hero{align-items:flex-start;flex-direction:column;}.rs485-controls,.rs485-relay-grid,.rs485-input-grid,.rs485-assignments{grid-template-columns:1fr;}.rs485-status{width:100%;box-sizing:border-box;}} "
             ".page-header{display:flex;flex-direction:row;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:10px;} " // Заголовок страницы
@@ -2317,7 +2333,27 @@ private:
                       html += assignment;
                       html += "</div>";
                   }
-                  html += "</div></div></div>";
+                  html += "</div></div>";
+                  html += "<div class='din-info-section'>"
+                          "<div class='rs485-card rs485-hero'><div><div class='rs485-title'>DIN-плата для ESP32-S3-DevKitC-1</div>"
+                          "<div class='rs485-sub'>Переходная плата для установки ESP32-S3-DevKitC-1 в щит автоматики на DIN-рейку. "
+                          "Выводит GPIO на винтовые клеммы, упрощает подключение питания, RS485 и сервисных сигналов.</div></div></div>"
+                          "<div class='rs485-card'>"
+                          "<div class='rs485-note'>Плата помогает развести ESP32-S3 без макетных проводов: питание 24V/GND, клеммы 5V/3V3/GND/RX/TX, "
+                          "линии GPIO на верхней и нижней колодках, отдельный RS485 A/B. Ниже указана фактическая распиновка, используемая этой прошивкой.</div>"
+                          "<div class='rs485-image-card'><img class='rs485-image' src='/din_esp32_s3_devkitc1.jpg' alt='DIN board for ESP32-S3-DevKitC-1'>"
+                          "<div class='rs485-spec'><h4>DIN ESP32-S3-DevKitC-1 carrier</h4>"
+                          "<div class='rs485-spec-row'><strong>Назначение</strong><span>Монтаж ESP32-S3-DevKitC-1 в электрическом шкафу</span></div>"
+                          "<div class='rs485-spec-row'><strong>Питание</strong><span>Клеммы 24V/GND, выводы 5V/3V3/GND для периферии</span></div>"
+                          "<div class='rs485-spec-row'><strong>GPIO3</strong><span>ADC датчика освещенности, вход 0..3.3 В, без внутренней подтяжки</span></div>"
+                          "<div class='rs485-spec-row'><strong>GPIO4 / GPIO5</strong><span>I2C: SDA / SCL для двух ADS1115; 0x48 A0 = pH, 0x49 A1 = ORP/CL</span></div>"
+                          "<div class='rs485-spec-row'><strong>GPIO6 / GPIO7</strong><span>UART1 Nextion: RX ESP32 / TX ESP32, 115200 8N1</span></div>"
+                          "<div class='rs485-spec-row'><strong>GPIO10</strong><span>DATA адресной ленты WS2815, 180 LED</span></div>"
+                          "<div class='rs485-spec-row'><strong>GPIO14</strong><span>OneWire-шина DS18B20: температура бассейна и после нагревателя</span></div>"
+                          "<div class='rs485-spec-row'><strong>GPIO18 / GPIO17</strong><span>Serial2 RS485 Modbus: RX / TX, 19200 8N1; клеммы RS485 A/B на DIN-плате</span></div>"
+                          "<div class='rs485-spec-row'><strong>RS485 реле</strong><span>R1 лампа, R2 питание WS2815, R6 NaOCl, R7 ACO/pH, R9 фильтрация/слив, R10 компрессор, R11 FILTRATION, R12 BACKWASH, R13 сброс песка, R14 долив, R15 теплый пол, R16 уличный свет</span></div>"
+                          "<div class='rs485-spec-row'><strong>RS485 входы</strong><span>DI1 нижний уровень бассейна, DI2 верхний уровень бассейна, DI3 верхний уровень сливной ямы, DI4-DI16 резерв</span></div>"
+                          "</div></div></div></div></div>";
                   renderedCount++;
                   continue;
               }
@@ -2937,6 +2973,52 @@ private:
     if(!modal) return;
     modal.classList.remove('hidden');
     modal.onclick = (e)=>{ if(e.target === modal) closePopup(id); };
+    if(calibrationPopupIds.has(id)) startCalibrationFastPoll();
+  }
+
+  const calibrationPopupIds = new Set(['Cal_PH','CL']);
+  let calibrationFastPollTimer = null;
+  let calibrationFastInFlight = false;
+
+  function activeCalibrationPopup(){
+    for(const id of calibrationPopupIds){
+      const modal = document.getElementById('popup-' + id);
+      if(modal && !modal.classList.contains('hidden')) return id;
+    }
+    return '';
+  }
+
+  function stopCalibrationFastPoll(){
+    if(calibrationFastPollTimer) clearTimeout(calibrationFastPollTimer);
+    calibrationFastPollTimer = null;
+  }
+
+  function scheduleCalibrationFastPoll(delayMs=500){
+    stopCalibrationFastPoll();
+    calibrationFastPollTimer = setTimeout(fetchCalibrationLive, delayMs);
+  }
+
+  function startCalibrationFastPoll(){
+    stopCalibrationFastPoll();
+    fetchCalibrationLive();
+  }
+
+  function fetchCalibrationLive(){
+    if(!activeCalibrationPopup()){
+      stopCalibrationFastPoll();
+      return;
+    }
+    if(calibrationFastInFlight){
+      scheduleCalibrationFastPoll(250);
+      return;
+    }
+    calibrationFastInFlight = true;
+    fetch('/calibration/live').then(r=>r.json()).then(j=>{
+      Object.keys(j).forEach(key=>applyLiveValue(key, j[key]));
+    }).catch(()=>{}).finally(()=>{
+      calibrationFastInFlight = false;
+      if(activeCalibrationPopup()) scheduleCalibrationFastPoll(500);
+    });
   }
 
   async function ensurePopupAuthorized(){
@@ -2965,6 +3047,7 @@ private:
   function closePopup(id){
     const modal = document.getElementById('popup-' + id);
     if(modal) modal.classList.add('hidden');
+    if(calibrationPopupIds.has(id) && !activeCalibrationPopup()) stopCalibrationFastPoll();
   }
 
   document.addEventListener('click', async (event)=>{
@@ -4842,6 +4925,29 @@ function setImg(x){
       r->send(200, "application/json", "{\"status\":\"ok\"}");
     });
 
+    server.on("/calibration/live", HTTP_GET, [](AsyncWebServerRequest *r){
+      if(!ensureAuthorized(r)) return;
+      requestCalibrationFastMode();
+
+      JsonDocument doc;
+      doc["PH"] = PH;
+      doc["analogValuePH"] = analogValuePH_Comp;
+      doc["Temper_PH"] = Temper_PH;
+      doc["ppmCl"] = ppmCl;
+      doc["corrected_ORP_Eh_mV"] = corrected_ORP_Eh_mV;
+      doc["ClCalibrationCorrectedOrp"] = corrected_ORP_Eh_mV;
+      doc["ClCalibrationTempOrp"] = corr_ORP_temper_mV;
+      doc["CalRastvor256mV"] = CalRastvor256mV;
+      doc["Calibration_ORP_mV"] = Calibration_ORP_mV;
+      doc["ClCalibrationFormula"] = resolveUiValueOverride("ClCalibrationFormula", ClCalibrationFormula);
+      doc["ClCalibrationStatus"] = resolveUiValueOverride("ClCalibrationStatus", ClCalibrationStatus);
+      doc["ClCalibrationTemperatureInfo"] = resolveUiValueOverride("ClCalibrationTemperatureInfo", ClCalibrationTemperatureInfo);
+
+      AsyncResponseStream *response = r->beginResponseStream("application/json");
+      serializeJson(doc, *response);
+      r->send(response);
+    });
+
     server.on("/live", HTTP_GET, [](AsyncWebServerRequest *r){
           if(!ensureAuthorized(r)) return;
       JsonDocument doc; // ArduinoJson v7 сам расширяет документ: не держим 64 КБ heap на каждый быстрый /live.
@@ -5151,6 +5257,7 @@ server.on("/getImage", HTTP_GET, [](AsyncWebServerRequest *r){
     server.serveStatic("/level_between_levels.png", SPIFFS, "/level_between_levels.png"); // Пиктограмма: уровень между нижним и верхним датчиками.
     server.serveStatic("/level_above_upper.png", SPIFFS, "/level_above_upper.png"); // Пиктограмма: уровень достиг верхнего датчика или выше.
     server.serveStatic("/huaqingjun.jpg", SPIFFS, "/huaqingjun.jpg"); // Отдаёт изображение RS485-реле Huaqingjun из SPIFFS.
+    server.serveStatic("/din_esp32_s3_devkitc1.jpg", SPIFFS, "/din_esp32_s3_devkitc1.jpg"); // Отдаёт изображение DIN-платы ESP32-S3 из SPIFFS.
     server.serveStatic("/img1.jpg", SPIFFS, "/img1.jpg"); // Отдаёт изображение img1.jpg из SPIFFS по HTTP пути /img1.jpg
     server.serveStatic("/img2.jpg", SPIFFS, "/img2.jpg"); // Отдаёт изображение img2.jpg из SPIFFS по HTTP пути /img2.jpg
 
