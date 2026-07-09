@@ -33,19 +33,19 @@ inline void interface(){ // Декларатиынве функции интер
   
     // Общая информация по бассейну
     UI_PAGE();
-    UI_IMAGE("Image1", "/Basin.jpg", "width:250%;height:800; x:-80%;y:100%;");
-    UI_IMAGE("PoolLevelIcon", "/level_between_levels.png", "width:86;height:86;left:41%;top:172px;border-radius:8px;box-shadow:0 8px 18px rgba(0,0,0,0.35);pointer-events:none;");
+    UI_IMAGE("Image1", "/Basin.jpg", "width:100%;height:auto;border-radius:0;box-shadow:none;");
+    UI_IMAGE("PoolLevelIcon", "/level_between_levels.png", "width:7%;height:auto;left:44%;top:22%;border-radius:8px;box-shadow:0 8px 18px rgba(0,0,0,0.35);pointer-events:none;");
     
-    UI_TEXT("OverlayPoolTemp", OverlayPoolTemp, "x:62%;y:300;fontSize:14;color:#00ff00");
-    UI_TEXT("OverlayHeaterTemp", OverlayHeaterTemp, "x:78%;y:355;fontSize:14;color:#00ff00");
-    UI_TEXT("OverlayLevelUpper", OverlayLevelUpper, "x:41%;y:240;fontSize:13;color:#00ff00");
-    UI_TEXT("OverlayLevelLower", OverlayLevelLower, "x:41%;y:290;fontSize:13;color:#00ff00");
+    UI_TEXT("OverlayPoolTemp", OverlayPoolTemp, "x:62%;y:36%;fontSize:14;color:#00ff00");
+    UI_TEXT("OverlayHeaterTemp", OverlayHeaterTemp, "x:78%;y:43%;fontSize:14;color:#00ff00");
+    UI_TEXT("OverlayLevelUpper", OverlayLevelUpper, "x:44%;y:30%;fontSize:13;color:#00ff00");
+    UI_TEXT("OverlayLevelLower", OverlayLevelLower, "x:44%;y:36%;fontSize:13;color:#00ff00");
    
-    UI_TEXT("OverlayPh", OverlayPh, "x:61%;y:400;fontSize:13;color:#00ff00");
-    UI_TEXT("OverlayChlorine", OverlayChlorine, "x:72%;y:400;fontSize:13;color:#00ff00");
-    UI_TEXT("OverlayFilterState", OverlayFilterState, "x:32%;y:470;fontSize:12;color:#00ff00");
-    UI_TEXT("OverlayDrainPit", OverlayDrainPit, "x:84%;y:595;fontSize:12;color:#00ff00");
-    UI_TEXT("OverlayLight", OverlayLight, "x:82%;y:90;fontSize:12;color:#00ff00");
+    UI_TEXT("OverlayPh", OverlayPh, "x:60%;y:48%;fontSize:13;color:#00ff00");
+    UI_TEXT("OverlayChlorine", OverlayChlorine, "x:70%;y:48%;fontSize:13;color:#00ff00");
+    UI_TEXT("OverlayFilterState", OverlayFilterState, "x:31%;y:60%;fontSize:12;color:#00ff00");
+    UI_TEXT("OverlayDrainPit", OverlayDrainPit, "x:82%;y:75%;fontSize:12;color:#00ff00");
+    UI_TEXT("OverlayLight", OverlayLight, "x:82%;y:10%;fontSize:12;color:#00ff00");
 
     
                             // // Controls tab
@@ -164,11 +164,11 @@ inline void interface(){ // Декларатиынве функции интер
     UI_POPUP_BEGIN("LightThresholds", "Настройка порогов включения / отключения по датчику освещенности", "⚙️ Настройка порогов освещенности");
         UI_DISPLAY("LightSensorLiveInfo", LightSensorLiveInfo, "📡 Текущие показания GPIO3");
         UI_DISPLAY("LightThresholdHelp", LightThresholdHelp, "ℹ️ Логика автосвета");
-        UI_DUAL_RANGE_KEYS("LampLightThresholdRange", LampLightOffThreshold, LampLightOnThreshold, "LampLightOffThreshold", "LampLightOnThreshold", 0, 100, 1, "💡 Лампа бассейна: выключить / включить, %");
+        UI_DUAL_RANGE_KEYS("LampLightThresholdRange", LampLightOffThreshold, LampLightOnThreshold, "LampLightOffThreshold", "LampLightOnThreshold", 0, 100, 1, "💡 Лампа бассейна: включить / выключить, %");
         UI_DISPLAY("LampLightAutoState", LampLightAutoState, "💡 Состояние лампы бассейна");
-        UI_DUAL_RANGE_KEYS("UlLightThresholdRange", UlLightOffThreshold, UlLightOnThreshold, "UlLightOffThreshold", "UlLightOnThreshold", 0, 100, 1, "🚏 Улица: выключить / включить, %");
+        UI_DUAL_RANGE_KEYS("UlLightThresholdRange", UlLightOffThreshold, UlLightOnThreshold, "UlLightOffThreshold", "UlLightOnThreshold", 0, 100, 1, "🚏 Улица: включить / выключить, %");
         UI_DISPLAY("UlLightAutoState", UlLightAutoState, "🚏 Состояние уличного освещения");
-        UI_DUAL_RANGE_KEYS("RgbLightThresholdRange", RgbLightOffThreshold, RgbLightOnThreshold, "RgbLightOffThreshold", "RgbLightOnThreshold", 0, 100, 1, "🌈 RGB: выключить / включить, %");
+        UI_DUAL_RANGE_KEYS("RgbLightThresholdRange", RgbLightOffThreshold, RgbLightOnThreshold, "RgbLightOffThreshold", "RgbLightOnThreshold", 0, 100, 1, "🌈 RGB: включить / выключить, %");
         UI_DISPLAY("RgbLightAutoState", RgbLightAutoState, "🌈 Состояние RGB");
         UI_DISPLAY("LightSensorDiagnosticInfo", LightSensorDiagnosticInfo, "🧪 Подробная диагностика ADC");
     UI_POPUP_END();

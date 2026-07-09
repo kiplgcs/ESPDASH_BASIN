@@ -190,16 +190,16 @@ int Lumen_Ul_SampleCount; // Сколько быстрых ADC-замеров и
 bool Lumen_Ul_AdcSaturated; // Флаг насыщения ADC GPIO3 по raw-значению.
 String LightSensorLiveInfo = ""; // Живая строка с текущими показаниями датчика освещенности.
 String LightSensorDiagnosticInfo = ""; // Подробная диагностика ADC для popup настроек порогов.
-String LightThresholdHelp = "GPIO3 измеряет сигнал датчика 0..3.3 В. В этом проекте при затемнении напряжение растет: полный авто-режим включает выше верхнего порога и выключает ниже нижнего. Режим 'датчик -> таймер' включает по датчику только внутри окна таймера и выключает в конце этого окна.";
+String LightThresholdHelp = "Освещенность в Web уже перевернута под реальный датчик: 0% = темно, 100% = ярко. На GPIO3 напряжение растет при затемнении, поэтому полный авто-режим включает свет при падении ниже нижнего порога и выключает при росте выше верхнего. Режим 'датчик -> таймер' включает по нижнему порогу только внутри окна таймера и выключает в конце этого окна.";
 String LampLightAutoState = ""; // Текущее состояние автоматики лампы бассейна по освещенности.
 String UlLightAutoState = ""; // Текущее состояние автоматики уличного освещения по освещенности.
 String RgbLightAutoState = ""; // Текущее состояние автоматики RGB по освещенности.
-int LampLightOffThreshold = 75; // Лампа бассейна: при падении ниже этого процента выключаем.
-int LampLightOnThreshold = 85; // Лампа бассейна: при росте выше этого процента включаем.
-int UlLightOffThreshold = 75; // Уличное освещение: нижний порог гистерезиса.
-int UlLightOnThreshold = 85; // Уличное освещение: верхний порог гистерезиса.
-int RgbLightOffThreshold = 75; // RGB: нижний порог гистерезиса.
-int RgbLightOnThreshold = 85; // RGB: верхний порог гистерезиса.
+int LampLightOffThreshold = 75; // Лампа бассейна: нижний порог, при падении ниже него включаем.
+int LampLightOnThreshold = 85; // Лампа бассейна: верхний порог, при росте выше него выключаем.
+int UlLightOffThreshold = 75; // Уличное освещение: нижний порог включения в темноте.
+int UlLightOnThreshold = 85; // Уличное освещение: верхний порог отключения при свете.
+int RgbLightOffThreshold = 75; // RGB: нижний порог включения в темноте.
+int RgbLightOnThreshold = 85; // RGB: верхний порог отключения при свете.
 //int Lumen_Ul_percent; //Освещенность в процентах
 
 inline unsigned long CalibrationFastRequestedAt = 0; // Последний запрос быстрого режима измерений из popup калибровки.
@@ -592,10 +592,10 @@ inline bool applyLightModeSettingRequest(const String &id, const String &rawValu
   return false;
 }
 
-inline bool applyLightAutoHysteresis(bool currentState, int offThreshold, int onThreshold) { // Автосвет: больше процент GPIO3 = темнее.
+inline bool applyLightAutoHysteresis(bool currentState, int offThreshold, int onThreshold) { // Автосвет: 0% = темно, 100% = ярко.
   normalizeLightThresholdPair(offThreshold, onThreshold);
-  if (!currentState && Lumen_Ul >= onThreshold) return true; // Стало темно: включаем.
-  if (currentState && Lumen_Ul <= offThreshold) return false; // Стало светло: выключаем.
+  if (!currentState && Lumen_Ul <= offThreshold) return true; // Стало темно: включаем.
+  if (currentState && Lumen_Ul >= onThreshold) return false; // Стало светло: выключаем.
   return currentState; // Между порогами держим прежнее состояние, чтобы реле не дергалось.
 }
 
@@ -607,19 +607,19 @@ inline bool lightTimeWindowActive(uint16_t currentMinutes, uint16_t startMinutes
   return currentMinutes >= startMinutes && currentMinutes < endMinutes;
 }
 
-inline bool applyLightSensorOnTimerOff(bool currentState, int onThreshold, bool timerWindowActive) { // Включение по датчику, отключение по концу окна таймера.
+inline bool applyLightSensorOnTimerOff(bool currentState, int offThreshold, bool timerWindowActive) { // Включение по датчику, отключение по концу окна таймера.
   if (!timerWindowActive) return false;
   if (currentState) return true;
-  return Lumen_Ul >= clampLightThresholdValue(onThreshold);
+  return Lumen_Ul <= clampLightThresholdValue(offThreshold);
 }
 
 inline String buildLightAutoStateText(const String &name, bool currentState, int offThreshold, int onThreshold) { // Короткий статус для popup.
   normalizeLightThresholdPair(offThreshold, onThreshold);
   String action;
-  if (!currentState && Lumen_Ul >= onThreshold) action = "порог включения достигнут";
-  else if (currentState && Lumen_Ul <= offThreshold) action = "порог отключения достигнут";
+  if (!currentState && Lumen_Ul <= offThreshold) action = "порог включения достигнут";
+  else if (currentState && Lumen_Ul >= onThreshold) action = "порог отключения достигнут";
   else action = "в зоне гистерезиса";
-  return name + ": " + (currentState ? "включено" : "выключено") + "; сейчас " + String(Lumen_Ul) + "%, выкл <= " + String(offThreshold) + "%, вкл >= " + String(onThreshold) + "% - " + action + ".";
+  return name + ": " + (currentState ? "включено" : "выключено") + "; сейчас " + String(Lumen_Ul) + "%, вкл <= " + String(offThreshold) + "%, выкл >= " + String(onThreshold) + "% - " + action + ".";
 }
 
 inline void persistChemicalLimits() { // Сохраняем все пределы химии единым блоком.
@@ -1594,7 +1594,7 @@ private:
       return String(Lumen_Ul);
     });
     registerUiValueProvider("LightSensorLiveInfo", [](){
-      return String("Сейчас: ") + String(Lumen_Ul) + "%, " + String(static_cast<float>(Lumen_Ul_FilteredMilliVolts) / 1000.0f, 2) + " В на GPIO3. Чем выше процент, тем темнее по текущему датчику.";
+      return String("Сейчас: ") + String(Lumen_Ul) + "%, " + String(static_cast<float>(Lumen_Ul_FilteredMilliVolts) / 1000.0f, 2) + " В на GPIO3. 0% = темно, 100% = ярко; напряжение датчика растет при затемнении.";
     });
     registerUiValueProvider("LightSensorDiagnosticInfo", [](){
       if (LightSensorDiagnosticInfo.length()) return LightSensorDiagnosticInfo;
@@ -1613,7 +1613,7 @@ private:
         if (!timeOk) return text + "Время недоступно, автоматика выключит выход.";
         if (!windowActive) return text + "Сейчас вне окна таймера, выход выключен.";
         if (Lamp) return text + "Включено по датчику и будет выключено в конце окна.";
-        return text + "Ждет затемнение: включение при >= " + String(LampLightOnThreshold) + "%; сейчас " + String(Lumen_Ul) + "%.";
+        return text + "Ждет затемнение: включение при <= " + String(LampLightOffThreshold) + "%; сейчас " + String(Lumen_Ul) + "%.";
       }
       return buildLightAutoStateText("Лампа бассейна", Lamp, LampLightOffThreshold, LampLightOnThreshold);
     });
@@ -1636,7 +1636,7 @@ private:
         if (!timeOk) return text + "Время недоступно, автоматика выключит выход.";
         if (!windowActive) return text + "Сейчас вне окна таймера, выход выключен.";
         if (Pow_Ul_light) return text + "Включено по датчику и будет выключено в конце окна.";
-        return text + "Ждет затемнение: включение при >= " + String(UlLightOnThreshold) + "%; сейчас " + String(Lumen_Ul) + "%.";
+        return text + "Ждет затемнение: включение при <= " + String(UlLightOffThreshold) + "%; сейчас " + String(Lumen_Ul) + "%.";
       }
       return buildLightAutoStateText("Уличное освещение", Pow_Ul_light, UlLightOffThreshold, UlLightOnThreshold);
     });
@@ -1650,7 +1650,7 @@ private:
         if (!timeOk) return text + "Время недоступно, автоматика выключит выход.";
         if (!windowActive) return text + "Сейчас вне окна таймера, выход выключен.";
         if (Pow_WS2815) return text + "Включено по датчику и будет выключено в конце окна.";
-        return text + "Ждет затемнение: включение при >= " + String(RgbLightOnThreshold) + "%; сейчас " + String(Lumen_Ul) + "%.";
+        return text + "Ждет затемнение: включение при <= " + String(RgbLightOffThreshold) + "%; сейчас " + String(Lumen_Ul) + "%.";
       }
       return buildLightAutoStateText("RGB подсветка", Pow_WS2815, RgbLightOffThreshold, RgbLightOnThreshold);
     });
@@ -1791,6 +1791,9 @@ private:
       ".dash-btn:hover{transform:translateY(-1px);box-shadow:0 6px 14px rgba(0,0,0,0.45);} " // Эффект наведения на кнопку
                 ".page{display:none;position:relative;grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap:15px;} " // Страница интерфейса
       ".page.active{display:block;} " // Отображение активной страницы
+      ".basin-overview-card{position:relative;width:100%;max-width:1400px;aspect-ratio:800/477;margin:0 auto 14px auto;padding:0;background:transparent;border:none;box-shadow:none;overflow:hidden;border-radius:0;} " // Общая страница бассейна: картинка и подписи живут в одном контейнере.
+      ".basin-overview-image{display:block;width:100%;height:100%;object-fit:contain;border-radius:0;box-shadow:none;} " // Стабильное масштабирование схемы бассейна.
+      ".basin-overlay{pointer-events:none;} " // Оверлеи не мешают кликам и скроллу.
       ".rs485-panel{display:flex;flex-direction:column;gap:12px;width:100%;} "
       ".rs485-card{background:#1d1d1f;border:1px solid rgba(255,255,255,0.08);border-radius:8px;box-shadow:0 10px 24px rgba(0,0,0,0.45);padding:14px;box-sizing:border-box;} "
       ".rs485-hero{display:flex;align-items:center;justify-content:space-between;gap:16px;} "
@@ -2206,8 +2209,73 @@ private:
       auto renderTabElements = [&](const String &tabId){ // Лямбда для рендера элементов вкладки
         const uint32_t renderElementsStartMs = millis(); // Старт таймера рендера элементов конкретной вкладки
         uint16_t renderedCount = 0; // Счётчик отрисованных элементов для контроля полноты вывода
+        bool basinOverviewTab = false; // На общей странице бассейна оверлеи должны быть привязаны к самой картинке.
+        for(auto &candidate : self->elements){
+          if(candidate.tab == tabId && candidate.type == "image" && candidate.id == "Image1"){
+            basinOverviewTab = true;
+            break;
+          }
+        }
+
+        auto readStyleProp = [](const String &styleStr, const String &prop)->String { // Читает одно CSS-свойство из компактной строки.
+            String key = prop + ":";
+            int idx = styleStr.indexOf(key);
+            if(idx < 0) return "";
+            int start = idx + key.length();
+            int end = styleStr.indexOf(";", start);
+            if(end < 0) end = styleStr.length();
+            String value = styleStr.substring(start, end);
+            value.trim();
+            return value;
+        };
+
+        auto normalizeCssCoord = [](const String &raw)->String { // Числовые координаты считаем пикселями, проценты оставляем процентами.
+            String trimmed = raw;
+            trimmed.trim();
+            if(trimmed.length() == 0) return trimmed;
+            bool hasUnit = false;
+            for(int i=0;i<trimmed.length();i++){
+                char c = trimmed[i];
+                if((c>='0' && c<='9') || c=='-' || c=='.') continue;
+                hasUnit = true;
+                break;
+            }
+            return hasUnit ? trimmed : trimmed + "px";
+        };
+
+        auto appendAbsoluteOverlay = [&](const Element &overlay, bool insideOverview){ // Рендерит абсолютную подпись либо внутри картинки, либо внутри страницы.
+            String styleStr = overlay.value;
+            String fontSizeStr = readStyleProp(styleStr, "fontSize");
+            int fontSize = fontSizeStr.length() ? fontSizeStr.toInt() : 24;
+            String color = readStyleProp(styleStr, "color"); if(color.length() == 0) color = "#00ff00";
+            String bgColor = readStyleProp(styleStr, "bg"); if(bgColor.length() == 0) bgColor = "rgba(0,0,0,0.65)";
+            String padding = readStyleProp(styleStr, "padding"); if(padding.length() == 0) padding = "6px 12px";
+            String borderRadius = readStyleProp(styleStr, "borderRadius"); if(borderRadius.length() == 0) borderRadius = "14px";
+            String leftRaw = readStyleProp(styleStr, "x");
+            String topRaw = readStyleProp(styleStr, "y");
+            String whiteSpace = readStyleProp(styleStr, "white-space");
+            if(whiteSpace.length() == 0) whiteSpace = readStyleProp(styleStr, "whiteSpace");
+            if(whiteSpace.length() == 0) whiteSpace = "nowrap";
+            bool hasLeft = leftRaw.length();
+            bool hasTop = topRaw.length();
+            String leftValue = hasLeft ? normalizeCssCoord(leftRaw) : "50%";
+            String topValue = hasTop ? normalizeCssCoord(topRaw) : "50%";
+            String translateX = hasLeft ? "0%" : "-50%";
+            String translateY = hasTop ? "0%" : "-50%";
+            String transform = "translate("+translateX+", "+translateY+")";
+            String panelStyle = "position:absolute; left:"+leftValue+"; top:"+topValue+"; transform:"+transform+"; "
+                                "background:"+bgColor+"; color:"+color+"; font-size:"+String(fontSize)+"px; padding:"+padding+"; "
+                                "border-radius:"+borderRadius+"; display:inline-flex; align-items:center; justify-content:center; "
+                                "text-align:center; box-sizing:border-box; white-space:"+whiteSpace+"; max-width:90%; "
+                                "box-shadow:0 10px 20px rgba(0,0,0,0.45); z-index:" + String(insideOverview ? 4 : 2) + ";";
+            String classAttr = insideOverview ? " class='basin-overlay'" : "";
+            html += "<div id='"+overlay.id+"'"+classAttr+" style='"+panelStyle+"'>"+overlay.label+"</div>";
+            renderedCount++;
+        };
+
         for(auto &e : self->elements){ // Перебор всех UI-элементов
         if(e.tab != tabId || e.type != "image") continue; // Фильтр по вкладке и типу image
+        if(basinOverviewTab && e.id == "PoolLevelIcon") continue; // Иконка уровня отрисуется внутри схемы бассейна.
 
               String imgSrc = e.label; // Источник изображения
               if(!imgSrc.startsWith("http") && !imgSrc.startsWith("/")) imgSrc = "/" + imgSrc; // Приведение к относительному пути
@@ -2274,16 +2342,41 @@ private:
                   if(topRaw.length()) containerStyle += " top:"+topRaw+";"; // Смещение сверху
                   containerStyle += " margin:0;"; // Убираем авто-отступы
               }
+              if(e.id == "Image1"){
+                  containerStyle = "position:relative;width:100%;max-width:1400px;aspect-ratio:800/477;margin:0 auto 14px auto;"
+                                   "padding:0;background:transparent;border:none;box-shadow:none;overflow:hidden;border-radius:0;";
+                  imageStyle = "display:block;width:100%;height:100%;border-radius:0;box-shadow:none;object-fit:contain;z-index:1;";
+              }
 
-              html += "<div class=\"card\" style=\""+containerStyle+"\">"; // Карточка контейнера изображения
-              html += "<img id='"+e.id+"' src='"+imgSrc+"' data-refresh='"+(imgSrc=="/getImage"?"getImage":"")+"' " // Тег изображения
+              String imageCardClass = (e.id == "Image1") ? "card basin-overview-card" : "card";
+              String imageClassAttr = (e.id == "Image1") ? " class='basin-overview-image'" : "";
+              html += "<div class=\""+imageCardClass+"\" style=\""+containerStyle+"\">"; // Карточка контейнера изображения
+              html += "<img id='"+e.id+"'"+imageClassAttr+" src='"+imgSrc+"' data-refresh='"+(imgSrc=="/getImage"?"getImage":"")+"' " // Тег изображения
                       "style='"+imageStyle+"'/>"; // Применение стилей изображения
+              if(e.id == "Image1"){
+                for(auto &levelIcon : self->elements){
+                  if(levelIcon.tab != tabId || levelIcon.type != "image" || levelIcon.id != "PoolLevelIcon") continue;
+                  String levelSrc = currentPoolLevelIconPath();
+                  String levelStyle = levelIcon.value;
+                  if(levelStyle.length() && levelStyle[levelStyle.length()-1] != ';') levelStyle += ';';
+                  if(levelStyle.indexOf("position:") < 0) levelStyle += "position:absolute;";
+                  if(levelStyle.indexOf("z-index:") < 0) levelStyle += "z-index:3;";
+                  html += "<img id='PoolLevelIcon' src='"+levelSrc+"' style='"+levelStyle+"'/>";
+                  renderedCount++;
+                  break;
+                }
+                for(auto &overlay : self->elements){
+                  if(overlay.tab != tabId || overlay.type != "displayStringAbsolute") continue;
+                  appendAbsoluteOverlay(overlay, true);
+                }
+              }
 
        html += "</div>"; // Закрытие карточки изображения
           }
 
           for(auto &overlay : self->elements){ // Перебор элементов для наложений
               if(overlay.tab != tabId || overlay.type != "displayStringAbsolute") continue; // Фильтр по вкладке и типу
+              if(basinOverviewTab) continue; // Для общей схемы бассейна подписи уже внутри контейнера изображения.
               String styleStr = overlay.value; // CSS-строка стилей
               auto readProp = [&](const String &prop)->String { // Чтение CSS-свойства из строки
                   String key = prop + ":";
@@ -3142,6 +3235,7 @@ private:
     let mqttEnabledTouched = false;
     let mqttSaveTimer = null;
     let espLiveLastOkAt = 0;
+    const espLiveTimeoutMs = 18000;
 
   function formatConnectionClock(dateObj){
     const pad = (num)=>String(num).padStart(2, '0');
@@ -3164,7 +3258,7 @@ private:
   }
 
   function checkEspLiveTimeout(){
-    if(!espLiveLastOkAt || Date.now() - espLiveLastOkAt > 3000){
+    if(!espLiveLastOkAt || Date.now() - espLiveLastOkAt > espLiveTimeoutMs){
       setEspConnectionState(false);
     }
   }
@@ -4563,6 +4657,7 @@ window.addEventListener('resize', ()=>{
     let liveInFlight = false;
     const liveActiveDelayMs = 2000; // Когда Nextion используется, Web обновляет live-данные чаще.
     const liveDimmedDelayMs = 6000; // В приглушенном режиме HMI Web реже опрашивает ESP32 и снижает нагрузку.
+    const liveRequestTimeoutMs = 8000; // Зависший запрос не должен навсегда блокировать следующий /live.
     let livePollDelayMs = liveActiveDelayMs;
     let livePollTimer = null;
 
@@ -4629,7 +4724,10 @@ window.addEventListener('resize', ()=>{
     function fetchLive(){
     if(liveInFlight){ scheduleLivePoll(500); return; }
     liveInFlight = true;
-    fetch('/live').then(r=>r.json()).then(j=>{
+    const liveController = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    const liveTimeout = liveController ? setTimeout(()=>liveController.abort(), liveRequestTimeoutMs) : null;
+    const liveFetchOptions = liveController ? {cache:'no-store', signal:liveController.signal} : {cache:'no-store'};
+    fetch('/live', liveFetchOptions).then(r=>r.json()).then(j=>{
         markEspLiveOk();
         if(typeof j.Nx_dim_id !== 'undefined') updateLivePollDelay(j.Nx_dim_id);
         if(typeof j.CurrentTime !== 'undefined') updatePageDateTime(j.CurrentTime);
@@ -4775,7 +4873,7 @@ window.addEventListener('resize', ()=>{
     
     Object.keys(j).forEach(key=>applyLiveValue(key, j[key]));
 
-    }).catch(()=>{}).finally(()=>{ liveInFlight = false; scheduleLivePoll(); });
+    }).catch(()=>{}).finally(()=>{ if(liveTimeout) clearTimeout(liveTimeout); liveInFlight = false; scheduleLivePoll(); });
   }
 scheduleLivePoll(250); // Первый live-опрос делаем быстро, дальше интервал выбирается по яркости Nextion.
 setInterval(tickPageDateTime, 1000);

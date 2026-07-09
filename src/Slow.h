@@ -252,7 +252,9 @@ switch (flag_slow) {
   // GPIO3 работает как чистый аналоговый вход. На ESP32-S3 raw 4095 не означает 3.3 В, поэтому напряжение берем через калиброванные mV.
   constexpr uint8_t LumenAdcPin = 3;
   constexpr uint8_t LumenAdcSampleCount = 24; // Пачка быстрых замеров нужна, чтобы отбрасывать редкие выбросы вверх.
-  constexpr int LumenSensorFullScaleMv = 3300; // Внешний датчик дает 0..3.3 В, проценты считаем от этой физической шкалы.
+  constexpr int LumenSensorFullScaleMv = 3300; // Внешний датчик дает 0..3.3 В.
+  constexpr int LumenSensorBrightMv = 2450; // По фактическим замерам: ярко на GPIO3 примерно 2.35..2.45 В.
+  constexpr int LumenSensorDarkMv = 3100; // В темноте напряжение растет; 3.1 В и выше считаем темнотой.
   constexpr int LumenAdcSaturationRaw = 4080; // Запас ниже 4095, чтобы видеть почти насыщенный канал.
   uint32_t lumenRawSum = 0; // Среднее оставляем только для диагностики.
   uint32_t lumenMilliVoltSum = 0; // Среднее напряжение пачки для сравнения с минимальным значением.
@@ -303,14 +305,17 @@ switch (flag_slow) {
   Lumen_Ul_MilliVolts = Lumen_Ul_FilteredMilliVolts;
   //jee.var("Lumen_Ul", String(Lumen_Ul));
   // if(Lumen_Ul != Saved_Lumen_Ul) {Saved_Lumen_Ul = Lumen_Ul;
-  Lumen_Ul = constrain((Lumen_Ul_MilliVolts * 100 + (LumenSensorFullScaleMv / 2)) / LumenSensorFullScaleMv, 0, 100); // 0..3.3 В датчика в проценты.
+  const int lumenPercentRangeMv = max(1, LumenSensorDarkMv - LumenSensorBrightMv);
+  const int lumenPercentMilliVolts = constrain(Lumen_Ul_MilliVolts, LumenSensorBrightMv, LumenSensorDarkMv);
+  Lumen_Ul = constrain(((LumenSensorDarkMv - lumenPercentMilliVolts) * 100 + (lumenPercentRangeMv / 2)) / lumenPercentRangeMv, 0, 100); // 0% = темно, 100% = ярко.
 
   const float lumenVoltage = static_cast<float>(Lumen_Ul_MilliVolts) / 1000.0f; // Диагностическое напряжение на GPIO3.
   InfoString2 = "Освещенность = " + String(Lumen_Ul) + " % (" + String(lumenVoltage, 2) + " В)";
   LightSensorDiagnosticInfo = String("GPIO3 ADC: выбрано min ") + String(Lumen_Ul_MinMilliVolts) + " мВ из " + String(Lumen_Ul_SampleCount) +
                               " замеров; фильтр " + String(Lumen_Ul_FilteredMilliVolts) + " мВ; среднее " + String(Lumen_Ul_AverageMilliVolts) +
                               " мВ; диапазон пачки " + String(Lumen_Ul_MinMilliVolts) + ".." + String(Lumen_Ul_MaxMilliVolts) +
-                              " мВ; raw среднее " + String(Lumen_Ul_Raw) + ", raw min/max " + String(lumenMinRaw) + "/" + String(lumenMaxRaw) + ".";
+                              " мВ; raw среднее " + String(Lumen_Ul_Raw) + ", raw min/max " + String(lumenMinRaw) + "/" + String(lumenMaxRaw) +
+                              ". Шкала освещенности: " + String(LumenSensorBrightMv) + " мВ = 100%, " + String(LumenSensorDarkMv) + " мВ = 0%.";
   if (Lumen_Ul_AdcSaturated) {
     LightSensorDiagnosticInfo += " Raw близко к 4095: если показания перестают различать 2.5..3.3 В, нужен делитель или буфер перед GPIO3.";
   }
