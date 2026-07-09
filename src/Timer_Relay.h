@@ -601,21 +601,38 @@ void TimerControlRelay(int interval) {
                 } else if (SetLamp == "timer") {
                   Lamp = checkTimeInInterval(currentHour, currentMinute, lampTimer.on, lampTimer.off);
                 } else if (SetLamp == "auto") {
-                  Lamp = Lumen_Ul < 20;
+                  Lamp = applyLightAutoHysteresis(Lamp, LampLightOffThreshold, LampLightOnThreshold);
+                } else if (SetLamp == "auto_timer_off") {
+                  const bool lampTimerWindowActive = timeAvailable && checkTimeInInterval(currentHour, currentMinute, lampTimer.on, lampTimer.off);
+                  Lamp = applyLightSensorOnTimerOff(Lamp, LampLightOnThreshold, lampTimerWindowActive);
                 } else {
                   // Резервная логика для совместимости со старым управлением
                   if (Power_Time1) {
                     Lamp = checkTimeInInterval(currentHour, currentMinute, lampTimer.on, lampTimer.off);
                   } else if (Lamp_autosvet) {
-                    Lamp = Lumen_Ul < 20;
+                    Lamp = applyLightAutoHysteresis(Lamp, LampLightOffThreshold, LampLightOnThreshold);
                   }
                 }    
    
-                    if (checkTimeInInterval(currentHour, currentMinute, rgbTimer.on, rgbTimer.off)&&WS2815_Time1==true) {
-                      Pow_WS2815=true;
-                    } else if (WS2815_Time1==true) {Pow_WS2815=false;} // Выключаем
+                    if (SetRGB == "off") {
+                      Pow_WS2815 = false;
+                    } else if (SetRGB == "on") {
+                      Pow_WS2815 = true;
+                    } else if (SetRGB == "auto" || Pow_WS2815_autosvet) {
+                      Pow_WS2815 = applyLightAutoHysteresis(Pow_WS2815, RgbLightOffThreshold, RgbLightOnThreshold);
+                    } else if (SetRGB == "auto_timer_off") {
+                      const bool rgbTimerWindowActive = timeAvailable && checkTimeInInterval(currentHour, currentMinute, rgbTimer.on, rgbTimer.off);
+                      Pow_WS2815 = applyLightSensorOnTimerOff(Pow_WS2815, RgbLightOnThreshold, rgbTimerWindowActive);
+                    } else if (SetRGB == "timer" || WS2815_Time1) {
+                      Pow_WS2815 = checkTimeInInterval(currentHour, currentMinute, rgbTimer.on, rgbTimer.off);
+                    }
               
-                    if (Ul_light_Time) {
+                    if (UlLight_sensorTimerOff) {
+                      const bool ulLightTimerWindowActive = timeAvailable && checkTimeInInterval(currentHour, currentMinute, ulLightTimer.on, ulLightTimer.off);
+                      Pow_Ul_light = applyLightSensorOnTimerOff(Pow_Ul_light, UlLightOnThreshold, ulLightTimerWindowActive);
+                    } else if (UlLight_autosvet) {
+                      Pow_Ul_light = applyLightAutoHysteresis(Pow_Ul_light, UlLightOffThreshold, UlLightOnThreshold);
+                    } else if (Ul_light_Time) {
                       Pow_Ul_light = checkTimeInInterval(currentHour, currentMinute, ulLightTimer.on, ulLightTimer.off);
                     }        
     

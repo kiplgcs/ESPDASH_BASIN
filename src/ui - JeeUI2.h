@@ -989,6 +989,10 @@ inline void onSetLampChange(const String &value){ // обработчик изм
         Lamp = false;
         Lamp_autosvet = true;
         Power_Time1 = false;
+    } else if(SetLamp == "auto_timer_off"){ // включение по датчику, отключение по окончанию окна таймера
+        Lamp = false;
+        Lamp_autosvet = false;
+        Power_Time1 = false;
     } else if(SetLamp == "timer"){ // режим работы по таймеру
         Lamp = false;
         Lamp_autosvet = false;
@@ -1012,6 +1016,10 @@ inline void onSetRgbChange(const String &value){ // обработчик изм�
     } else if(SetRGB == "auto"){ // автоматический режим
         Pow_WS2815 = false;
         Pow_WS2815_autosvet = true;
+        WS2815_Time1 = false;
+    } else if(SetRGB == "auto_timer_off"){ // включение по датчику, отключение по окончанию окна таймера
+        Pow_WS2815 = false;
+        Pow_WS2815_autosvet = false;
         WS2815_Time1 = false;
     } else if(SetRGB == "timer"){ // режим по таймеру
         Pow_WS2815 = false;

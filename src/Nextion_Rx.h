@@ -43,6 +43,7 @@ constexpr uint8_t NX_ASYNC_GROUP_DISPENSERS = 1;
 constexpr uint8_t NX_ASYNC_GROUP_FILTR_SWITCHES = 2;
 constexpr uint8_t NX_ASYNC_GROUP_DISPENSERS_CONTROLS = 3;
 constexpr uint8_t NX_ASYNC_GROUP_GMT_OFFSET = 4;
+constexpr uint8_t NX_DISPENSERS_CONTROL_SOURCE_ANY = 255;
 
 struct NextionAsyncNumberRead {
   bool active = false;
@@ -67,6 +68,7 @@ uint8_t NxFiltrSwitchPollIndex = 0;
 unsigned long NxDispensersControlPollRequestUntil = 0;
 unsigned long NxNextDispensersControlPollAt = 0;
 uint8_t NxDispensersControlPollIndex = 0;
+uint8_t NxDispensersControlPollSourceTarget = NX_DISPENSERS_CONTROL_SOURCE_ANY;
 unsigned long NxGmtOffsetPollRequestUntil = 0;
 unsigned long NxNextGmtOffsetPollAt = 0;
 
@@ -136,10 +138,11 @@ inline bool nextionFiltrSwitchPollRequested() {
          static_cast<long>(millis() - NxFiltrSwitchPollRequestUntil) < 0;
 }
 
-inline void requestNextionDispensersControlPoll(unsigned long pollMs = 7000, unsigned long firstDelayMs = 350) {
+inline void requestNextionDispensersControlPoll(uint8_t sourceTarget = NX_DISPENSERS_CONTROL_SOURCE_ANY, unsigned long pollMs = 7000, unsigned long firstDelayMs = 350) {
   NxDispensersControlPollRequestUntil = millis() + pollMs; // Несколько секунд читаем controls после события, чтобы ComboBox успел закрыться.
   NxNextDispensersControlPollAt = millis() + firstDelayMs; // Первое чтение откладываем, иначе Nextion часто возвращает старый индекс.
   NxDispensersControlPollIndex = 0; // Начинаем цикл с sw0/cb0.
+  NxDispensersControlPollSourceTarget = sourceTarget; // Запоминаем, какой control вызвал опрос, чтобы не перетирать web-only режимы.
 }
 
 inline bool nextionDispensersControlPollRequested() {
@@ -249,6 +252,7 @@ inline void applyNextionDispensersControlAsyncValue(uint8_t target, uint32_t val
     const int nextionIndex = static_cast<int>(value);
     if (!isValidNextionDosingComboIndex(nextionIndex)) return; // Мусорный индекс не должен менять период.
     const int nextValue = dosingModeFromNextionComboIndex(nextionIndex);
+    if (nextionIndex == 2 && isWebOnlyDosingPeriodMode(ACO_Work) && NxDispensersControlPollSourceTarget != 1) return; // Старый Nextion показывает web-only 2/3/4 мин как 5 мин; соседние events не должны сбрасывать настройку.
     if (ACO_Work != nextValue) {
       Saved_ACO_Work = ACO_Work = nextValue; // Nextion хранит индекс строки, ESP32 хранит код периода.
       saveValue<int>("ACO_Work", ACO_Work); // Сохраняем подтвержденный период.
@@ -265,6 +269,7 @@ inline void applyNextionDispensersControlAsyncValue(uint8_t target, uint32_t val
     const int nextionIndex = static_cast<int>(value);
     if (!isValidNextionDosingComboIndex(nextionIndex)) return; // Мусорный индекс не должен менять период.
     const int nextValue = dosingModeFromNextionComboIndex(nextionIndex);
+    if (nextionIndex == 2 && isWebOnlyDosingPeriodMode(H2O2_Work) && NxDispensersControlPollSourceTarget != 3) return; // Старый Nextion показывает web-only 2/3/4 мин как 5 мин; соседние events не должны сбрасывать настройку.
     if (H2O2_Work != nextValue) {
       Saved_H2O2_Work = H2O2_Work = nextValue; // Nextion хранит индекс строки, ESP32 хранит код периода.
       saveValue<int>("H2O2_Work", H2O2_Work); // Сохраняем подтвержденный период.
@@ -997,7 +1002,7 @@ void trigger20(){read_heat_sw0();}
 // }
 // void trigger22(){read_Dispensers_sw0_sw1();} 
 void read_Dispensers_sw0_sw1(){
-    requestNextionDispensersControlPoll(); // Читаем sw0 асинхронно после завершения события Nextion.
+    requestNextionDispensersControlPoll(0); // Читаем sw0 асинхронно после завершения события Nextion.
 }
 void trigger22(){Nx_page_id = 9; holdNextionDispensersWrites(9000); read_Dispensers_sw0_sw1();} // Trigger с реальной страницы дозаторов подтверждает, что можно читать ее controls.
 // // printh 23 02 54 17  - Dispensers  свчитываем состояние ComboBox cb0.txt
@@ -1011,7 +1016,7 @@ void trigger22(){Nx_page_id = 9; holdNextionDispensersWrites(9000); read_Dispens
 // } 
 
 void read_Dispensers_cb0(){ // Колбэк-функция обработки значения cb0
-    requestNextionDispensersControlPoll(); // ComboBox читаем отложенно: сразу после выбора Nextion часто возвращает старый индекс.
+    requestNextionDispensersControlPoll(1); // ComboBox читаем отложенно: сразу после выбора Nextion часто возвращает старый индекс.
 }
 void trigger23(){Nx_page_id = 9; holdNextionDispensersWrites(9000); read_Dispensers_cb0();} // Trigger ComboBox ACO приходит со страницы дозаторов и разрешает безопасный опрос controls.
 // // printh 23 02 54 18 - Dispensers  свчитываем состояние n4 / n5
@@ -1025,7 +1030,7 @@ void trigger23(){Nx_page_id = 9; holdNextionDispensersWrites(9000); read_Dispens
 // }
 // void trigger24(){read_Dispensers_sw2_sw3();} 
 void read_Dispensers_sw2_sw3(){
-    requestNextionDispensersControlPoll(); // Читаем sw2 асинхронно после завершения события Nextion.
+    requestNextionDispensersControlPoll(2); // Читаем sw2 асинхронно после завершения события Nextion.
 }
 void trigger24(){Nx_page_id = 9; holdNextionDispensersWrites(9000); read_Dispensers_sw2_sw3();} // Trigger sw2 приходит со страницы дозаторов и не дает скрытой странице выключать NaOCl.
 
@@ -1042,7 +1047,7 @@ void trigger24(){Nx_page_id = 9; holdNextionDispensersWrites(9000); read_Dispens
 // } 
 
 void read_Dispensers_cb1(){ // Колбэк-функция обработки значения cb1
-    requestNextionDispensersControlPoll(); // ComboBox читаем отложенно: сразу после выбора Nextion часто возвращает старый индекс.
+    requestNextionDispensersControlPoll(3); // ComboBox читаем отложенно: сразу после выбора Nextion часто возвращает старый индекс.
 }
 
 void trigger25(){Nx_page_id = 9; holdNextionDispensersWrites(9000); read_Dispensers_cb1();} // Trigger ComboBox NaOCl приходит со страницы дозаторов и разрешает безопасный опрос controls.
@@ -1266,13 +1271,13 @@ triggerActivated_Nextion = false; //Деактивируем вызов из loo
     case 21:  break;
     case 22:  break;
     case 23: 
-    requestNextionDispensersControlPoll(); // Старый отложенный путь тоже только планирует безопасное чтение ComboBox.
+    requestNextionDispensersControlPoll(1); // Старый отложенный путь тоже только планирует безопасное чтение ComboBox.
     //Serial.println(ACO_Work);
     // jee.var("ACO_Work", String(ACO_Work));
     break;
     case 24:  break;
     case 25: 
-    requestNextionDispensersControlPoll(); // Старый отложенный путь тоже только планирует безопасное чтение ComboBox.
+    requestNextionDispensersControlPoll(3); // Старый отложенный путь тоже только планирует безопасное чтение ComboBox.
     //Serial.println(H2O2_Work);
     // jee.var("H2O2_Work", String(H2O2_Work));
     break;

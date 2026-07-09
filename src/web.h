@@ -180,6 +180,25 @@ void appendUiRegistryValues(JsonDocument &doc);
 bool Slep = false; //Флаг режима сна
 int Lumen_Ul, Saved_Lumen_Ul; //освещенность на улице
 int Lumen_Ul_Raw; // Сырое значение АЦП GPIO3 для диагностики датчика освещенности.
+int Lumen_Ul_MilliVolts; // Калиброванное напряжение GPIO3 в мВ; raw 4095 на ESP32-S3 не равен 3.3 В.
+int Lumen_Ul_MinMilliVolts; // Минимальное напряжение из пачки замеров: отсекает редкие выбросы вверх.
+int Lumen_Ul_MaxMilliVolts; // Максимальное напряжение из пачки замеров для диагностики наводок.
+int Lumen_Ul_AverageMilliVolts; // Среднее напряжение пачки замеров для сравнения с фильтром.
+int Lumen_Ul_FilteredMilliVolts; // Отфильтрованное напряжение, которое идет в процент и Web.
+int Lumen_Ul_SampleCount; // Сколько быстрых ADC-замеров использовано в последней пачке.
+bool Lumen_Ul_AdcSaturated; // Флаг насыщения ADC GPIO3 по raw-значению.
+String LightSensorLiveInfo = ""; // Живая строка с текущими показаниями датчика освещенности.
+String LightSensorDiagnosticInfo = ""; // Подробная диагностика ADC для popup настроек порогов.
+String LightThresholdHelp = "GPIO3 измеряет сигнал датчика 0..3.3 В. В этом проекте при затемнении напряжение растет: полный авто-режим включает выше верхнего порога и выключает ниже нижнего. Режим 'датчик -> таймер' включает по датчику только внутри окна таймера и выключает в конце этого окна.";
+String LampLightAutoState = ""; // Текущее состояние автоматики лампы бассейна по освещенности.
+String UlLightAutoState = ""; // Текущее состояние автоматики уличного освещения по освещенности.
+String RgbLightAutoState = ""; // Текущее состояние автоматики RGB по освещенности.
+int LampLightOffThreshold = 75; // Лампа бассейна: при падении ниже этого процента выключаем.
+int LampLightOnThreshold = 85; // Лампа бассейна: при росте выше этого процента включаем.
+int UlLightOffThreshold = 75; // Уличное освещение: нижний порог гистерезиса.
+int UlLightOnThreshold = 85; // Уличное освещение: верхний порог гистерезиса.
+int RgbLightOffThreshold = 75; // RGB: нижний порог гистерезиса.
+int RgbLightOnThreshold = 85; // RGB: верхний порог гистерезиса.
 //int Lumen_Ul_percent; //Освещенность в процентах
 
 inline unsigned long CalibrationFastRequestedAt = 0; // Последний запрос быстрого режима измерений из popup калибровки.
@@ -235,6 +254,8 @@ bool Power_Warm_floor_heating = false;
 	
 bool Pow_Ul_light, Pow_Ul_light1; // Промывка фильтра
 bool Ul_light_Time = false, Saved_Ul_light_Time; // Разрешения работы включения по времени
+bool UlLight_autosvet = false, Saved_UlLight_autosvet; // Автоматическое уличное освещение по датчику GPIO3.
+bool UlLight_sensorTimerOff = false, Saved_UlLight_sensorTimerOff; // Улица: включение по датчику, отключение по таймеру.
 String Ul_light_timeON, Ul_light_timeOFF; // Утавки времени включения
 
 
@@ -382,6 +403,9 @@ inline int sanitizeDosingPeriodValue(int value) { // Приводим выбра
   switch (value) { // Проверяем только те коды, которые реально есть в выпадающем списке.
     case 1: return 1; // 5 секунд работы раз в 15 секунд.
     case 2: return 2; // 5 секунд работы раз в 60 секунд.
+    case 14: return 14; // 5 секунд работы раз в 2 минуты.
+    case 15: return 15; // 5 секунд работы раз в 3 минуты.
+    case 16: return 16; // 5 секунд работы раз в 4 минуты.
     case 3: return 3; // 5 секунд работы раз в 5 минут.
     case 4: return 4; // 5 секунд работы раз в 15 минут.
     case 5: return 5; // 5 секунд работы раз в 30 минут.
@@ -397,10 +421,18 @@ inline int sanitizeDosingPeriodValue(int value) { // Приводим выбра
   }
 }
 
+inline bool isWebOnlyDosingPeriodMode(int mode) { // Эти интервалы добавлены в Web/MQTT, но отсутствуют в текущем HMI-файле Nextion.
+  const int normalizedMode = sanitizeDosingPeriodValue(mode);
+  return normalizedMode == 14 || normalizedMode == 15 || normalizedMode == 16;
+}
+
 inline int nextionDosingComboIndexFromMode(int mode) { // Nextion ComboBox хранит индекс строки, а ESP32 хранит код периода дозирования.
   switch (sanitizeDosingPeriodValue(mode)) { // Индексы строго соответствуют порядку строк в HMI-файле Nextion.
     case 1: return 0; // 5 сек / 15 сек.
     case 2: return 1; // 5 сек / 60 сек.
+    case 14:
+    case 15:
+    case 16: return 2; // В HMI Nextion нет строк 2/3/4 минуты, показываем ближайшие 5 минут.
     case 3: return 2; // 5 сек / 5 мин.
     case 4: return 3; // 5 сек / 15 мин.
     case 5: return 4; // 5 сек / 30 мин.
@@ -454,6 +486,9 @@ inline unsigned long dosingPeriodMsFromMode(int mode) { // Переводим к
   switch (sanitizeDosingPeriodValue(mode)) { // Сначала нормализуем код, чтобы не получить нулевой период.
     case 1: return 15UL * 1000UL; // 15 секунд.
     case 2: return 60UL * 1000UL; // 60 секунд.
+    case 14: return 2UL * 60UL * 1000UL; // 2 минуты.
+    case 15: return 3UL * 60UL * 1000UL; // 3 минуты.
+    case 16: return 4UL * 60UL * 1000UL; // 4 минуты.
     case 3: return 5UL * 60UL * 1000UL; // 5 минут.
     case 4: return 15UL * 60UL * 1000UL; // 15 минут.
     case 5: return 30UL * 60UL * 1000UL; // 30 минут.
@@ -479,6 +514,111 @@ inline float clampFloatSetting(float value, float minValue, float maxValue, floa
   if (value < minValue) return minValue; // Если значение ниже допустимого, поднимаем до минимума.
   if (value > maxValue) return maxValue; // Если значение выше допустимого, опускаем до максимума.
   return value; // Если значение корректное, оставляем его без изменений.
+}
+
+inline int clampLightThresholdValue(int value) { // Пороги освещенности всегда храним как 0..100%.
+  return constrain(value, 0, 100);
+}
+
+inline void normalizeLightThresholdPair(int &offThreshold, int &onThreshold) { // Нормализует пару порогов для гистерезиса.
+  offThreshold = clampLightThresholdValue(offThreshold);
+  onThreshold = clampLightThresholdValue(onThreshold);
+  if (offThreshold > onThreshold) { // Нижний порог должен быть слева, верхний справа.
+    const int tmp = offThreshold;
+    offThreshold = onThreshold;
+    onThreshold = tmp;
+  }
+}
+
+inline void normalizeLightThresholds() { // Исправляет все пороги датчика освещенности после загрузки или сохранения.
+  normalizeLightThresholdPair(LampLightOffThreshold, LampLightOnThreshold);
+  normalizeLightThresholdPair(UlLightOffThreshold, UlLightOnThreshold);
+  normalizeLightThresholdPair(RgbLightOffThreshold, RgbLightOnThreshold);
+}
+
+inline void persistLightThresholds() { // Сохраняет пороги автосвета единым блоком.
+  saveValue<int>("LampLightOffThreshold", LampLightOffThreshold);
+  saveValue<int>("LampLightOnThreshold", LampLightOnThreshold);
+  saveValue<int>("UlLightOffThreshold", UlLightOffThreshold);
+  saveValue<int>("UlLightOnThreshold", UlLightOnThreshold);
+  saveValue<int>("RgbLightOffThreshold", RgbLightOffThreshold);
+  saveValue<int>("RgbLightOnThreshold", RgbLightOnThreshold);
+}
+
+inline bool parseLightThresholdRange(const String &rawValue, int &offThreshold, int &onThreshold) { // Разбирает значение dual range вида "75-85".
+  const int sep = rawValue.indexOf('-');
+  if (sep < 0) return false;
+  offThreshold = rawValue.substring(0, sep).toInt();
+  onThreshold = rawValue.substring(sep + 1).toInt();
+  normalizeLightThresholdPair(offThreshold, onThreshold);
+  return true;
+}
+
+inline bool applyLightThresholdSettingRequest(const String &id, const String &rawValue) { // Безопасно применяет настройки порогов освещенности из Web.
+  bool handled = true;
+  if (id == "LampLightThresholdRange") handled = parseLightThresholdRange(rawValue, LampLightOffThreshold, LampLightOnThreshold);
+  else if (id == "UlLightThresholdRange") handled = parseLightThresholdRange(rawValue, UlLightOffThreshold, UlLightOnThreshold);
+  else if (id == "RgbLightThresholdRange") handled = parseLightThresholdRange(rawValue, RgbLightOffThreshold, RgbLightOnThreshold);
+  else if (id == "LampLightOffThreshold") LampLightOffThreshold = rawValue.toInt();
+  else if (id == "LampLightOnThreshold") LampLightOnThreshold = rawValue.toInt();
+  else if (id == "UlLightOffThreshold") UlLightOffThreshold = rawValue.toInt();
+  else if (id == "UlLightOnThreshold") UlLightOnThreshold = rawValue.toInt();
+  else if (id == "RgbLightOffThreshold") RgbLightOffThreshold = rawValue.toInt();
+  else if (id == "RgbLightOnThreshold") RgbLightOnThreshold = rawValue.toInt();
+  else return false;
+  if (!handled) return false;
+  normalizeLightThresholds();
+  persistLightThresholds();
+  return true;
+}
+
+inline bool applyLightModeSettingRequest(const String &id, const String &rawValue) { // Взаимоисключающие режимы уличного освещения по датчику.
+  const bool requestedState = rawValue.toInt() != 0;
+  if (id == "UlLight_autosvet") {
+    UlLight_autosvet = requestedState;
+    if (UlLight_autosvet) UlLight_sensorTimerOff = false;
+    saveValue<int>("UlLight_autosvet", UlLight_autosvet ? 1 : 0);
+    saveValue<int>("UlLight_sensorTimerOff", UlLight_sensorTimerOff ? 1 : 0);
+    return true;
+  }
+  if (id == "UlLight_sensorTimerOff") {
+    UlLight_sensorTimerOff = requestedState;
+    if (UlLight_sensorTimerOff) UlLight_autosvet = false;
+    saveValue<int>("UlLight_sensorTimerOff", UlLight_sensorTimerOff ? 1 : 0);
+    saveValue<int>("UlLight_autosvet", UlLight_autosvet ? 1 : 0);
+    return true;
+  }
+  return false;
+}
+
+inline bool applyLightAutoHysteresis(bool currentState, int offThreshold, int onThreshold) { // Автосвет: больше процент GPIO3 = темнее.
+  normalizeLightThresholdPair(offThreshold, onThreshold);
+  if (!currentState && Lumen_Ul >= onThreshold) return true; // Стало темно: включаем.
+  if (currentState && Lumen_Ul <= offThreshold) return false; // Стало светло: выключаем.
+  return currentState; // Между порогами держим прежнее состояние, чтобы реле не дергалось.
+}
+
+inline bool lightTimeWindowActive(uint16_t currentMinutes, uint16_t startMinutes, uint16_t endMinutes) { // Такое же окно, как checkTimeInInterval, но без зависимости от Timer_Relay.h.
+  currentMinutes %= 1440;
+  startMinutes %= 1440;
+  endMinutes %= 1440;
+  if (endMinutes < startMinutes) return currentMinutes >= startMinutes || currentMinutes < endMinutes;
+  return currentMinutes >= startMinutes && currentMinutes < endMinutes;
+}
+
+inline bool applyLightSensorOnTimerOff(bool currentState, int onThreshold, bool timerWindowActive) { // Включение по датчику, отключение по концу окна таймера.
+  if (!timerWindowActive) return false;
+  if (currentState) return true;
+  return Lumen_Ul >= clampLightThresholdValue(onThreshold);
+}
+
+inline String buildLightAutoStateText(const String &name, bool currentState, int offThreshold, int onThreshold) { // Короткий статус для popup.
+  normalizeLightThresholdPair(offThreshold, onThreshold);
+  String action;
+  if (!currentState && Lumen_Ul >= onThreshold) action = "порог включения достигнут";
+  else if (currentState && Lumen_Ul <= offThreshold) action = "порог отключения достигнут";
+  else action = "в зоне гистерезиса";
+  return name + ": " + (currentState ? "включено" : "выключено") + "; сейчас " + String(Lumen_Ul) + "%, выкл <= " + String(offThreshold) + "%, вкл >= " + String(onThreshold) + "% - " + action + ".";
 }
 
 inline void persistChemicalLimits() { // Сохраняем все пределы химии единым блоком.
@@ -1366,6 +1506,7 @@ private:
 // Настройка веб-сервера
   void setupServer(){
     MiniDash *self=this; // Указатель на текущий экземпляр для использования в колбэках
+    normalizeLightThresholds(); // Пороги автосвета должны быть валидны до первой отдачи Web и до /live.
 
     // Подключаем кастомные генераторы значений UI, чтобы объединять состояния и форматировать строки
     registerUiValueProvider("DS1", [](){ return formatTemperatureString(DS1, DS1Available); }); // отображение температуры с учетом доступности датчика
@@ -1434,6 +1575,58 @@ private:
     });
     registerUiValueProvider("Lumen_Ul", [](){ // Освещенность на Web должна брать живой процент, а не стартовое значение.
       return String(Lumen_Ul);
+    });
+    registerUiValueProvider("LightSensorLiveInfo", [](){
+      return String("Сейчас: ") + String(Lumen_Ul) + "%, " + String(static_cast<float>(Lumen_Ul_FilteredMilliVolts) / 1000.0f, 2) + " В на GPIO3. Чем выше процент, тем темнее по текущему датчику.";
+    });
+    registerUiValueProvider("LightSensorDiagnosticInfo", [](){
+      if (LightSensorDiagnosticInfo.length()) return LightSensorDiagnosticInfo;
+      return String("ADC GPIO3 еще не получил пачку измерений.");
+    });
+    registerUiValueProvider("LightThresholdHelp", [](){
+      return LightThresholdHelp;
+    });
+    registerUiValueProvider("LampLightAutoState", []() -> String {
+      if (SetLamp == "auto_timer_off") {
+        int h = 0, m = 0;
+        const bool timeOk = getCurrentHourMinute(h, m);
+        UITimerEntry &timer = ui.timer("LampTimer");
+        const bool windowActive = timeOk && lightTimeWindowActive(static_cast<uint16_t>(h * 60 + m), timer.on, timer.off);
+        String text = String("Лампа бассейна: режим датчик -> таймер; окно ") + formatMinutesToTime(timer.on) + "-" + formatMinutesToTime(timer.off) + ". ";
+        if (!timeOk) return text + "Время недоступно, автоматика выключит выход.";
+        if (!windowActive) return text + "Сейчас вне окна таймера, выход выключен.";
+        if (Lamp) return text + "Включено по датчику и будет выключено в конце окна.";
+        return text + "Ждет затемнение: включение при >= " + String(LampLightOnThreshold) + "%; сейчас " + String(Lumen_Ul) + "%.";
+      }
+      return buildLightAutoStateText("Лампа бассейна", Lamp, LampLightOffThreshold, LampLightOnThreshold);
+    });
+    registerUiValueProvider("UlLightAutoState", []() -> String {
+      if (UlLight_sensorTimerOff) {
+        int h = 0, m = 0;
+        const bool timeOk = getCurrentHourMinute(h, m);
+        UITimerEntry &timer = ui.timer("UlLightTimer");
+        const bool windowActive = timeOk && lightTimeWindowActive(static_cast<uint16_t>(h * 60 + m), timer.on, timer.off);
+        String text = String("Уличное освещение: режим датчик -> таймер; окно ") + formatMinutesToTime(timer.on) + "-" + formatMinutesToTime(timer.off) + ". ";
+        if (!timeOk) return text + "Время недоступно, автоматика выключит выход.";
+        if (!windowActive) return text + "Сейчас вне окна таймера, выход выключен.";
+        if (Pow_Ul_light) return text + "Включено по датчику и будет выключено в конце окна.";
+        return text + "Ждет затемнение: включение при >= " + String(UlLightOnThreshold) + "%; сейчас " + String(Lumen_Ul) + "%.";
+      }
+      return buildLightAutoStateText("Уличное освещение", Pow_Ul_light, UlLightOffThreshold, UlLightOnThreshold);
+    });
+    registerUiValueProvider("RgbLightAutoState", []() -> String {
+      if (SetRGB == "auto_timer_off") {
+        int h = 0, m = 0;
+        const bool timeOk = getCurrentHourMinute(h, m);
+        UITimerEntry &timer = ui.timer("RgbTimer");
+        const bool windowActive = timeOk && lightTimeWindowActive(static_cast<uint16_t>(h * 60 + m), timer.on, timer.off);
+        String text = String("RGB подсветка: режим датчик -> таймер; окно ") + formatMinutesToTime(timer.on) + "-" + formatMinutesToTime(timer.off) + ". ";
+        if (!timeOk) return text + "Время недоступно, автоматика выключит выход.";
+        if (!windowActive) return text + "Сейчас вне окна таймера, выход выключен.";
+        if (Pow_WS2815) return text + "Включено по датчику и будет выключено в конце окна.";
+        return text + "Ждет затемнение: включение при >= " + String(RgbLightOnThreshold) + "%; сейчас " + String(Lumen_Ul) + "%.";
+      }
+      return buildLightAutoStateText("RGB подсветка", Pow_WS2815, RgbLightOffThreshold, RgbLightOnThreshold);
     });
     registerUiValueProvider("WaterLevelSensorUpper", [](){ // На Web показываем смысл, а не сырой замкнутый контакт DI2.
       return PoolUpperLevelReachedConfirmed ? String("уровень достиг верхнего датчика") : String("уровень ниже верхнего датчика");
@@ -1866,6 +2059,16 @@ private:
       ".dash-modal[data-popup='CL'] input{margin-bottom:0;background:#0d1117;border-color:rgba(255,255,255,0.16);font-size:1rem;font-variant-numeric:tabular-nums;} " // Убирает лишний нижний отступ и делает ввод ORP аккуратнее.
       ".dash-modal[data-popup='CL'] .dash-btn{width:100%;margin-top:0;border-radius:8px;} " // Делает кнопку проверки насоса ровной по ширине окна.
       "@media (max-width:640px){.dash-modal[data-popup='CL'] .popup-grid{grid-template-columns:1fr;}.dash-modal[data-popup='CL'] #ClCalibrationCorrectedOrp,.dash-modal[data-popup='CL'] #ClCalibrationTempOrp{font-size:1.6rem;}} " // Переводит окно ORP в один столбец на телефоне.
+      ".dash-modal[data-popup='LightThresholds'] .dash-modal-content{width:min(920px,95vw);border-radius:12px;background:#151922;border-color:rgba(82,180,255,0.22);} " // Окно порогов достаточно широкое для трех диапазонов.
+      ".dash-modal[data-popup='LightThresholds'] .dash-modal-body{padding:14px;background:#10141b;} " // Единый темный фон без вложенных панелей.
+      ".dash-modal[data-popup='LightThresholds'] .popup-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-items:stretch;} " // Две колонки на десктопе.
+      ".dash-modal[data-popup='LightThresholds'] .popup-grid .card{width:auto;min-width:0;margin-bottom:0;border-radius:8px;padding:12px 14px;background:#1a1f28;border-color:rgba(255,255,255,0.08);box-shadow:none;} " // Компактные карточки без перекрытий.
+      ".dash-modal[data-popup='LightThresholds'] .card:has(#LightSensorLiveInfo),.dash-modal[data-popup='LightThresholds'] .card:has(#LightThresholdHelp),.dash-modal[data-popup='LightThresholds'] .card:has(#LightSensorDiagnosticInfo){grid-column:1/-1;} " // Широкие информационные строки.
+      ".dash-modal[data-popup='LightThresholds'] label{font-size:0.78rem;line-height:1.3;color:#aab8c7;text-transform:uppercase;letter-spacing:0.05em;} " // Подписи компактные и сканируемые.
+      ".dash-modal[data-popup='LightThresholds'] .range-display{font-family:'JetBrains Mono','SFMono-Regular',Consolas,monospace;color:#eaf5ff;} " // Значения порогов читаются как числа.
+      ".dash-modal[data-popup='LightThresholds'] #LightSensorLiveInfo{font-size:1.2rem;font-weight:800;color:#e8fbff;font-variant-numeric:tabular-nums;} " // Главное живое значение датчика.
+      ".dash-modal[data-popup='LightThresholds'] #LightSensorDiagnosticInfo{font-family:'JetBrains Mono','SFMono-Regular',Consolas,monospace;font-size:0.92rem;line-height:1.45;color:#dbeafe;background:#0b1118;border:1px solid rgba(82,180,255,0.18);border-radius:8px;padding:10px 12px;} " // Подробная диагностика не мешает верхней строке страницы.
+      "@media (max-width:720px){.dash-modal[data-popup='LightThresholds'] .popup-grid{grid-template-columns:1fr;}.dash-modal[data-popup='LightThresholds'] #LightSensorLiveInfo{font-size:1rem;}} " // Адаптация окна порогов под телефон.
 
             ".network-row{display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:12px 14px;background:transparent;border:none;border-bottom:1px solid rgba(255,255,255,0.05);color:#e9ecf4;text-align:left;cursor:pointer;transition:background 0.12s ease;} " // Строка сети Wi-Fi
       ".network-row:hover{background:rgba(255,255,255,0.04);} " // Hover подсветка строки сети
@@ -2345,7 +2548,7 @@ private:
                           "<div class='rs485-spec'><h4>DIN ESP32-S3-DevKitC-1 carrier</h4>"
                           "<div class='rs485-spec-row'><strong>Назначение</strong><span>Монтаж ESP32-S3-DevKitC-1 в электрическом шкафу</span></div>"
                           "<div class='rs485-spec-row'><strong>Питание</strong><span>Клеммы 24V/GND, выводы 5V/3V3/GND для периферии</span></div>"
-                          "<div class='rs485-spec-row'><strong>GPIO3</strong><span>ADC датчика освещенности, вход 0..3.3 В, без внутренней подтяжки</span></div>"
+                          "<div class='rs485-spec-row'><strong>GPIO3</strong><span>ADC датчика освещенности без внутренней подтяжки; для точных 0..3.3 В на ESP32-S3 нужен внешний делитель</span></div>"
                           "<div class='rs485-spec-row'><strong>GPIO4 / GPIO5</strong><span>I2C: SDA / SCL для двух ADS1115; 0x48 A0 = pH, 0x49 A1 = ORP/CL</span></div>"
                           "<div class='rs485-spec-row'><strong>GPIO6 / GPIO7</strong><span>UART1 Nextion: RX ESP32 / TX ESP32, 115200 8N1</span></div>"
                           "<div class='rs485-spec-row'><strong>GPIO10</strong><span>DATA адресной ленты WS2815, 180 LED</span></div>"
@@ -4628,6 +4831,14 @@ function setImg(x){
         if(applyChemistrySettingRequest(key, valStr)){ // Пределы pH/CL нормализуем и сохраняем сразу.
           r->send(200,"text/plain","OK"); // Возвращаем успешный ответ после безопасного применения.
           return; // Не отдаем эти пределы в общий обработчик без проверки диапазонов.
+        }
+        if(applyLightThresholdSettingRequest(key, valStr)){ // Пороги освещенности нормализуем и сохраняем сразу.
+          r->send(200,"text/plain","OK");
+          return;
+        }
+        if(applyLightModeSettingRequest(key, valStr)){ // Взаимоисключающие режимы уличного освещения по датчику.
+          r->send(200,"text/plain","OK");
+          return;
         }
         if(applyRs485ConfigRequest(key, valStr)){
           r->send(200,"text/plain","OK");

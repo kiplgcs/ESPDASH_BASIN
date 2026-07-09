@@ -157,9 +157,23 @@ inline void interface(){ // Декларатиынве функции интер
     UI_TEXT("InfoString2", InfoString2, "x:45%;y:1%;fontSize:22;color:#00ff00");
     UI_SELECT_CB("SetLamp", SetLamp, (std::initializer_list<UIOption>{{"off", "Лампа отключена постоянно"},
                                      {"on", "Лампа включена постоянно"},
-                                     {"auto", "Включение по датчику освещенности (<20%)"},
+                                     {"auto", "Включение по датчику освещенности (по порогам)"},
+                                     {"auto_timer_off", "Включение по датчику, отключение по таймеру"},
                                      {"timer", "Включение по таймеру"}}), "💡 Режим света", onSetLampChange);
     UI_DISPLAY_INT("Lumen_Ul", Lumen_Ul, "🔆 Освещенность на улице, %");
+    UI_POPUP_BEGIN("LightThresholds", "Настройка порогов включения / отключения по датчику освещенности", "⚙️ Настройка порогов освещенности");
+        UI_DISPLAY("LightSensorLiveInfo", LightSensorLiveInfo, "📡 Текущие показания GPIO3");
+        UI_DISPLAY("LightThresholdHelp", LightThresholdHelp, "ℹ️ Логика автосвета");
+        UI_DUAL_RANGE_KEYS("LampLightThresholdRange", LampLightOffThreshold, LampLightOnThreshold, "LampLightOffThreshold", "LampLightOnThreshold", 0, 100, 1, "💡 Лампа бассейна: выключить / включить, %");
+        UI_DISPLAY("LampLightAutoState", LampLightAutoState, "💡 Состояние лампы бассейна");
+        UI_CHECKBOX("UlLight_autosvet", UlLight_autosvet, "🚏 Управлять уличным освещением по датчику");
+        UI_CHECKBOX("UlLight_sensorTimerOff", UlLight_sensorTimerOff, "🚏 Улица: включать по датчику, отключать по таймеру");
+        UI_DUAL_RANGE_KEYS("UlLightThresholdRange", UlLightOffThreshold, UlLightOnThreshold, "UlLightOffThreshold", "UlLightOnThreshold", 0, 100, 1, "🚏 Улица: выключить / включить, %");
+        UI_DISPLAY("UlLightAutoState", UlLightAutoState, "🚏 Состояние уличного освещения");
+        UI_DUAL_RANGE_KEYS("RgbLightThresholdRange", RgbLightOffThreshold, RgbLightOnThreshold, "RgbLightOffThreshold", "RgbLightOnThreshold", 0, 100, 1, "🌈 RGB: выключить / включить, %");
+        UI_DISPLAY("RgbLightAutoState", RgbLightAutoState, "🌈 Состояние RGB");
+        UI_DISPLAY("LightSensorDiagnosticInfo", LightSensorDiagnosticInfo, "🧪 Подробная диагностика ADC");
+    UI_POPUP_END();
 
         UI_TIMER("LampTimer", "⏲️ Таймер лампы", LampTimerON, LampTimerOFF, onLampTimerChange);
 
@@ -169,7 +183,8 @@ inline void interface(){ // Декларатиынве функции интер
     UI_CHECKBOX("WS2815_Time1", WS2815_Time1, "⏲️ Таймер RGB ленты"); //Галочка - активания/деактивация таймера
     UI_SELECT_CB("SetRGB", SetRGB, (std::initializer_list<UIOption>{{"off", "RGB подсветка отключена постоянно"},
                                    {"on", "RGB подсветка включена постоянно"},
-                                   {"auto", "Включение по датчику освещенности (<20%)"},
+                                   {"auto", "Включение по датчику освещенности (по порогам)"},
+                                   {"auto_timer_off", "Включение по датчику, отключение по таймеру"},
                                    {"timer", "Включение по таймеру"}}), "🎛️ Режим управления RGB подсветкой", onSetRgbChange);
         UI_TIMER("RgbTimer", "⏲️ Таймер RGB ленты", RgbTimerON, RgbTimerOFF, noopTimerCallback);
 UI_COLOR("LEDColor", LEDColor, "🎨 Цвет подсветки");
@@ -290,6 +305,9 @@ UI_COLOR("LEDColor", LEDColor, "🎨 Цвет подсветки");
 
    static const std::initializer_list<UIOption> dosingOptions{  {"1", "5 сек / 15 сек"},
                                                                 {"2", "5 сек / 60 сек"},
+                                                                {"14", "5 сек / 2 мин"},
+                                                                {"15", "5 сек / 3 мин"},
+                                                                {"16", "5 сек / 4 мин"},
                                                                 {"3", "5 сек / 5 мин"},
                                                                 {"4", "5 сек / 15 мин"},
                                                                 {"5", "5 сек / 30 мин"},

@@ -4,6 +4,8 @@
 #include <WiFiUdp.h>
 #include <Wire.h> // I2C и ADS1115 подключаем здесь, чтобы не дублировать в PH_CL2.h
 #include <esp_system.h>
+#include <driver/adc.h>
+#include <esp_adc_cal.h>
 #include "NPT_Time.h"
 
 #include "wifi_manager.h"        // Логика Wi-Fi и сохранение параметров
@@ -114,10 +116,13 @@ void setup() {
   Serial.printf("[BOOT] Chip model: %s | Cores: %u | Revision: %u\n",
                 ESP.getChipModel(), ESP.getChipCores(), ESP.getChipRevision());
 
-  pinMode(3, INPUT); // GPIO3 используется как чистый аналоговый вход датчика освещенности; внутренние подтяжки искажают ADC.
+  pinMode(3, ANALOG); // GPIO3 используется как чистый аналоговый вход датчика освещенности; внутренние подтяжки и цифровой вход искажают ADC.
   analogReadResolution(12); // Для датчика освещенности используем шкалу ADC 0..4095.
 #ifdef ARDUINO_ARCH_ESP32
-  analogSetPinAttenuation(3, ADC_11db); // Диапазон ADC до 3.3 В, чтобы датчик не упирался в 100% слишком рано.
+  adcAttachPin(3); // Явно привязываем GPIO3 к ADC1_CH2 на ESP32-S3 до первых измерений.
+  analogSetPinAttenuation(3, ADC_11db); // Максимальная доступная шкала ESP32-S3 ADC; верх 0..3.3 В требует внешнего делителя для точности.
+  adc1_config_width(ADC_WIDTH_BIT_12); // Для прямого IDF-чтения GPIO3 используем 12 бит: 0..4095.
+  adc1_config_channel_atten(ADC1_CHANNEL_2, ADC_ATTEN_DB_11); // GPIO3 = ADC1_CHANNEL_2 на ESP32-S3.
 #endif
 
   // Подключение к Wi-Fi с использованием сохранённых данных и кнопок
