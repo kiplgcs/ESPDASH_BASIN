@@ -254,7 +254,7 @@ switch (flag_slow) {
   constexpr uint8_t LumenAdcSampleCount = 24; // Пачка быстрых замеров нужна, чтобы отбрасывать редкие выбросы вверх.
   constexpr int LumenSensorFullScaleMv = 3300; // Внешний датчик дает 0..3.3 В.
   constexpr int LumenSensorBrightMv = 2450; // По фактическим замерам: ярко на GPIO3 примерно 2.35..2.45 В.
-  constexpr int LumenSensorDarkMv = 3100; // В темноте напряжение растет; 3.1 В и выше считаем темнотой.
+  constexpr int LumenSensorDarkMv = 3300; // В темноте напряжение растет; 3.3 В считаем нижней точкой шкалы освещенности.
   constexpr int LumenAdcSaturationRaw = 4080; // Запас ниже 4095, чтобы видеть почти насыщенный канал.
   uint32_t lumenRawSum = 0; // Среднее оставляем только для диагностики.
   uint32_t lumenMilliVoltSum = 0; // Среднее напряжение пачки для сравнения с минимальным значением.

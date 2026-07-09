@@ -34,16 +34,16 @@ inline void interface(){ // Декларатиынве функции интер
     // Общая информация по бассейну
     UI_PAGE();
     UI_IMAGE("Image1", "/Basin.jpg", "width:100%;height:auto;border-radius:0;box-shadow:none;");
-    UI_IMAGE("PoolLevelIcon", "/level_between_levels.png", "width:7%;height:auto;left:44%;top:22%;border-radius:8px;box-shadow:0 8px 18px rgba(0,0,0,0.35);pointer-events:none;");
+    UI_IMAGE("PoolLevelIcon", "/level_between_levels.png", "width:6.8%;height:auto;left:32%;top:8%;border-radius:8px;box-shadow:0 8px 18px rgba(0,0,0,0.35);pointer-events:none;");
     
-    UI_TEXT("OverlayPoolTemp", OverlayPoolTemp, "x:62%;y:36%;fontSize:14;color:#00ff00");
-    UI_TEXT("OverlayHeaterTemp", OverlayHeaterTemp, "x:78%;y:43%;fontSize:14;color:#00ff00");
-    UI_TEXT("OverlayLevelUpper", OverlayLevelUpper, "x:44%;y:30%;fontSize:13;color:#00ff00");
-    UI_TEXT("OverlayLevelLower", OverlayLevelLower, "x:44%;y:36%;fontSize:13;color:#00ff00");
+    UI_TEXT("OverlayPoolTemp", OverlayPoolTemp, "x:57%;y:35%;fontSize:14;color:#00ff00");
+    UI_TEXT("OverlayHeaterTemp", OverlayHeaterTemp, "x:75%;y:43%;fontSize:14;color:#00ff00");
+    UI_TEXT("OverlayLevelUpper", OverlayLevelUpper, "x:37%;y:12%;fontSize:13;color:#00ff00");
+    UI_TEXT("OverlayLevelLower", OverlayLevelLower, "x:37%;y:27%;fontSize:13;color:#00ff00");
    
-    UI_TEXT("OverlayPh", OverlayPh, "x:60%;y:48%;fontSize:13;color:#00ff00");
-    UI_TEXT("OverlayChlorine", OverlayChlorine, "x:70%;y:48%;fontSize:13;color:#00ff00");
-    UI_TEXT("OverlayFilterState", OverlayFilterState, "x:31%;y:60%;fontSize:12;color:#00ff00");
+    UI_TEXT("OverlayPh", OverlayPh, "x:48%;y:27%;fontSize:13;color:#00ff00");
+    UI_TEXT("OverlayChlorine", OverlayChlorine, "x:58%;y:27%;fontSize:13;color:#00ff00");
+    UI_TEXT("OverlayFilterState", OverlayFilterState, "x:28%;y:56%;fontSize:12;color:#00ff00");
     UI_TEXT("OverlayDrainPit", OverlayDrainPit, "x:82%;y:75%;fontSize:12;color:#00ff00");
     UI_TEXT("OverlayLight", OverlayLight, "x:82%;y:10%;fontSize:12;color:#00ff00");
 

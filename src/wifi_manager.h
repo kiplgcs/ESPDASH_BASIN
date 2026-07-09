@@ -13,6 +13,10 @@ struct WifiStatusInfo {
   String ip;
   int rssi;
   bool apActive;
+  int statusCode;
+  uint32_t connectCount;
+  unsigned long lastConnectedAgoSec;
+  unsigned long lastDisconnectedAgoSec;
 };
 
 // Persistent storage helpers and Wi-Fi defaults
@@ -109,9 +113,16 @@ inline unsigned long lastSignalScan = 0;     // Когда последний р
 inline unsigned long lastFallbackStaRetry = 0; // Когда в AP-режиме последний раз пробовали вернуться в STA
 inline unsigned long checkInterval = 1000;      // 1s until stable connection
 inline const unsigned long attemptInterval = 5000; // retry window while connecting
-inline const unsigned long signalScanInterval = 120000; // Не сканируем WiFi чаще 1 раза в 2 минуты
+inline const unsigned long connectedCheckInterval = 5000; // После подключения проверяем связь часто, чтобы быстро переподключаться.
+inline const unsigned long signalScanInterval = 300000; // Сканирование сетей при STA делаем редко, чтобы не ронять быстрый Web-опрос.
 inline const unsigned long fallbackStaRetryInterval = 600000; // В AP-режиме редко пробуем STA, чтобы не выбрасывать клиентов captive portal
 inline const int signalSwitchHysteresisDb = 8; // Переключаемся только при заметно лучшем сигнале, чтобы не прыгать между AP
+inline const int poorSignalScanThresholdDbm = -78; // Сравниваем основную/резервную сеть только при реально слабом сигнале.
+inline bool wasStaConnected = false; // Помнит, что STA уже была подключена, чтобы отличать обрыв от штатного старта.
+inline unsigned long lastStaConnectedAt = 0; // Последний момент успешного подключения.
+inline unsigned long lastStaDisconnectedAt = 0; // Последний момент обнаруженной потери Wi-Fi.
+inline uint32_t staConnectCount = 0; // Счетчик успешных STA-подключений с момента загрузки.
+inline wl_status_t lastWifiStatus = WL_IDLE_STATUS; // Последний статус Wi-Fi для Web-диагностики.
 
 inline void beginMdns() {
   if (mdnsStarted)
@@ -241,18 +252,24 @@ inline String buildModeText() {
 }
 
 inline void onConnected() {
+  const bool firstConnectionAfterLoss = !wasStaConnected;
+  wasStaConnected = true;
+  lastStaConnectedAt = millis();
+  if (firstConnectionAfterLoss) staConnectCount++;
   fallbackApActive = false;    // AP больше не нужен
   staAttemptInProgress = false;
-  checkInterval = 120000;      // 120 seconds — замедляем проверки статуса при стабильной связи
+  checkInterval = connectedCheckInterval; // Проверяем чаще, чтобы Web быстро видел реальный обрыв.
   attemptCount = 0;            // Сбрасываем счетчик
     stopCaptiveDns();            // В STA captive DNS не нужен
-  WiFi.mode(WIFI_STA);         // Оставляем только STA
+  if (WiFi.getMode() != WIFI_STA) WiFi.mode(WIFI_STA); // Оставляем только STA без лишней перенастройки радио.
   beginMdns();                 // Стартуем mDNS для удобного доступа
-  Serial.printf("[WiFi] Connected: SSID \"%s\" | IP: %s | RSSI: %d dBm | Mode: %s\n",
-                WiFi.SSID().c_str(),
-                WiFi.localIP().toString().c_str(),
-                WiFi.RSSI(),
-                buildModeText().c_str());
+  if (firstConnectionAfterLoss) {
+    Serial.printf("[WiFi] Connected: SSID \"%s\" | IP: %s | RSSI: %d dBm | Mode: %s\n",
+                  WiFi.SSID().c_str(),
+                  WiFi.localIP().toString().c_str(),
+                  WiFi.RSSI(),
+                  buildModeText().c_str());
+  }
 }
 
 inline String buildStatusText() {
@@ -272,12 +289,16 @@ inline void ensureConnection() {
   lastStatusCheck = now;
 
   wl_status_t status = WiFi.status();
+  lastWifiStatus = status;
   if (status == WL_CONNECTED) {
-    onConnected(); // Сбрасываем счетчики и отключаем AP
-    if (staBackupSsid.length() && now - lastSignalScan >= signalScanInterval) {
+    if (!wasStaConnected || fallbackApActive || staAttemptInProgress) onConnected(); // Переход в устойчивое состояние.
+    else checkInterval = connectedCheckInterval; // Не трогаем Wi-Fi-режим и не пишем лог при обычной проверке.
+    const int currentRssi = WiFi.RSSI();
+    if (staBackupSsid.length() && currentRssi <= poorSignalScanThresholdDbm && now - lastSignalScan >= signalScanInterval) {
       lastSignalScan = now;
       if (chooseBestStaBySignal(true)) {
         WiFi.disconnect(true);
+        wasStaConnected = false;
         staAttemptInProgress = false;
         attemptCount = 0;
         checkInterval = 1000;
@@ -289,6 +310,11 @@ inline void ensureConnection() {
 
   if (checkInterval != 1000)
     checkInterval = 1000; // Возвращаем быстрые проверки, если потеряли сеть
+  if (wasStaConnected) {
+    wasStaConnected = false;
+    lastStaDisconnectedAt = now;
+    Serial.printf("[WiFi] Disconnected: status=%d, reconnecting...\n", static_cast<int>(status));
+  }
 
   if (fallbackApActive) {
     if (now - lastFallbackStaRetry < fallbackStaRetryInterval) {
@@ -355,6 +381,7 @@ inline void wifiModuleLoop() { if (captiveDnsActive) captiveDnsServer.processNex
 
 inline WifiStatusInfo getWifiStatus() {
   WifiStatusInfo info{};
+  const unsigned long now = millis();
   wifi_mode_t mode = WiFi.getMode();
   info.modeText = wifi_internal::buildModeText(); // STA / AP / STA+AP
   info.statusText = wifi_internal::buildStatusText(); // Connected / Connecting / AP Only / Disconnected
@@ -362,6 +389,10 @@ inline WifiStatusInfo getWifiStatus() {
   info.ip = (mode == WIFI_MODE_AP) ? WiFi.softAPIP().toString() : WiFi.localIP().toString();
   info.rssi = WiFi.isConnected() ? WiFi.RSSI() : 0;
   info.apActive = mode == WIFI_MODE_AP || mode == WIFI_MODE_APSTA;
+  info.statusCode = static_cast<int>(WiFi.status());
+  info.connectCount = wifi_internal::staConnectCount;
+  info.lastConnectedAgoSec = wifi_internal::lastStaConnectedAt ? (now - wifi_internal::lastStaConnectedAt) / 1000UL : 0;
+  info.lastDisconnectedAgoSec = wifi_internal::lastStaDisconnectedAt ? (now - wifi_internal::lastStaDisconnectedAt) / 1000UL : 0;
   return info;
 }
 

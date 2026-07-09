@@ -2124,7 +2124,7 @@ private:
       ".esp-link-state{border-radius:8px;border:1px solid #3ad76f;background:#0f5b2a;color:#fff;font-weight:900;text-align:center;padding:12px 8px;font-size:1rem;} "
       ".esp-link-card.off{border-color:#7a2626;background:#221114;} "
       ".esp-link-card.off .esp-link-state{border-color:#b93434;background:#6b1616;color:#fff;} "
-      ".esp-link-last{font-size:0.78rem;color:#94a8bd;} "
+      ".esp-link-last{font-size:0.78rem;color:#94a8bd;line-height:1.35;word-break:break-word;} "
       ".btn-toggle-on{background:linear-gradient(135deg,#4caf50,#81c784);color:#0b0f14;} " // Кнопка включённого состояния
       ".btn-mqtt{position:relative;overflow:hidden;background:linear-gradient(135deg,#1f2a44,#263555);border:1px solid rgba(111,168,255,0.35);color:#e6edff;box-shadow:0 12px 24px rgba(0,0,0,0.4);} " // Базовая кнопка MQTT
       ".btn-mqtt:before{content:'';position:absolute;inset:0;opacity:0;pointer-events:none;background:radial-gradient(circle at 20% 20%,rgba(255,255,255,0.28),transparent 45%);transition:opacity 0.18s ease;} " // Световой эффект кнопки MQTT
@@ -3235,26 +3235,42 @@ private:
     let mqttEnabledTouched = false;
     let mqttSaveTimer = null;
     let espLiveLastOkAt = 0;
-    const espLiveTimeoutMs = 18000;
+    const espLiveTimeoutMs = 7000;
 
   function formatConnectionClock(dateObj){
     const pad = (num)=>String(num).padStart(2, '0');
     return `${pad(dateObj.getHours())}:${pad(dateObj.getMinutes())}:${pad(dateObj.getSeconds())}`;
   }
 
-  function setEspConnectionState(connected){
+  function formatShortUptime(totalSeconds){
+    const seconds = Number(totalSeconds);
+    if(!Number.isFinite(seconds) || seconds < 0) return '--';
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
+    return h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}` : `${m}:${String(s).padStart(2,'0')}`;
+  }
+
+  function setEspConnectionState(connected, info, rttMs){
     const card = document.getElementById('EspLinkStatus');
     const state = document.getElementById('EspLinkStatus_state');
     const last = document.getElementById('EspLinkStatus_last');
     if(!card || !state) return;
     card.classList.toggle('off', !connected);
     state.innerText = connected ? 'ESP32 на связи' : 'Нет связи с ESP32';
-    if(last && connected) last.innerText = 'Последний отклик: ' + formatConnectionClock(new Date());
+    if(last && connected){
+      const details = [formatConnectionClock(new Date())];
+      if(typeof rttMs === 'number') details.push(`${rttMs} мс`);
+      if(info && typeof info.WifiRSSI !== 'undefined') details.push(`RSSI ${info.WifiRSSI} dBm`);
+      if(info && typeof info.UptimeSec !== 'undefined') details.push(`up ${formatShortUptime(info.UptimeSec)}`);
+      if(info && typeof info.WifiConnectCount !== 'undefined') details.push(`WiFi#${info.WifiConnectCount}`);
+      last.innerText = 'Последний отклик: ' + details.join(' | ');
+    }
   }
 
-  function markEspLiveOk(){
+  function markEspLiveOk(info, rttMs){
     espLiveLastOkAt = Date.now();
-    setEspConnectionState(true);
+    setEspConnectionState(true, info, rttMs);
   }
 
   function checkEspLiveTimeout(){
@@ -4656,8 +4672,8 @@ window.addEventListener('resize', ()=>{
     let pageDateTimeLastSync = 0;
     let liveInFlight = false;
     const liveActiveDelayMs = 2000; // Когда Nextion используется, Web обновляет live-данные чаще.
-    const liveDimmedDelayMs = 6000; // В приглушенном режиме HMI Web реже опрашивает ESP32 и снижает нагрузку.
-    const liveRequestTimeoutMs = 8000; // Зависший запрос не должен навсегда блокировать следующий /live.
+    const liveDimmedDelayMs = 2000; // Связь с ESP32 должна проверяться часто даже при приглушенном Nextion.
+    const liveRequestTimeoutMs = 5000; // Зависший запрос не должен надолго маскировать потерю связи.
     let livePollDelayMs = liveActiveDelayMs;
     let livePollTimer = null;
 
@@ -4724,11 +4740,12 @@ window.addEventListener('resize', ()=>{
     function fetchLive(){
     if(liveInFlight){ scheduleLivePoll(500); return; }
     liveInFlight = true;
+    const liveStartedAt = Date.now();
     const liveController = (typeof AbortController !== 'undefined') ? new AbortController() : null;
     const liveTimeout = liveController ? setTimeout(()=>liveController.abort(), liveRequestTimeoutMs) : null;
     const liveFetchOptions = liveController ? {cache:'no-store', signal:liveController.signal} : {cache:'no-store'};
     fetch('/live', liveFetchOptions).then(r=>r.json()).then(j=>{
-        markEspLiveOk();
+        markEspLiveOk(j, Date.now() - liveStartedAt);
         if(typeof j.Nx_dim_id !== 'undefined') updateLivePollDelay(j.Nx_dim_id);
         if(typeof j.CurrentTime !== 'undefined') updatePageDateTime(j.CurrentTime);
         if(typeof j.CurrentTime !== 'undefined') syncManualTimeInputs(j.CurrentTime);
@@ -5287,6 +5304,8 @@ function setImg(x){
     server.on("/live", HTTP_GET, [](AsyncWebServerRequest *r){
           if(!ensureAuthorized(r)) return;
       JsonDocument doc; // ArduinoJson v7 сам расширяет документ: не держим 64 КБ heap на каждый быстрый /live.
+      static uint32_t liveSeq = 0;
+      WifiStatusInfo wifiInfo = getWifiStatus();
 
       doc["CurrentTime"] = CurrentTime; // Временная метка для синхронизации времени страницы
       doc["gmtOffset"] = gmtOffset_correct; // Часовой пояс (GMT offset)
@@ -5294,6 +5313,22 @@ function setImg(x){
       doc["FilterImageState"] = jpg; // Выбор картинки бассейна (анимация/статик)
       doc["BasinImage"] = currentBasinImagePath(); // Картинка бассейна по состоянию RGB и лампы
       doc["PoolLevelIcon"] = currentPoolLevelIconPath(); // Маленькая PNG-пиктограмма уровня на общей странице бассейна.
+      doc["LiveSeq"] = ++liveSeq; // Счетчик live-ответов для диагностики пропусков.
+      doc["UptimeSec"] = millis() / 1000UL; // Если uptime сбросился, ESP32 реально перезагружался.
+      doc["FreeHeap"] = ESP.getFreeHeap();
+#ifdef ARDUINO_ARCH_ESP32
+      doc["MinFreeHeap"] = ESP.getMinFreeHeap();
+#endif
+      doc["ResetReason"] = webResetReasonToText(esp_reset_reason());
+      doc["WifiStatus"] = wifiInfo.statusText;
+      doc["WifiMode"] = wifiInfo.modeText;
+      doc["WifiSSID"] = wifiInfo.ssid;
+      doc["WifiIP"] = wifiInfo.ip;
+      doc["WifiRSSI"] = wifiInfo.rssi;
+      doc["WifiStatusCode"] = wifiInfo.statusCode;
+      doc["WifiConnectCount"] = wifiInfo.connectCount;
+      doc["WifiLastConnectedAgoSec"] = wifiInfo.lastConnectedAgoSec;
+      doc["WifiLastDisconnectedAgoSec"] = wifiInfo.lastDisconnectedAgoSec;
       doc["button_Lamp"] = Lamp ? 1 : 0; // Отображение состояния кнопки лампы, которая не объявлена через UI
       for (const auto &timer : ui.allTimers()) {
         doc[String(timer.id + "_ON")] = formatMinutesToTime(timer.on);
