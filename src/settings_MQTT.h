@@ -152,6 +152,8 @@ extern bool Power_Clean; // промывка фильтра
 extern bool Clean_Time1; // таймер промывки
 extern bool Pow_Ul_light; // ручное освещение
 extern bool Ul_light_Time; // таймер уличного освещения
+extern bool UlLight_autosvet; // уличное освещение по датчику
+extern bool UlLight_sensorTimerOff; // улица: датчик включает, таймер отключает
 extern bool Activation_Heat; // управление нагревом
 extern bool Activation_Water_Level; // контроль уровня воды
 extern bool WaterLevelSensorUpper; // датчик верхнего уровня
@@ -199,6 +201,7 @@ extern float RoomTempOff; // граница выключения отоплен�
 extern bool Power_Warm_floor_heating; // обогрев пола
 extern String SetLamp; // режим лампы
 extern String SetRGB; // режим RGB
+extern String SetUlLight; // режим уличного освещения
 extern bool Lamp; // состояние лампы
 extern bool Lamp_autosvet; // авто-режим лампы
 extern bool Power_Time1; // режим таймера лампы
@@ -387,6 +390,42 @@ inline void mqttApplyRgbMode(const String &rawMode){
   saveValue<int>("Pow_WS2815", Pow_WS2815 ? 1 : 0);
   saveValue<int>("Pow_WS2815_autosvet", Pow_WS2815_autosvet ? 1 : 0);
   saveValue<int>("WS2815_Time1", WS2815_Time1 ? 1 : 0);
+}
+
+inline void mqttApplyUlLightMode(const String &rawMode){
+  SetUlLight = mqttNormalizedMode(rawMode);
+  if(SetUlLight == "on"){
+    Pow_Ul_light = true;
+    Ul_light_Time = false;
+    UlLight_autosvet = false;
+    UlLight_sensorTimerOff = false;
+  } else if(SetUlLight == "auto"){
+    Pow_Ul_light = false;
+    Ul_light_Time = false;
+    UlLight_autosvet = true;
+    UlLight_sensorTimerOff = false;
+  } else if(SetUlLight == "auto_timer_off"){
+    Pow_Ul_light = false;
+    Ul_light_Time = false;
+    UlLight_autosvet = false;
+    UlLight_sensorTimerOff = true;
+  } else if(SetUlLight == "timer"){
+    Pow_Ul_light = false;
+    Ul_light_Time = true;
+    UlLight_autosvet = false;
+    UlLight_sensorTimerOff = false;
+  } else {
+    Pow_Ul_light = false;
+    Ul_light_Time = false;
+    UlLight_autosvet = false;
+    UlLight_sensorTimerOff = false;
+  }
+
+  saveValue<String>("SetUlLight", SetUlLight);
+  saveButtonState("Pow_Ul_light", Pow_Ul_light ? 1 : 0);
+  saveValue<int>("Ul_light_Time", Ul_light_Time ? 1 : 0);
+  saveValue<int>("UlLight_autosvet", UlLight_autosvet ? 1 : 0);
+  saveValue<int>("UlLight_sensorTimerOff", UlLight_sensorTimerOff ? 1 : 0);
 }
 
 inline String mqttLedAutoplayState(){
@@ -644,8 +683,17 @@ inline void handleMqttCommandMessage(char* topic, byte* payload, unsigned int le
 
   if(topicStr == "home/esp32/Pow_Ul_light/set"){
     Pow_Ul_light = mqttPayloadIsOn(message); // обновление состояния
+    SetUlLight = Pow_Ul_light ? "on" : "off";
+    Ul_light_Time = false;
+    UlLight_autosvet = false;
+    UlLight_sensorTimerOff = false;
+    saveValue<String>("SetUlLight", SetUlLight);
+    saveValue<int>("Ul_light_Time", 0);
+    saveValue<int>("UlLight_autosvet", 0);
+    saveValue<int>("UlLight_sensorTimerOff", 0);
     saveValue<int>("Pow_Ul_light", Pow_Ul_light ? 1 : 0); // сохранение
     publishMqttStateBool("home/esp32/Pow_Ul_light", Pow_Ul_light); // публикация
+    publishMqttStateString("home/esp32/SetUlLight", SetUlLight);
     return;
   }
 
@@ -670,6 +718,16 @@ inline void handleMqttCommandMessage(char* topic, byte* payload, unsigned int le
       publishMqttStateString("home/esp32/SetRGB", SetRGB); // публикация
       publishMqttStateBool("home/esp32/Pow_WS2815", Pow_WS2815);
       publishMqttStateBool("home/esp32/WS2815_Time1", WS2815_Time1);
+    }
+    return;
+  }
+
+  if(topicStr == "home/esp32/SetUlLight/set"){
+    if(mqttIsAllowedMode(message)){
+      mqttApplyUlLightMode(message);
+      publishMqttStateString("home/esp32/SetUlLight", SetUlLight);
+      publishMqttStateBool("home/esp32/Pow_Ul_light", Pow_Ul_light);
+      publishMqttStateBool("home/esp32/Ul_light_Time", Ul_light_Time);
     }
     return;
   }
@@ -853,7 +911,7 @@ if(entityId == "OverlayPoolTemp" || entityId == "OverlayHeaterTemp" ||
   if(entityId == "RoomTemp" || entityId == "RoomTempRange" ||
      entityId == "RoomTemper" || entityId == "Power_Warm_floor_heating") return DISCOVERY_GROUP_ROOM_TEMPERATURE;
 
-  if(entityId == "Pow_Ul_light" || entityId == "Ul_light_Time" ||
+  if(entityId == "Pow_Ul_light" || entityId == "SetUlLight" || entityId == "Ul_light_Time" ||
      entityId == "UlLightTimer_ON" || entityId == "UlLightTimer_OFF") return DISCOVERY_GROUP_OUTDOOR_LIGHTING;
 
   return DISCOVERY_GROUP_OVERVIEW;
@@ -1021,6 +1079,7 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
       {"number", "LedBrightness"},
       {"switch", "SetRGB"},
       {"switch", "SetLamp"},
+      {"switch", "SetUlLight"},
       {"sensor", "status"},
       {"sensor", "alive"},
       {"text", "Comment"},
@@ -1126,7 +1185,7 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
   static const char* const ledColorOrderOptions[] = {"GRB", "RGB", "GBR", "RBG", "BRG", "BGR"};
   static const char* const dosingOptions[] = {"1", "2", "14", "15", "16", "3", "4", "5", "6", "8", "9", "10", "11", "12", "13", "7"};
   const size_t baseCount = sizeof(baseEntities) / sizeof(baseEntities[0]); // количество base сущностей
-  const size_t totalCount = baseCount + 8; // количество select сущностей
+  const size_t totalCount = baseCount + 9; // количество select сущностей
 
   if(mqttDiscoveryStage == DISCOVERY_NONE){
     mqttDiscoveryStage = DISCOVERY_MAIN_ENTITIES; // старт этапа
@@ -1144,16 +1203,18 @@ if(mqttDiscoveryStage == DISCOVERY_MAIN_ENTITIES){
       } else if(mqttDiscoveryIndex == baseCount + 1){
           result = publishMqttDiscoverySelect("SetRGB", "🎛️ Режим управления RGB подсветкой", "home/esp32/SetRGB", "home/esp32/SetRGB/set", selectOptions, 5, deviceId, deviceName, true, true);
         } else if(mqttDiscoveryIndex == baseCount + 2){
-         result = publishMqttDiscoverySelect("LedColorMode", "🎨 Режим цвета", "home/esp32/LedColorMode", "home/esp32/LedColorMode/set", ledColorModeOptions, 2, deviceId, deviceName, true, true);
+          result = publishMqttDiscoverySelect("SetUlLight", "🚏 Режим уличного освещения", "home/esp32/SetUlLight", "home/esp32/SetUlLight/set", selectOptions, 5, deviceId, deviceName, true, true);
       } else if(mqttDiscoveryIndex == baseCount + 3){
-          result = publishMqttDiscoverySelect("LedPattern", "✨ Режим подсветки", "home/esp32/LedPattern", "home/esp32/LedPattern/set", ledPatternOptions, 24, deviceId, deviceName, true, true);
+         result = publishMqttDiscoverySelect("LedColorMode", "🎨 Режим цвета", "home/esp32/LedColorMode", "home/esp32/LedColorMode/set", ledColorModeOptions, 2, deviceId, deviceName, true, true);
       } else if(mqttDiscoveryIndex == baseCount + 4){
-         result = publishMqttDiscoverySelect("LedAutoplay", "🔁 Автосмена", "home/esp32/LedAutoplay", "home/esp32/LedAutoplay/set", ledAutoplayOptions, 2, deviceId, deviceName, true, true);
+          result = publishMqttDiscoverySelect("LedPattern", "✨ Режим подсветки", "home/esp32/LedPattern", "home/esp32/LedPattern/set", ledPatternOptions, 24, deviceId, deviceName, true, true);
       } else if(mqttDiscoveryIndex == baseCount + 5){
-          result = publishMqttDiscoverySelect("LedColorOrder", "🎚️ Порядок цветов ленты", "home/esp32/LedColorOrder", "home/esp32/LedColorOrder/set", ledColorOrderOptions, 6, deviceId, deviceName, true, true);
+         result = publishMqttDiscoverySelect("LedAutoplay", "🔁 Автосмена", "home/esp32/LedAutoplay", "home/esp32/LedAutoplay/set", ledAutoplayOptions, 2, deviceId, deviceName, true, true);
       } else if(mqttDiscoveryIndex == baseCount + 6){
-          result = publishMqttDiscoverySelect("ACO_Work", "⏳ Период дозирования ACO", "home/esp32/ACO_Work", "home/esp32/ACO_Work/set", dosingOptions, 16, deviceId, deviceName, true, true);
+          result = publishMqttDiscoverySelect("LedColorOrder", "🎚️ Порядок цветов ленты", "home/esp32/LedColorOrder", "home/esp32/LedColorOrder/set", ledColorOrderOptions, 6, deviceId, deviceName, true, true);
       } else if(mqttDiscoveryIndex == baseCount + 7){
+          result = publishMqttDiscoverySelect("ACO_Work", "⏳ Период дозирования ACO", "home/esp32/ACO_Work", "home/esp32/ACO_Work/set", dosingOptions, 16, deviceId, deviceName, true, true);
+      } else if(mqttDiscoveryIndex == baseCount + 8){
          result = publishMqttDiscoverySelect("H2O2_Work", "⏳ Период дозирования NaOCl", "home/esp32/H2O2_Work", "home/esp32/H2O2_Work/set", dosingOptions, 16, deviceId, deviceName, true, true);
       }
 
@@ -1180,7 +1241,7 @@ if(mqttDiscoveryStage == DISCOVERY_MAIN_ENTITIES){
         if(mqttDiscoveryRetryCount <= mqttDiscoveryMaxRetries){
           if(mqttDiscoveryIndex >= baseCount){
             const size_t selectIndex = mqttDiscoveryIndex - baseCount;
-            if(selectIndex <= 7){
+            if(selectIndex <= 8){
               const char* id = nullptr;
               const char* name = nullptr;
               const char* stateTopic = nullptr;
@@ -1192,16 +1253,18 @@ if(mqttDiscoveryStage == DISCOVERY_MAIN_ENTITIES){
               } else if(selectIndex == 1){
                 id = "SetRGB"; name = "🎛️ Режим RGB"; stateTopic = "home/esp32/SetRGB"; commandTopic = "home/esp32/SetRGB/set"; options = selectOptions; optionsCount = 5;
               } else if(selectIndex == 2){
-                id = "LedColorMode"; name = "🎨 Режим цвета RGB"; stateTopic = "home/esp32/LedColorMode"; commandTopic = "home/esp32/LedColorMode/set"; options = ledColorModeOptions; optionsCount = 2;
+                id = "SetUlLight"; name = "🚏 Режим уличного освещения"; stateTopic = "home/esp32/SetUlLight"; commandTopic = "home/esp32/SetUlLight/set"; options = selectOptions; optionsCount = 5;
               } else if(selectIndex == 3){
-                id = "LedPattern"; name = "✨ Эффект RGB"; stateTopic = "home/esp32/LedPattern"; commandTopic = "home/esp32/LedPattern/set"; options = ledPatternOptions; optionsCount = 24;
+                id = "LedColorMode"; name = "🎨 Режим цвета RGB"; stateTopic = "home/esp32/LedColorMode"; commandTopic = "home/esp32/LedColorMode/set"; options = ledColorModeOptions; optionsCount = 2;
               } else if(selectIndex == 4){
-                id = "LedAutoplay"; name = "🔁 Автосмена RGB"; stateTopic = "home/esp32/LedAutoplay"; commandTopic = "home/esp32/LedAutoplay/set"; options = ledAutoplayOptions; optionsCount = 2;
+                id = "LedPattern"; name = "✨ Эффект RGB"; stateTopic = "home/esp32/LedPattern"; commandTopic = "home/esp32/LedPattern/set"; options = ledPatternOptions; optionsCount = 24;
               } else if(selectIndex == 5){
-                 id = "LedColorOrder"; name = "🎚️ Порядок цветов"; stateTopic = "home/esp32/LedColorOrder"; commandTopic = "home/esp32/LedColorOrder/set"; options = ledColorOrderOptions; optionsCount = 6;
+                id = "LedAutoplay"; name = "🔁 Автосмена RGB"; stateTopic = "home/esp32/LedAutoplay"; commandTopic = "home/esp32/LedAutoplay/set"; options = ledAutoplayOptions; optionsCount = 2;
               } else if(selectIndex == 6){
-                id = "ACO_Work"; name = "🧴 Период дозирования ACO"; stateTopic = "home/esp32/ACO_Work"; commandTopic = "home/esp32/ACO_Work/set"; options = dosingOptions; optionsCount = 16;
+                 id = "LedColorOrder"; name = "🎚️ Порядок цветов"; stateTopic = "home/esp32/LedColorOrder"; commandTopic = "home/esp32/LedColorOrder/set"; options = ledColorOrderOptions; optionsCount = 6;
               } else if(selectIndex == 7){
+                id = "ACO_Work"; name = "🧴 Период дозирования ACO"; stateTopic = "home/esp32/ACO_Work"; commandTopic = "home/esp32/ACO_Work/set"; options = dosingOptions; optionsCount = 16;
+              } else if(selectIndex == 8){
                  id = "H2O2_Work"; name = "🧪 Период дозирования NaOCl"; stateTopic = "home/esp32/H2O2_Work"; commandTopic = "home/esp32/H2O2_Work/set"; options = dosingOptions; optionsCount = 16;
               }
               if(id){
@@ -1483,6 +1546,7 @@ if(!resolveMqttHost()) return; // хост не резолвится
       mqttSubscribeTopic("home/esp32/Activation_Heat/set", 0); // команда нагрева
       mqttSubscribeTopic("home/esp32/SetLamp/set", 0); // команда режима лампы
       mqttSubscribeTopic("home/esp32/SetRGB/set", 0); // команда режима RGB
+      mqttSubscribeTopic("home/esp32/SetUlLight/set", 0); // команда режима уличного освещения
       mqttSubscribeTopic("home/esp32/+/set", 0); // универсальная подписка на команды
     
     } else { // если не удалось подключиться
@@ -1637,6 +1701,7 @@ inline void handleMqttLoop(){ // основной цикл MQTT
 
       publishMqttStateString("home/esp32/SetLamp", SetLamp);
       publishMqttStateString("home/esp32/SetRGB", SetRGB);
+      publishMqttStateString("home/esp32/SetUlLight", SetUlLight);
       mqttForcePublishAllStates = false; // Полный снимок отправлен, дальше state-публикации идут только при изменении.
     
     }

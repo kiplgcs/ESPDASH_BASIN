@@ -1035,6 +1035,41 @@ inline void onSetRgbChange(const String &value){ // обработчик изм�
     saveValue<int>("WS2815_Time1", WS2815_Time1 ? 1 : 0); // сохраняет таймер RGB
 }
 
+inline void onSetUlLightChange(const String &value){ // обработчик изменения режима уличного освещения
+    SetUlLight = value; // сохраняет выбранный режим
+    if(SetUlLight == "on"){ // постоянное включение
+        Pow_Ul_light = true;
+        Ul_light_Time = false;
+        UlLight_autosvet = false;
+        UlLight_sensorTimerOff = false;
+    } else if(SetUlLight == "auto"){ // автоматическое управление по датчику
+        Pow_Ul_light = false;
+        Ul_light_Time = false;
+        UlLight_autosvet = true;
+        UlLight_sensorTimerOff = false;
+    } else if(SetUlLight == "auto_timer_off"){ // включение по датчику, отключение по окончанию окна таймера
+        Pow_Ul_light = false;
+        Ul_light_Time = false;
+        UlLight_autosvet = false;
+        UlLight_sensorTimerOff = true;
+    } else if(SetUlLight == "timer"){ // режим работы по таймеру
+        Pow_Ul_light = false;
+        Ul_light_Time = true;
+        UlLight_autosvet = false;
+        UlLight_sensorTimerOff = false;
+    } else { // любой другой режим — всё выключено
+        Pow_Ul_light = false;
+        Ul_light_Time = false;
+        UlLight_autosvet = false;
+        UlLight_sensorTimerOff = false;
+    }
+    saveValue<String>("SetUlLight", SetUlLight); // сохраняет режим улицы
+    saveButtonState("Pow_Ul_light", Pow_Ul_light ? 1 : 0); // сохраняет ручное состояние улицы
+    saveValue<int>("Ul_light_Time", Ul_light_Time ? 1 : 0); // сохраняет флаг таймера улицы
+    saveValue<int>("UlLight_autosvet", UlLight_autosvet ? 1 : 0); // сохраняет флаг полного авто-режима улицы
+    saveValue<int>("UlLight_sensorTimerOff", UlLight_sensorTimerOff ? 1 : 0); // сохраняет режим датчик -> таймер
+}
+
 inline void onLedColorModeChange(const String &value){ // обработчик выбора режима цвета LED
     ColorRGB = value.equalsIgnoreCase("manual"); // включает ручной режим выбора цвета
 }

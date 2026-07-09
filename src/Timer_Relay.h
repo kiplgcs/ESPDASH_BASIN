@@ -627,14 +627,27 @@ void TimerControlRelay(int interval) {
                       Pow_WS2815 = checkTimeInInterval(currentHour, currentMinute, rgbTimer.on, rgbTimer.off);
                     }
               
-                    if (UlLight_sensorTimerOff) {
+                    if (SetUlLight == "off") {
+                      Pow_Ul_light = false;
+                    } else if (SetUlLight == "on") {
+                      Pow_Ul_light = true;
+                    } else if (SetUlLight == "timer") {
+                      Pow_Ul_light = checkTimeInInterval(currentHour, currentMinute, ulLightTimer.on, ulLightTimer.off);
+                    } else if (SetUlLight == "auto") {
+                      Pow_Ul_light = applyLightAutoHysteresis(Pow_Ul_light, UlLightOffThreshold, UlLightOnThreshold);
+                    } else if (SetUlLight == "auto_timer_off") {
                       const bool ulLightTimerWindowActive = timeAvailable && checkTimeInInterval(currentHour, currentMinute, ulLightTimer.on, ulLightTimer.off);
                       Pow_Ul_light = applyLightSensorOnTimerOff(Pow_Ul_light, UlLightOnThreshold, ulLightTimerWindowActive);
-                    } else if (UlLight_autosvet) {
-                      Pow_Ul_light = applyLightAutoHysteresis(Pow_Ul_light, UlLightOffThreshold, UlLightOnThreshold);
-                    } else if (Ul_light_Time) {
-                      Pow_Ul_light = checkTimeInInterval(currentHour, currentMinute, ulLightTimer.on, ulLightTimer.off);
-                    }        
+                    } else {
+                      if (UlLight_sensorTimerOff) {
+                        const bool ulLightTimerWindowActive = timeAvailable && checkTimeInInterval(currentHour, currentMinute, ulLightTimer.on, ulLightTimer.off);
+                        Pow_Ul_light = applyLightSensorOnTimerOff(Pow_Ul_light, UlLightOnThreshold, ulLightTimerWindowActive);
+                      } else if (UlLight_autosvet) {
+                        Pow_Ul_light = applyLightAutoHysteresis(Pow_Ul_light, UlLightOffThreshold, UlLightOnThreshold);
+                      } else if (Ul_light_Time) {
+                        Pow_Ul_light = checkTimeInInterval(currentHour, currentMinute, ulLightTimer.on, ulLightTimer.off);
+                      }
+                    }
     
 //   if (checkTimeInInterval(hours, minutes, Filtr_timeON1, Filtr_timeOFF1)&&Filtr_Time1==true || checkTimeInInterval(hours, minutes, Filtr_timeON2, Filtr_timeOFF2)&&Filtr_Time2==true || checkTimeInInterval(hours, minutes, Filtr_timeON3, Filtr_timeOFF3)&&Filtr_Time3==true) {
 //      if(!Power_Clean){Power_Filtr=true;} //преимущество очистки - отключаем фильтрацию в любом случае (даже если включен по таймерам), если подошло время очистки фильтра

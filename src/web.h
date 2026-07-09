@@ -115,6 +115,7 @@ inline String ModeSelect = "Normal"; // Режим работы (наприме�
 inline String DaysSelect = "Sun"; // Выбор дней недели: по умолчанию промывка раз в неделю в воскресенье
 inline String SetLamp = "timer"; // Режим работы лампы: по умолчанию включение по таймеру
 inline String SetRGB = "timer"; // Режим управления RGB подсветкой: по умолчанию включение по таймеру
+inline String SetUlLight = "timer"; // Режим уличного освещения: по умолчанию включение по таймеру
 inline String StoredAPSSID;      // Сохраненный SSID точки доступа
 inline String StoredAPPASS;      // Сохраненный пароль точки доступа
 inline String authUsername;      // Логин для доступа к веб-интерфейсу
@@ -867,8 +868,16 @@ inline bool applyRs485RelayRequest(uint8_t relay, bool requestedState) {
       saveValue<int>("Power_Warm_floor_heating", Power_Warm_floor_heating ? 1 : 0);
       return true;
     case 15:
+      SetUlLight = requestedState ? "on" : "off";
       Pow_Ul_light = requestedState;
+      Ul_light_Time = false;
+      UlLight_autosvet = false;
+      UlLight_sensorTimerOff = false;
+      saveValue<String>("SetUlLight", SetUlLight);
       saveButtonState("Pow_Ul_light", Pow_Ul_light ? 1 : 0);
+      saveValue<int>("Ul_light_Time", 0);
+      saveValue<int>("UlLight_autosvet", 0);
+      saveValue<int>("UlLight_sensorTimerOff", 0);
       return true;
     default:
       return false;
@@ -906,7 +915,11 @@ inline void applyRs485AllOffRequest() {
   applyWaterControlRequest("Power_Topping", false);
   RoomTemper = false;
   Power_Warm_floor_heating = false;
+  SetUlLight = "off";
   Pow_Ul_light = false;
+  Ul_light_Time = false;
+  UlLight_autosvet = false;
+  UlLight_sensorTimerOff = false;
   for (uint8_t relay = 0; relay < 16; relay++) {
     Rs485ManualRelayState[relay] = false;
     persistRs485ManualRelay(relay);
@@ -927,7 +940,11 @@ inline void applyRs485AllOffRequest() {
   saveButtonState("SolSandDump", 0);
   saveValue<int>("RoomTemper", 0);
   saveValue<int>("Power_Warm_floor_heating", 0);
+  saveValue<String>("SetUlLight", SetUlLight);
   saveButtonState("Pow_Ul_light", 0);
+  saveValue<int>("Ul_light_Time", 0);
+  saveValue<int>("UlLight_autosvet", 0);
+  saveValue<int>("UlLight_sensorTimerOff", 0);
 }
 
 
@@ -1601,7 +1618,16 @@ private:
       return buildLightAutoStateText("Лампа бассейна", Lamp, LampLightOffThreshold, LampLightOnThreshold);
     });
     registerUiValueProvider("UlLightAutoState", []() -> String {
-      if (UlLight_sensorTimerOff) {
+      if (SetUlLight == "off") return String("Уличное освещение: постоянно выключено.");
+      if (SetUlLight == "on") return String("Уличное освещение: постоянно включено.");
+      if (SetUlLight == "timer") {
+        int h = 0, m = 0;
+        const bool timeOk = getCurrentHourMinute(h, m);
+        UITimerEntry &timer = ui.timer("UlLightTimer");
+        const bool windowActive = timeOk && lightTimeWindowActive(static_cast<uint16_t>(h * 60 + m), timer.on, timer.off);
+        return String("Уличное освещение: режим таймера; окно ") + formatMinutesToTime(timer.on) + "-" + formatMinutesToTime(timer.off) + "; сейчас " + (windowActive ? "внутри окна." : "вне окна.");
+      }
+      if (SetUlLight == "auto_timer_off" || UlLight_sensorTimerOff) {
         int h = 0, m = 0;
         const bool timeOk = getCurrentHourMinute(h, m);
         UITimerEntry &timer = ui.timer("UlLightTimer");
@@ -4660,6 +4686,7 @@ window.addEventListener('resize', ()=>{
     if(typeof j.ThemeColor !== 'undefined') updateInputValue('ThemeColor', j.ThemeColor); 
     if(typeof j.SetLamp !== 'undefined') updateSelectValue('SetLamp', j.SetLamp);
        if(typeof j.SetRGB !== 'undefined') updateSelectValue('SetRGB', j.SetRGB);
+    if(typeof j.SetUlLight !== 'undefined') updateSelectValue('SetUlLight', j.SetUlLight);
         if(typeof j.DaysSelect !== 'undefined') updateDaysSelection('DaysSelect', j.DaysSelect);
     if(typeof j.IntInput !== 'undefined') updateInputValue('IntInput', j.IntInput);
     if(typeof j.FloatInput !== 'undefined') updateInputValue('FloatInput', j.FloatInput);

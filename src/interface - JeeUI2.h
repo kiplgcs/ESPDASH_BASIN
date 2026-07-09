@@ -166,8 +166,6 @@ inline void interface(){ // Декларатиынве функции интер
         UI_DISPLAY("LightThresholdHelp", LightThresholdHelp, "ℹ️ Логика автосвета");
         UI_DUAL_RANGE_KEYS("LampLightThresholdRange", LampLightOffThreshold, LampLightOnThreshold, "LampLightOffThreshold", "LampLightOnThreshold", 0, 100, 1, "💡 Лампа бассейна: выключить / включить, %");
         UI_DISPLAY("LampLightAutoState", LampLightAutoState, "💡 Состояние лампы бассейна");
-        UI_CHECKBOX("UlLight_autosvet", UlLight_autosvet, "🚏 Управлять уличным освещением по датчику");
-        UI_CHECKBOX("UlLight_sensorTimerOff", UlLight_sensorTimerOff, "🚏 Улица: включать по датчику, отключать по таймеру");
         UI_DUAL_RANGE_KEYS("UlLightThresholdRange", UlLightOffThreshold, UlLightOnThreshold, "UlLightOffThreshold", "UlLightOnThreshold", 0, 100, 1, "🚏 Улица: выключить / включить, %");
         UI_DISPLAY("UlLightAutoState", UlLightAutoState, "🚏 Состояние уличного освещения");
         UI_DUAL_RANGE_KEYS("RgbLightThresholdRange", RgbLightOffThreshold, RgbLightOnThreshold, "RgbLightOffThreshold", "RgbLightOnThreshold", 0, 100, 1, "🌈 RGB: выключить / включить, %");
@@ -390,8 +388,12 @@ UI_COLOR("LEDColor", LEDColor, "🎨 Цвет подсветки");
 
     // Уличное освещение
     UI_PAGE();
-UI_BUTTON("Pow_Ul_light", Pow_Ul_light, "gray", "🚏 Включить/Отключить освещение вручную");
-    UI_CHECKBOX("Ul_light_Time", Ul_light_Time, "⏱️ Таймер уличного освещения");
+    UI_SELECT_CB("SetUlLight", SetUlLight, (std::initializer_list<UIOption>{{"off", "Уличное освещение отключено постоянно"},
+                                          {"on", "Уличное освещение включено постоянно"},
+                                          {"auto", "Включение по датчику освещенности (по порогам)"},
+                                          {"auto_timer_off", "Включение по датчику, отключение по таймеру"},
+                                          {"timer", "Включение по таймеру"}}), "🚏 Режим уличного освещения", onSetUlLightChange);
+    UI_DISPLAY("UlLightAutoState", UlLightAutoState, "🚏 Состояние уличного освещения");
         UI_TIMER("UlLightTimer", "⏲️ Таймер уличного освещения", UlLightTimerON, UlLightTimerOFF, noopTimerCallback);
 
     // Настройка времени
