@@ -3099,20 +3099,24 @@ private:
       html += "<div id='"+wifiPage.id+"' class='page'>"
               "<div class='page-header'><h3>"+wifiPage.title+"</h3>"
               "<div class='page-datetime' id='page-datetime-"+wifiPage.id+"'>--</div></div>"
+              "<h4 class='section-title'>Основная сеть WiFi</h4>"
               "<div class='card compact wifi-card'>"
-              "<div class='wifi-field'><label>SSID</label><div class='input-with-action'>"
+              "<div class='wifi-field'><label>SSID основной сети</label><div class='input-with-action'>"
               "<input id='ssid' value='"+loadValue<String>("ssid",defaultSSID)+"'>"
-              "<button class='btn-secondary' id='scan-btn' onclick='scanWiFi()'>Scan WiFi</button>"
+              "<button class='btn-secondary' id='scan-btn' onclick=\"scanWiFi('ssid','scan-btn')\">Scan WiFi</button>"
               "</div></div>"
               
-              "<div class='wifi-field'><label>Password</label><input id='pass' type='password' value='"+loadValue<String>("pass",defaultPASS)+"'></div>"
+              "<div class='wifi-field'><label>Пароль основной сети</label><input id='pass' type='password' value='"+loadValue<String>("pass",defaultPASS)+"'></div>"
               "</div>"
-              "<h4 class='section-title'>Backup STA Settings</h4>"
+              "<h4 class='section-title'>Резервная сеть WiFi</h4>"
               "<div class='card compact wifi-card'>"
-              "<div class='wifi-field'><label>Backup SSID</label><input id='ssid2' value='"+loadValue<String>("ssid2", String(""))+"'></div>"
-              "<div class='wifi-field'><label>Backup Password</label><input id='pass2' type='password' value='"+loadValue<String>("pass2", String(""))+"'></div>"
+              "<div class='wifi-field'><label>SSID резервной сети</label><div class='input-with-action'>"
+              "<input id='ssid2' value='"+loadValue<String>("ssid2", String(""))+"'>"
+              "<button class='btn-secondary' id='scan-backup-btn' onclick=\"scanWiFi('ssid2','scan-backup-btn')\">Scan WiFi</button>"
+              "</div></div>"
+              "<div class='wifi-field'><label>Пароль резервной сети</label><input id='pass2' type='password' value='"+loadValue<String>("pass2", String(""))+"'></div>"
               "</div>"
-              "<h4 class='section-title'>AP Settings</h4>"
+              "<h4 class='section-title'>Сервисная точка доступа ESP32</h4>"
               "<div class='card compact wifi-card'>"
               "<div class='wifi-field'><label>AP SSID</label><input id='ap_ssid' value='"+loadValue<String>("apSSID", String(apSSID))+"'></div>"
               "<div class='wifi-field'><label>AP Password</label><input id='ap_pass' type='password' value='"+loadValue<String>("apPASS", String(apPASS))+"'></div>"
@@ -3126,9 +3130,13 @@ private:
               "<div class='stat-group'><div class='stat-heading'>Сеть</div><ul class='stat-list'>"
               "<li><span>Wi-Fi Status (текущее состояние)</span><strong id='wifi-status'>--</strong></li>"
               "<li><span>Wi-Fi Mode (текущий режим STA/AP)</span><strong id='wifi-mode'>--</strong></li>"
+              "<li><span>Фактически используется</span><strong id='wifi-network-role'>--</strong></li>"
               "<li><span>SSID (имя Wi-Fi сети)</span><strong id='wifi-ssid'>--</strong></li>"
               "<li><span>Local IP (текущий IP-адрес)</span><strong id='wifi-ip'>--</strong></li>"
               "<li><span>Signal Strength (RSSI) (уровень сигнала Wi-Fi)</span><strong id='wifi-rssi'>--</strong></li>"
+              "<li><span>Подключено непрерывно</span><strong id='wifi-connected-for'>--</strong></li>"
+              "<li><span>Подключений после запуска</span><strong id='wifi-connect-count'>--</strong></li>"
+              "<li><span>Последняя причина отключения</span><strong id='wifi-disconnect-reason'>--</strong></li>"
               "</ul></div></div>"
               "<div id='wifi-scan-modal' class='wifi-modal hidden'>"
               "<div class='wifi-modal-content'>"
@@ -3235,7 +3243,11 @@ private:
     let mqttEnabledTouched = false;
     let mqttSaveTimer = null;
     let espLiveLastOkAt = 0;
-    const espLiveTimeoutMs = 7000;
+    const espLiveTimeoutMs = 6500;
+    let espHealthInFlight = false;
+    let espHealthTimer = null;
+    const espHealthRequestTimeoutMs = 3000;
+    const espHealthPollDelayMs = 1200;
 
   function formatConnectionClock(dateObj){
     const pad = (num)=>String(num).padStart(2, '0');
@@ -3262,6 +3274,7 @@ private:
       const details = [formatConnectionClock(new Date())];
       if(typeof rttMs === 'number') details.push(`${rttMs} мс`);
       if(info && typeof info.WifiRSSI !== 'undefined') details.push(`RSSI ${info.WifiRSSI} dBm`);
+      if(info && info.WifiNetworkRole) details.push(String(info.WifiNetworkRole).replace(' сеть WiFi',''));
       if(info && typeof info.UptimeSec !== 'undefined') details.push(`up ${formatShortUptime(info.UptimeSec)}`);
       if(info && typeof info.WifiConnectCount !== 'undefined') details.push(`WiFi#${info.WifiConnectCount}`);
       last.innerText = 'Последний отклик: ' + details.join(' | ');
@@ -3277,6 +3290,29 @@ private:
     if(!espLiveLastOkAt || Date.now() - espLiveLastOkAt > espLiveTimeoutMs){
       setEspConnectionState(false);
     }
+  }
+
+  function scheduleEspHealth(delayMs=espHealthPollDelayMs){
+    if(espHealthTimer) clearTimeout(espHealthTimer);
+    espHealthTimer = setTimeout(fetchEspHealth, delayMs);
+  }
+
+  function fetchEspHealth(){
+    if(espHealthInFlight){ scheduleEspHealth(300); return; }
+    espHealthInFlight = true;
+    const startedAt = Date.now();
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timeoutId = controller ? setTimeout(()=>controller.abort(), espHealthRequestTimeoutMs) : null;
+    const options = controller ? {cache:'no-store', signal:controller.signal} : {cache:'no-store'};
+    fetch('/health', options)
+      .then(response=>{ if(!response.ok) throw new Error('health'); return response.json(); })
+      .then(info=>markEspLiveOk(info, Date.now() - startedAt))
+      .catch(()=>{})
+      .finally(()=>{
+        if(timeoutId) clearTimeout(timeoutId);
+        espHealthInFlight = false;
+        scheduleEspHealth();
+      });
   }
 
   // Показ выбранной страницы и скрытие остальных
@@ -3878,11 +3914,17 @@ function saveProfileSettings(){
   const updateWifiStatus = (data)=>{
     updateStat('wifi-status', data.wifiStatus || 'N/A');
     updateStat('wifi-mode', data.wifiMode || 'N/A');
+    updateStat('wifi-network-role', data.networkRole || 'N/A');
     updateStat('wifi-ssid', data.ssid && data.ssid.length ? data.ssid : 'N/A');
     updateStat('wifi-ip', data.localIp && data.localIp.length ? data.localIp : 'N/A');
     const rssiVal = (typeof data.rssi !== 'undefined' && data.rssi !== null) ? data.rssi : 'N/A';
     const rssiText = isNaN(Number(rssiVal)) ? String(rssiVal) : `${rssiVal} dBm`;
     updateStat('wifi-rssi', rssiText);
+    updateStat('wifi-connected-for', data.wifiStatus === 'Connected' ? formatShortUptime(data.connectedForSec) : '--');
+    updateStat('wifi-connect-count', typeof data.connectCount !== 'undefined' ? data.connectCount : '--');
+    const reasonCode = Number(data.disconnectReasonCode || 0);
+    const reasonText = data.disconnectReason || 'Нет данных';
+    updateStat('wifi-disconnect-reason', reasonCode > 0 ? `${reasonText} (${reasonCode})` : reasonText);
     // Не перезаписываем поля WiFi статусом соединения: форма должна показывать сохраненные настройки, а не случайно стирать ввод пользователя.
 
   };
@@ -4255,6 +4297,10 @@ function closeWifiModal(){
   if(modal) modal.classList.add('hidden');
 }
 
+let wifiScanTargetId = 'ssid';
+let wifiScanButtonId = 'scan-btn';
+let wifiScanPollTimer = null;
+
 function renderWifiScanList(networks){
   const list = document.getElementById('wifi-scan-list');
   const modal = document.getElementById('wifi-scan-modal');
@@ -4271,10 +4317,10 @@ function renderWifiScanList(networks){
       const auth = authLabel(net.auth);
       btn.innerHTML = `<div class='network-ssid'>${ssid}</div><div class='network-meta'>${rssi} · ${auth}</div>`;
       btn.addEventListener('click', ()=>{
-        const ssidInput = document.getElementById('ssid');
+        const ssidInput = document.getElementById(wifiScanTargetId);
         if(ssidInput){
           ssidInput.value = net.ssid || '';
-          wifiInputEdited.ssid = true;
+          wifiInputEdited[wifiScanTargetId] = true;
         }
         closeWifiModal();
       });
@@ -4293,17 +4339,40 @@ function showWifiScanPlaceholder(text){
   modal.classList.remove('hidden');
 }
 
-function scanWiFi(){
-  const btn = document.getElementById('scan-btn');
+function finishWifiScanButton(){
+  const btn = document.getElementById(wifiScanButtonId);
+  if(btn){ btn.disabled = false; btn.innerText = 'Scan WiFi'; }
+}
+
+function pollWifiScanResult(startedAt){
+  fetch('/wifi/scan/result', {cache:'no-store'})
+    .then(r=>{ if(!r.ok) throw new Error('scan status'); return r.json(); })
+    .then(data=>{
+      if(data && data.ready){
+        renderWifiScanList(Array.isArray(data.networks) ? data.networks : []);
+        finishWifiScanButton();
+        return;
+      }
+      if(Date.now() - startedAt > 12000) throw new Error('scan timeout');
+      wifiScanPollTimer = setTimeout(()=>pollWifiScanResult(startedAt), 350);
+    })
+    .catch(()=>{
+      renderWifiScanList([]);
+      finishWifiScanButton();
+    });
+}
+
+function scanWiFi(targetId='ssid', buttonId='scan-btn'){
+  wifiScanTargetId = targetId;
+  wifiScanButtonId = buttonId;
+  if(wifiScanPollTimer) clearTimeout(wifiScanPollTimer);
+  const btn = document.getElementById(buttonId);
   if(btn){ btn.disabled = true; btn.innerText = 'Scanning...'; }
   showWifiScanPlaceholder('Идет сканирование...');
-  fetch('/wifi/scan')
-    .then(r=>r.json())
-    .then(data=>{ renderWifiScanList(Array.isArray(data) ? data : []); })
-    .catch(()=>{ renderWifiScanList([]); })
-    .finally(()=>{
-      if(btn){ btn.disabled = false; btn.innerText = 'Scan WiFi'; }
-    });
+  fetch('/wifi/scan/start', {cache:'no-store'})
+    .then(r=>{ if(!r.ok) throw new Error('scan start'); return r.json(); })
+    .then(()=>pollWifiScanResult(Date.now()))
+    .catch(()=>{ renderWifiScanList([]); finishWifiScanButton(); });
 }
 
 function saveWiFi(){
@@ -4341,13 +4410,41 @@ customGraphCanvases.forEach(canvas=>{
   canvas.addEventListener('mouseleave', hideGraphTooltip);
 });
 
+function graphStorageKey(canvas){
+  return 'espdash.graph.' + encodeURIComponent(canvas.dataset.series || canvas.id);
+}
+
+function loadStoredGraphPoints(canvas){
+  try {
+    const stored = JSON.parse(localStorage.getItem(graphStorageKey(canvas)) || '[]');
+    return Array.isArray(stored) ? stored : [];
+  } catch(_){
+    return [];
+  }
+}
+
+function cachedGraphPoints(canvas){
+  const cached = graphDataCache.get(canvas);
+  if(cached && Array.isArray(cached.points) && cached.points.length) return cached.points;
+  return loadStoredGraphPoints(canvas);
+}
+
+function persistGraphPoints(canvas, points){
+  if(!Array.isArray(points) || !points.length) return;
+  try { localStorage.setItem(graphStorageKey(canvas), JSON.stringify(points)); } catch(_){}
+}
+
 function resizeCustomGraphs(){
   customGraphCanvases.forEach(canvas=>{
     if(!canvas.parentElement) return;
-    const w = canvas.parentElement.clientWidth;
-    if(w && w > 0) canvas.width = w;
+    const points = cachedGraphPoints(canvas);
+    const w = Math.round(canvas.parentElement.clientWidth || 0);
     const h = parseFloat(getComputedStyle(canvas).height);
-    if(!isNaN(h) && h > 0) canvas.height = h;
+    const nextHeight = !isNaN(h) && h > 0 ? Math.round(h) : canvas.height;
+    let resized = false;
+    if(w > 0 && canvas.width !== w){ canvas.width = w; resized = true; }
+    if(nextHeight > 0 && canvas.height !== nextHeight){ canvas.height = nextHeight; resized = true; }
+    if(resized && points.length) drawCustomGraph(canvas, points); // Изменение width/height очищает canvas, поэтому сразу восстанавливаем последнюю кривую.
   });
 }
 
@@ -4598,9 +4695,22 @@ function showGraphTooltip(canvas, evt){
 function fetchCustomGraph(canvas){
   if(!canvas) return;
   const series = canvas.dataset.series || canvas.id;
-  fetch('/graphData?series='+encodeURIComponent(series))
-    .then(r=>r.json())
-    .then(j=>drawCustomGraph(canvas,j));
+  fetch('/graphData?series='+encodeURIComponent(series), {cache:'no-store'})
+    .then(r=>{ if(!r.ok) throw new Error('graph response'); return r.json(); })
+    .then(j=>{
+      if(!Array.isArray(j)) throw new Error('graph data');
+      const cached = cachedGraphPoints(canvas);
+      if(!j.length && cached.length){
+        drawCustomGraph(canvas, cached); // Временный пустой ответ не стирает достоверную историю.
+        return;
+      }
+      if(j.length) persistGraphPoints(canvas, j);
+      drawCustomGraph(canvas, j);
+    })
+    .catch(()=>{
+      const cached = cachedGraphPoints(canvas);
+      if(cached.length) drawCustomGraph(canvas, cached);
+    });
 }
 
 function restartCustomGraphInterval(canvas){
@@ -4740,12 +4850,10 @@ window.addEventListener('resize', ()=>{
     function fetchLive(){
     if(liveInFlight){ scheduleLivePoll(500); return; }
     liveInFlight = true;
-    const liveStartedAt = Date.now();
     const liveController = (typeof AbortController !== 'undefined') ? new AbortController() : null;
     const liveTimeout = liveController ? setTimeout(()=>liveController.abort(), liveRequestTimeoutMs) : null;
     const liveFetchOptions = liveController ? {cache:'no-store', signal:liveController.signal} : {cache:'no-store'};
     fetch('/live', liveFetchOptions).then(r=>r.json()).then(j=>{
-        markEspLiveOk(j, Date.now() - liveStartedAt);
         if(typeof j.Nx_dim_id !== 'undefined') updateLivePollDelay(j.Nx_dim_id);
         if(typeof j.CurrentTime !== 'undefined') updatePageDateTime(j.CurrentTime);
         if(typeof j.CurrentTime !== 'undefined') syncManualTimeInputs(j.CurrentTime);
@@ -4893,6 +5001,7 @@ window.addEventListener('resize', ()=>{
     }).catch(()=>{}).finally(()=>{ if(liveTimeout) clearTimeout(liveTimeout); liveInFlight = false; scheduleLivePoll(); });
   }
 scheduleLivePoll(250); // Первый live-опрос делаем быстро, дальше интервал выбирается по яркости Nextion.
+scheduleEspHealth(100); // Независимый легкий heartbeat быстро и достоверно обновляет статус связи.
 setInterval(tickPageDateTime, 1000);
 setInterval(checkEspLiveTimeout, 500);
 checkEspLiveTimeout();
@@ -5301,6 +5410,22 @@ function setImg(x){
       r->send(response);
     });
 
+    server.on("/health", HTTP_GET, [](AsyncWebServerRequest *r){
+      if(!ensureAuthorized(r)) return;
+      WifiStatusInfo wifiInfo = getWifiStatus();
+      String json = "{\"ok\":1,";
+      json += "\"UptimeSec\":" + String(millis() / 1000UL) + ',';
+      json += "\"WifiRSSI\":" + String(wifiInfo.rssi) + ',';
+      json += "\"WifiSSID\":\"" + jsonEscape(wifiInfo.ssid) + "\",";
+      json += "\"WifiNetworkRole\":\"" + jsonEscape(wifiInfo.networkRole) + "\",";
+      json += "\"WifiConnectCount\":" + String(wifiInfo.connectCount) + ',';
+      json += "\"WifiConnectedForSec\":" + String(wifiInfo.connectedForSec) + ',';
+      json += "\"WifiDisconnectReasonCode\":" + String(wifiInfo.disconnectReasonCode) + "}";
+      AsyncWebServerResponse *response = r->beginResponse(200, "application/json", json);
+      response->addHeader("Cache-Control", "no-store");
+      r->send(response);
+    });
+
     server.on("/live", HTTP_GET, [](AsyncWebServerRequest *r){
           if(!ensureAuthorized(r)) return;
       JsonDocument doc; // ArduinoJson v7 сам расширяет документ: не держим 64 КБ heap на каждый быстрый /live.
@@ -5325,6 +5450,10 @@ function setImg(x){
       doc["WifiSSID"] = wifiInfo.ssid;
       doc["WifiIP"] = wifiInfo.ip;
       doc["WifiRSSI"] = wifiInfo.rssi;
+      doc["WifiNetworkRole"] = wifiInfo.networkRole;
+      doc["WifiConnectedForSec"] = wifiInfo.connectedForSec;
+      doc["WifiDisconnectReasonCode"] = wifiInfo.disconnectReasonCode;
+      doc["WifiDisconnectReason"] = wifiInfo.disconnectReasonText;
       doc["WifiStatusCode"] = wifiInfo.statusCode;
       doc["WifiConnectCount"] = wifiInfo.connectCount;
       doc["WifiLastConnectedAgoSec"] = wifiInfo.lastConnectedAgoSec;
@@ -5489,17 +5618,30 @@ function setImg(x){
       json += "\"spiffsTotal\":"+String(total)+",";
       json += "\"wifiMode\":\""+jsonEscape(wifiMode)+"\",";
       json += "\"wifiStatus\":\""+jsonEscape(wifiInfo.statusText)+"\",";
+      json += "\"networkRole\":\""+jsonEscape(wifiInfo.networkRole)+"\",";
       json += "\"ssid\":\""+jsonEscape(ssid)+"\",";
       json += "\"localIp\":\""+jsonEscape(localIp)+"\",";
-      json += "\"rssi\":\""+jsonEscape(rssi)+"\"";
+      json += "\"rssi\":\""+jsonEscape(rssi)+"\",";
+      json += "\"connectedForSec\":"+String(wifiInfo.connectedForSec)+",";
+      json += "\"connectCount\":"+String(wifiInfo.connectCount)+",";
+      json += "\"disconnectReasonCode\":"+String(wifiInfo.disconnectReasonCode)+",";
+      json += "\"disconnectReason\":\""+jsonEscape(wifiInfo.disconnectReasonText)+"\"";
       json += "}";
 
       r->send(200, "application/json", json);
     });
 
-    server.on("/wifi/scan", HTTP_GET, [](AsyncWebServerRequest *r){
-            if(!ensureAuthorized(r)) return;
-      r->send(200, "application/json", scanWifiNetworksJson());
+    server.on("/wifi/scan/start", HTTP_GET, [](AsyncWebServerRequest *r){
+      if(!ensureAuthorized(r)) return;
+      requestWifiNetworkScan();
+      r->send(202, "application/json", wifiNetworkScanStateJson());
+    });
+
+    server.on("/wifi/scan/result", HTTP_GET, [](AsyncWebServerRequest *r){
+      if(!ensureAuthorized(r)) return;
+      AsyncWebServerResponse *response = r->beginResponse(200, "application/json", wifiNetworkScanStateJson());
+      response->addHeader("Cache-Control", "no-store");
+      r->send(response);
     });
 
     server.on("/wifi/save", HTTP_POST, [](AsyncWebServerRequest *r){

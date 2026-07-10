@@ -11,10 +11,17 @@ struct WifiStatusInfo {
   String modeText;
   String ssid;
   String ip;
+  String networkRole;
+  String disconnectReasonText;
   int rssi;
+  int primaryRssi;
+  int backupRssi;
   bool apActive;
+  bool usingBackup;
   int statusCode;
+  int disconnectReasonCode;
   uint32_t connectCount;
+  unsigned long connectedForSec;
   unsigned long lastConnectedAgoSec;
   unsigned long lastDisconnectedAgoSec;
 };
@@ -106,23 +113,45 @@ inline bool fallbackApActive = false;     // Флаг активного ава�
 inline bool mdnsStarted = false;          // Указывает, что mDNS уже запущен
 inline bool usingBackupSta = false;       // Сейчас подключаемся к резервной STA-сети
 inline int attemptCount = 0;              // Счетчик попыток подключения
-inline const int maxAttempts = 5;         // Максимум попыток перед переходом в AP
+inline const int maxAttempts = 2;         // Две полноценные попытки на сеть дают быстрый, но не дерганый failover.
 inline unsigned long lastAttemptStarted = 0; // Когда стартовала текущая попытка
 inline unsigned long lastStatusCheck = 0;    // Когда последний раз проверяли статус
-inline unsigned long lastSignalScan = 0;     // Когда последний раз сравнивали RSSI основной и резервной сети
-inline unsigned long lastFallbackStaRetry = 0; // Когда в AP-режиме последний раз пробовали вернуться в STA
 inline unsigned long checkInterval = 1000;      // 1s until stable connection
-inline const unsigned long attemptInterval = 5000; // retry window while connecting
-inline const unsigned long connectedCheckInterval = 5000; // После подключения проверяем связь часто, чтобы быстро переподключаться.
-inline const unsigned long signalScanInterval = 300000; // Сканирование сетей при STA делаем редко, чтобы не ронять быстрый Web-опрос.
-inline const unsigned long fallbackStaRetryInterval = 600000; // В AP-режиме редко пробуем STA, чтобы не выбрасывать клиентов captive portal
-inline const int signalSwitchHysteresisDb = 8; // Переключаемся только при заметно лучшем сигнале, чтобы не прыгать между AP
-inline const int poorSignalScanThresholdDbm = -78; // Сравниваем основную/резервную сеть только при реально слабом сигнале.
+inline const unsigned long attemptInterval = 12000; // Полная попытка подключения, включая DHCP.
+inline const unsigned long connectedCheckInterval = 1000; // Быстро обнаруживаем реальный разрыв.
+inline const unsigned long primaryRecoveryScanInterval = 30000; // На резервной сети регулярно ищем восстановившуюся основную.
+inline const unsigned long degradedPrimaryScanInterval = 30000; // При слабой основной сравниваем ее с резервной.
+inline const unsigned long normalPrimaryScanInterval = 120000; // При хорошем сигнале сравнение редкое и не нагружает радио.
+inline const unsigned long fallbackRecoveryScanInterval = 15000; // Из аварийной AP возвращаемся в STA без долгого ожидания.
+inline const unsigned long primaryRetryCooldown = 60000; // После неудачи не пытаемся вернуться на основную каждую секунду.
+inline const int primaryDegradedRssiDbm = -75; // Ниже этого уровня основная сеть считается деградировавшей.
+inline const int usablePrimaryRssiDbm = -78; // Минимальный пригодный сигнал при близком уровне резервной сети.
+inline const int signalSwitchHysteresisDb = 12; // Резервная должна быть заметно лучше, а не случайно выиграть пару dB.
+inline const int primaryReturnMarginDb = 6; // Для возврата основная должна приблизиться к уровню резервной сети.
+inline const int requiredHealthyScans = 2; // Сеть должна подтвердиться двумя последовательными сканированиями.
 inline bool wasStaConnected = false; // Помнит, что STA уже была подключена, чтобы отличать обрыв от штатного старта.
 inline unsigned long lastStaConnectedAt = 0; // Последний момент успешного подключения.
 inline unsigned long lastStaDisconnectedAt = 0; // Последний момент обнаруженной потери Wi-Fi.
 inline uint32_t staConnectCount = 0; // Счетчик успешных STA-подключений с момента загрузки.
 inline wl_status_t lastWifiStatus = WL_IDLE_STATUS; // Последний статус Wi-Fi для Web-диагностики.
+inline String connectedStaSsid; // SSID текущего непрерывного подключения для корректного счетчика времени.
+inline uint8_t lastDisconnectReason = 0; // Код причины от драйвера Wi-Fi.
+inline unsigned long lastDisconnectEventAt = 0; // Время последнего события разрыва от драйвера.
+inline unsigned long primaryRetryNotBefore = 0; // Пауза перед проверочным возвратом с резервной сети.
+inline unsigned long lastAutoScanAt = 0; // Последнее автоматическое сканирование.
+inline int lastPrimaryRssi = -1000; // Последний найденный RSSI основной сети.
+inline int lastBackupRssi = -1000; // Последний найденный RSSI резервной сети.
+inline int primaryHealthyScanCount = 0; // Подтверждения восстановления основной сети.
+inline int degradedPrimaryScanCount = 0; // Подтверждения деградации основной сети.
+inline bool autoSwitchRequested = false; // Результат асинхронного сканирования требует сменить STA.
+inline bool autoSwitchToBackup = false; // Целевая сеть для отложенного переключения.
+inline bool wifiScanActive = false; // Асинхронное сканирование не блокирует прикладной loop.
+inline unsigned long wifiScanStartedAt = 0;
+inline unsigned long lastScanPollAt = 0;
+inline bool manualScanQueued = false;
+inline bool manualScanReady = false;
+inline String manualScanNetworksJson = "[]";
+inline SemaphoreHandle_t wifiScanMutex = nullptr;
 
 inline void beginMdns() {
   if (mdnsStarted)
@@ -151,57 +180,143 @@ inline void stopCaptiveDns() {
   captiveDnsActive = false;
 }
 
-inline void startHiddenApForSta() {
-  WiFi.softAP(apSsid.c_str(), apPass.c_str(), 1, true); // Поднимаем скрытый AP, чтобы устройство оставалось доступным
+inline void activateFallbackAp();
+inline void startStaAttempt();
+
+inline void ensureWifiScanMutex() {
+  if (wifiScanMutex == nullptr) wifiScanMutex = xSemaphoreCreateMutex();
 }
 
-inline void activateFallbackAp();
+inline String wifiScanEscape(String value) {
+  value.replace("\\", "\\\\");
+  value.replace("\"", "\\\"");
+  return value;
+}
 
-inline bool chooseBestStaBySignal(bool connectedMode) {
-  if (!staBackupSsid.length()) {
-    usingBackupSta = false;
-    return false;
+inline String wifiAuthText(wifi_auth_mode_t authMode) {
+  switch (authMode) {
+    case WIFI_AUTH_WEP: return "WEP";
+    case WIFI_AUTH_WPA_PSK: return "WPA";
+    case WIFI_AUTH_WPA2_PSK: return "WPA2";
+    case WIFI_AUTH_WPA_WPA2_PSK: return "WPA/WPA2";
+    case WIFI_AUTH_WPA3_PSK: return "WPA3";
+    case WIFI_AUTH_WPA2_WPA3_PSK: return "WPA2/WPA3";
+    default: return "open";
   }
-  if (!staSsid.length()) {
-    const bool changed = !usingBackupSta;
-    usingBackupSta = true;
-    return changed;
+}
+
+inline void evaluateScanForAutomaticSwitch(int primaryRssi, int backupRssi) {
+  const unsigned long now = millis();
+  if (WiFi.status() == WL_CONNECTED) {
+    const String actualSsid = WiFi.SSID();
+    const bool connectedToBackup = staBackupSsid.length() && actualSsid == staBackupSsid && actualSsid != staSsid;
+    if (connectedToBackup) {
+      if (now < primaryRetryNotBefore || primaryRssi <= -1000) {
+        primaryHealthyScanCount = 0;
+        return;
+      }
+      const bool primaryHealthy = primaryRssi >= usablePrimaryRssiDbm &&
+                                  (backupRssi <= -1000 || primaryRssi >= backupRssi - primaryReturnMarginDb);
+      primaryHealthyScanCount = primaryHealthy ? primaryHealthyScanCount + 1 : 0;
+      if (primaryHealthyScanCount >= requiredHealthyScans) {
+        autoSwitchRequested = true;
+        autoSwitchToBackup = false;
+        primaryHealthyScanCount = 0;
+        Serial.printf("[WiFi] Primary network recovered: primary=%d dBm, backup=%d dBm\n", primaryRssi, backupRssi);
+      }
+      return;
+    }
+
+    const int currentPrimaryRssi = WiFi.RSSI();
+    const bool primaryDegraded = backupRssi > -1000 &&
+                                 backupRssi >= currentPrimaryRssi + signalSwitchHysteresisDb;
+    degradedPrimaryScanCount = primaryDegraded ? degradedPrimaryScanCount + 1 : 0;
+    if (degradedPrimaryScanCount >= requiredHealthyScans) {
+      autoSwitchRequested = true;
+      autoSwitchToBackup = true;
+      degradedPrimaryScanCount = 0;
+      primaryRetryNotBefore = now + primaryRetryCooldown;
+      Serial.printf("[WiFi] Primary network degraded: primary=%d dBm, backup=%d dBm\n", currentPrimaryRssi, backupRssi);
+    }
+    return;
   }
 
-  wifi_mode_t prevMode = WiFi.getMode();
-  if (prevMode == WIFI_MODE_NULL) WiFi.mode(WIFI_MODE_STA);
-  else if (prevMode == WIFI_MODE_AP) WiFi.mode(WIFI_MODE_APSTA);
-
-  int primaryRssi = -1000;
-  int backupRssi = -1000;
-  int16_t count = WiFi.scanNetworks(false, true);
-  if (count < 0) count = 0;
-  for (int i = 0; i < count; i++) {
-    String found = WiFi.SSID(i);
-    int rssi = WiFi.RSSI(i);
-    if (found == staSsid && rssi > primaryRssi) primaryRssi = rssi;
-    if (found == staBackupSsid && rssi > backupRssi) backupRssi = rssi;
+  if (fallbackApActive) {
+    if (primaryRssi > -1000 && now >= primaryRetryNotBefore) {
+      autoSwitchRequested = true;
+      autoSwitchToBackup = false;
+    } else if (backupRssi > -1000 && staBackupSsid.length()) {
+      autoSwitchRequested = true;
+      autoSwitchToBackup = true;
+    }
   }
+}
+
+inline bool startAsyncWifiScan() {
+  if (wifiScanActive) return true;
+  wifi_mode_t mode = WiFi.getMode();
+  if (mode == WIFI_MODE_NULL) WiFi.mode(WIFI_MODE_STA);
+  else if (mode == WIFI_MODE_AP) WiFi.mode(WIFI_MODE_APSTA); // Видимая аварийная AP при сканировании не останавливается.
   WiFi.scanDelete();
-
-  if (prevMode == WIFI_MODE_AP) WiFi.mode(prevMode);
-
-  bool desiredBackup = usingBackupSta;
-  const int hysteresis = connectedMode ? signalSwitchHysteresisDb : 0;
-  if (backupRssi > -1000 && (primaryRssi <= -1000 || backupRssi >= primaryRssi + hysteresis)) {
-    desiredBackup = true;
-  } else if (primaryRssi > -1000 && (backupRssi <= -1000 || primaryRssi >= backupRssi + hysteresis)) {
-    desiredBackup = false;
-  }
-
-  if (desiredBackup != usingBackupSta) {
-    Serial.printf("[WiFi] Auto selected %s SSID by RSSI: primary=%d dBm, backup=%d dBm\n",
-                  desiredBackup ? "backup" : "primary", primaryRssi, backupRssi);
-    usingBackupSta = desiredBackup;
-    attemptCount = 0;
+  const int16_t state = WiFi.scanNetworks(true, true, false, 120); // Async: CPU и прикладная автоматика не ждут радио.
+  if (state == WIFI_SCAN_RUNNING) {
+    wifiScanActive = true;
+    wifiScanStartedAt = millis();
+    lastAutoScanAt = wifiScanStartedAt;
     return true;
   }
   return false;
+}
+
+inline void finishManualScan(const String &networksJson) {
+  ensureWifiScanMutex();
+  if (wifiScanMutex) xSemaphoreTake(wifiScanMutex, portMAX_DELAY);
+  if (manualScanQueued) {
+    manualScanNetworksJson = networksJson;
+    manualScanReady = true;
+    manualScanQueued = false;
+  }
+  if (wifiScanMutex) xSemaphoreGive(wifiScanMutex);
+}
+
+inline void pollAsyncWifiScan() {
+  if (!wifiScanActive) return;
+  const unsigned long now = millis();
+  if (now - lastScanPollAt < 100) return;
+  lastScanPollAt = now;
+
+  int16_t count = WiFi.scanComplete();
+  if (count == WIFI_SCAN_RUNNING) {
+    if (now - wifiScanStartedAt < 10000) return;
+    count = WIFI_SCAN_FAILED;
+  }
+
+  wifiScanActive = false;
+  if (count < 0) {
+    WiFi.scanDelete();
+    finishManualScan("[]");
+    return;
+  }
+
+  int primaryRssi = -1000;
+  int backupRssi = -1000;
+  String networksJson = "[";
+  for (int i = 0; i < count; i++) {
+    const String foundSsid = WiFi.SSID(i);
+    const int foundRssi = WiFi.RSSI(i);
+    if (foundSsid == staSsid && foundRssi > primaryRssi) primaryRssi = foundRssi;
+    if (foundSsid == staBackupSsid && foundRssi > backupRssi) backupRssi = foundRssi;
+    if (i) networksJson += ',';
+    networksJson += "{\"ssid\":\"" + wifiScanEscape(foundSsid) + "\",";
+    networksJson += "\"rssi\":" + String(foundRssi) + ',';
+    networksJson += "\"auth\":\"" + wifiAuthText(WiFi.encryptionType(i)) + "\"}";
+  }
+  networksJson += ']';
+  lastPrimaryRssi = primaryRssi;
+  lastBackupRssi = backupRssi;
+  evaluateScanForAutomaticSwitch(primaryRssi, backupRssi);
+  finishManualScan(networksJson);
+  WiFi.scanDelete();
 }
 
 inline void startStaAttempt() {
@@ -212,9 +327,10 @@ inline void startStaAttempt() {
     activateFallbackAp();
     return;
   }
-  WiFi.mode(WIFI_MODE_APSTA);                 // Разрешаем одновременный STA и AP
+  const wifi_mode_t targetMode = fallbackApActive ? WIFI_MODE_APSTA : WIFI_MODE_STA;
+  if (WiFi.getMode() != targetMode) WiFi.mode(targetMode); // Видимую AP сохраняем только во время аварийного восстановления.
   WiFi.setHostname(hostName.c_str());         // Применяем имя хоста перед подключением
-  startHiddenApForSta();                      // Оставляем доступ через скрытый AP на время попытки
+  WiFi.setSleep(false);                       // Убираем power-save задержки и потери быстрых Web-запросов.
   WiFi.begin(connectSsid.c_str(), connectPass.c_str());
   staAttemptInProgress = true;                // Отмечаем, что попытка идет
   lastAttemptStarted = millis();              // Запоминаем время старта
@@ -225,16 +341,21 @@ inline void startStaAttempt() {
 }
 
 inline void activateFallbackAp() {
-  WiFi.disconnect(true);
-  WiFi.mode(WIFI_AP);
-  WiFi.softAP(apSsid.c_str(), apPass.c_str()); // Запускаем только AP, чтобы пользователь смог подключиться
-    startCaptiveDns(); // В AP режиме все DNS-запросы ведем на ESP32 для автоперехода браузеров.
+  const bool alreadyActive = fallbackApActive;
+  WiFi.disconnect(false, false); // Останавливаем только STA; сохраненную конфигурацию и радио не стираем.
+  if (WiFi.getMode() != WIFI_MODE_APSTA) WiFi.mode(WIFI_MODE_APSTA);
+  if (!alreadyActive) WiFi.softAP(apSsid.c_str(), apPass.c_str()); // Видимая сервисная AP остается доступной во время STA-поиска.
+  if (!alreadyActive) startCaptiveDns(); // В AP режиме все DNS-запросы ведем на ESP32 для автоперехода браузеров.
+  stopMdns();
   fallbackApActive = true;                     // Запоминаем, что мы в аварийном режиме
   staAttemptInProgress = false;
   attemptCount = 0;
   checkInterval = 1000;
-  Serial.printf("[WiFi] Fallback AP active: SSID \"%s\" | IP: %s\n",
-                apSsid.c_str(), WiFi.softAPIP().toString().c_str());
+  lastAutoScanAt = millis();
+  if (!alreadyActive) {
+    Serial.printf("[WiFi] Fallback AP active: SSID \"%s\" | IP: %s\n",
+                  apSsid.c_str(), WiFi.softAPIP().toString().c_str());
+  }
 }
 
 inline String buildModeText() {
@@ -252,10 +373,15 @@ inline String buildModeText() {
 }
 
 inline void onConnected() {
-  const bool firstConnectionAfterLoss = !wasStaConnected;
+  const String actualSsid = WiFi.SSID();
+  const bool firstConnectionAfterLoss = !wasStaConnected || actualSsid != connectedStaSsid;
   wasStaConnected = true;
-  lastStaConnectedAt = millis();
-  if (firstConnectionAfterLoss) staConnectCount++;
+  usingBackupSta = staBackupSsid.length() && actualSsid == staBackupSsid && actualSsid != staSsid;
+  if (firstConnectionAfterLoss) {
+    lastStaConnectedAt = millis();
+    connectedStaSsid = actualSsid;
+    staConnectCount++;
+  }
   fallbackApActive = false;    // AP больше не нужен
   staAttemptInProgress = false;
   checkInterval = connectedCheckInterval; // Проверяем чаще, чтобы Web быстро видел реальный обрыв.
@@ -264,7 +390,8 @@ inline void onConnected() {
   if (WiFi.getMode() != WIFI_STA) WiFi.mode(WIFI_STA); // Оставляем только STA без лишней перенастройки радио.
   beginMdns();                 // Стартуем mDNS для удобного доступа
   if (firstConnectionAfterLoss) {
-    Serial.printf("[WiFi] Connected: SSID \"%s\" | IP: %s | RSSI: %d dBm | Mode: %s\n",
+    Serial.printf("[WiFi] Connected to %s network: SSID \"%s\" | IP: %s | RSSI: %d dBm | Mode: %s\n",
+                  usingBackupSta ? "backup" : "primary",
                   WiFi.SSID().c_str(),
                   WiFi.localIP().toString().c_str(),
                   WiFi.RSSI(),
@@ -282,8 +409,45 @@ inline String buildStatusText() {
   return "Disconnected";         // Подключение отсутствует
 }
 
+inline String disconnectReasonText(uint8_t reason) {
+  switch (reason) {
+    case 0: return "Нет данных";
+    case 2: return "Истекла авторизация";
+    case 15: return "Таймаут WPA handshake";
+    case 200: return "Потеря маяков точки доступа";
+    case 201: return "Точка доступа не найдена";
+    case 202: return "Ошибка авторизации";
+    case 203: return "Ошибка ассоциации";
+    case 204: return "Таймаут handshake";
+    default: return "Код WiFi " + String(reason);
+  }
+}
+
+inline void requestStaSwitch(bool toBackup, const char *reason) {
+  if (toBackup && !staBackupSsid.length()) return;
+  if (!toBackup && !staSsid.length()) toBackup = true;
+  Serial.printf("[WiFi] Switching to %s network: %s\n", toBackup ? "backup" : "primary", reason);
+  WiFi.disconnect(false, false);
+  stopMdns();
+  wasStaConnected = false;
+  staAttemptInProgress = false;
+  usingBackupSta = toBackup;
+  attemptCount = 0;
+  checkInterval = 1000;
+  startStaAttempt();
+}
+
 inline void ensureConnection() {
   const unsigned long now = millis();
+  pollAsyncWifiScan();
+
+  if (autoSwitchRequested) {
+    const bool targetBackup = autoSwitchToBackup;
+    autoSwitchRequested = false;
+    requestStaSwitch(targetBackup, fallbackApActive ? "saved SSID is available" : "confirmed signal policy");
+    return;
+  }
+
   if (now - lastStatusCheck < checkInterval)
     return; // Еще не время следующей проверки
   lastStatusCheck = now;
@@ -294,16 +458,15 @@ inline void ensureConnection() {
     if (!wasStaConnected || fallbackApActive || staAttemptInProgress) onConnected(); // Переход в устойчивое состояние.
     else checkInterval = connectedCheckInterval; // Не трогаем Wi-Fi-режим и не пишем лог при обычной проверке.
     const int currentRssi = WiFi.RSSI();
-    if (staBackupSsid.length() && currentRssi <= poorSignalScanThresholdDbm && now - lastSignalScan >= signalScanInterval) {
-      lastSignalScan = now;
-      if (chooseBestStaBySignal(true)) {
-        WiFi.disconnect(true);
-        wasStaConnected = false;
-        staAttemptInProgress = false;
-        attemptCount = 0;
-        checkInterval = 1000;
-        startStaAttempt();
-      }
+    const bool connectedToBackup = staBackupSsid.length() && WiFi.SSID() == staBackupSsid && WiFi.SSID() != staSsid;
+    const unsigned long scanInterval = connectedToBackup
+                                         ? primaryRecoveryScanInterval
+                                         : (currentRssi <= primaryDegradedRssiDbm ? degradedPrimaryScanInterval : normalPrimaryScanInterval);
+    const bool shouldScan = connectedToBackup
+                              ? (staSsid.length() && now >= primaryRetryNotBefore)
+                              : staBackupSsid.length();
+    if (shouldScan && !wifiScanActive && now - lastAutoScanAt >= scanInterval) {
+      startAsyncWifiScan();
     }
     return;
   }
@@ -313,25 +476,17 @@ inline void ensureConnection() {
   if (wasStaConnected) {
     wasStaConnected = false;
     lastStaDisconnectedAt = now;
-    Serial.printf("[WiFi] Disconnected: status=%d, reconnecting...\n", static_cast<int>(status));
+    stopMdns();
+    staAttemptInProgress = false;
+    attemptCount = 0;
+    usingBackupSta = !staSsid.length() && staBackupSsid.length(); // После любого обрыва сначала проверяем приоритетную сеть.
+    Serial.printf("[WiFi] Disconnected: status=%d, reason=%u (%s), reconnecting...\n",
+                  static_cast<int>(status), static_cast<unsigned>(lastDisconnectReason),
+                  disconnectReasonText(lastDisconnectReason).c_str());
   }
 
-  if (fallbackApActive) {
-    if (now - lastFallbackStaRetry < fallbackStaRetryInterval) {
-      return; // Уже в AP: ждем редкое окно переподключения, чтобы не мешать клиентам точки доступа.
-    }
-    lastFallbackStaRetry = now;
-    chooseBestStaBySignal(false); // Перед попыткой выбираем сохраненную сеть с самым сильным сигналом.
-    const String &connectSsid = usingBackupSta ? staBackupSsid : staSsid;
-    const String &connectPass = usingBackupSta ? staBackupPass : staPass;
-    if (!connectSsid.length()) return;
-    WiFi.mode(WIFI_MODE_APSTA); // Не останавливаем видимую AP, только включаем STA рядом с ней.
-    WiFi.setHostname(hostName.c_str());
-    WiFi.begin(connectSsid.c_str(), connectPass.c_str());
-    staAttemptInProgress = true;
-    lastAttemptStarted = now;
-    attemptCount = 1;
-    Serial.printf("[WiFi] AP fallback retry STA SSID \"%s\" by strongest saved signal; AP stays active\n", connectSsid.c_str());
+  if (fallbackApActive && !staAttemptInProgress) {
+    if (!wifiScanActive && now - lastAutoScanAt >= fallbackRecoveryScanInterval) startAsyncWifiScan();
     return;
   }
 
@@ -344,11 +499,14 @@ inline void ensureConnection() {
   } else if (!usingBackupSta && staBackupSsid.length()) {
     Serial.printf("[WiFi] Primary SSID \"%s\" unavailable, switching to backup SSID \"%s\"\n",
                   staSsid.c_str(), staBackupSsid.c_str());
-    WiFi.disconnect(true);
+    WiFi.disconnect(false, false);
     staAttemptInProgress = false;
     usingBackupSta = true;
     attemptCount = 0;
+    primaryRetryNotBefore = now + primaryRetryCooldown;
     startStaAttempt();
+  } else if (fallbackApActive) {
+    activateFallbackAp(); // Возвращаемся к неблокирующему поиску, не перезапуская видимую AP.
   } else {
     activateFallbackAp();
   }
@@ -370,10 +528,17 @@ inline void initWiFiModule() {
                 
   WiFi.persistent(false);        // Не сохраняем настройки Wi-Fi во флэш автоматически
   WiFi.mode(WIFI_STA);           // Первичный режим — STA
+  WiFi.setAutoReconnect(true);   // Драйвер помогает быстро восстановить краткий радиосбой между проверками менеджера.
+  WiFi.setSleep(false);          // Стабильная задержка важнее экономии энергии для стационарного контроллера.
+  WiFi.onEvent([](WiFiEvent_t, WiFiEventInfo_t info) {
+    lastDisconnectReason = info.wifi_sta_disconnected.reason;
+    lastDisconnectEventAt = millis();
+    lastStaDisconnectedAt = lastDisconnectEventAt;
+  }, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
   stopMdns();                    // Гарантируем чистый запуск mDNS
   WiFi.setHostname(hostName.c_str());
-  lastSignalScan = millis();
-  chooseBestStaBySignal(false);  // При старте сразу выбираем основную/резервную сеть с лучшим RSSI
+  usingBackupSta = !staSsid.length() && staBackupSsid.length(); // При старте основная сеть всегда имеет приоритет.
+  lastAutoScanAt = millis();
   startStaAttempt();             // Запускаем первую попытку подключения
 }
 
@@ -386,11 +551,22 @@ inline WifiStatusInfo getWifiStatus() {
   info.modeText = wifi_internal::buildModeText(); // STA / AP / STA+AP
   info.statusText = wifi_internal::buildStatusText(); // Connected / Connecting / AP Only / Disconnected
   info.ssid = WiFi.SSID();
-  info.ip = (mode == WIFI_MODE_AP) ? WiFi.softAPIP().toString() : WiFi.localIP().toString();
+  const bool connected = WiFi.status() == WL_CONNECTED;
+  info.ip = (!connected && (mode == WIFI_MODE_AP || mode == WIFI_MODE_APSTA)) ? WiFi.softAPIP().toString() : WiFi.localIP().toString();
   info.rssi = WiFi.isConnected() ? WiFi.RSSI() : 0;
   info.apActive = mode == WIFI_MODE_AP || mode == WIFI_MODE_APSTA;
+  info.usingBackup = connected && wifi_internal::staBackupSsid.length() &&
+                     info.ssid == wifi_internal::staBackupSsid && info.ssid != wifi_internal::staSsid;
+  if (connected) info.networkRole = info.usingBackup ? "Резервная сеть WiFi" : "Основная сеть WiFi";
+  else if (wifi_internal::fallbackApActive) info.networkRole = "Аварийная точка доступа ESP32";
+  else info.networkRole = wifi_internal::usingBackupSta ? "Подключение к резервной сети WiFi" : "Подключение к основной сети WiFi";
+  info.disconnectReasonCode = wifi_internal::lastDisconnectReason;
+  info.disconnectReasonText = wifi_internal::disconnectReasonText(wifi_internal::lastDisconnectReason);
+  info.primaryRssi = wifi_internal::lastPrimaryRssi;
+  info.backupRssi = wifi_internal::lastBackupRssi;
   info.statusCode = static_cast<int>(WiFi.status());
   info.connectCount = wifi_internal::staConnectCount;
+  info.connectedForSec = connected && wifi_internal::lastStaConnectedAt ? (now - wifi_internal::lastStaConnectedAt) / 1000UL : 0;
   info.lastConnectedAgoSec = wifi_internal::lastStaConnectedAt ? (now - wifi_internal::lastStaConnectedAt) / 1000UL : 0;
   info.lastDisconnectedAgoSec = wifi_internal::lastStaDisconnectedAt ? (now - wifi_internal::lastStaDisconnectedAt) / 1000UL : 0;
   return info;
@@ -398,82 +574,30 @@ inline WifiStatusInfo getWifiStatus() {
 
 inline String wifiHostName() { return wifi_internal::hostName; } // Текущее имя хоста
 
-inline String scanWifiNetworksJson() {
-  wifi_mode_t prevMode = WiFi.getMode();
-  bool apOnly = (prevMode == WIFI_MODE_AP);
-  wifi_mode_t targetMode = prevMode;
+inline bool requestWifiNetworkScan() {
+  using namespace wifi_internal;
+  ensureWifiScanMutex();
+  if (wifiScanMutex) xSemaphoreTake(wifiScanMutex, portMAX_DELAY);
+  manualScanQueued = true;
+  manualScanReady = false;
+  if (wifiScanMutex) xSemaphoreGive(wifiScanMutex);
+  if (wifiScanActive) return true;
+  if (startAsyncWifiScan()) return true;
+  finishManualScan("[]");
+  return false;
+}
 
-    bool staWasEnabled = WiFi.getMode() == WIFI_MODE_STA || WiFi.getMode() == WIFI_MODE_APSTA;
-  
-    if (apOnly)
-    targetMode = WIFI_MODE_APSTA; // Для сканирования добавляем STA
-  else if (prevMode == WIFI_MODE_NULL)
-    targetMode = WIFI_MODE_STA;   // Если Wi-Fi выключен — включаем STA
-
-  if (targetMode != prevMode) {
-    WiFi.mode(targetMode);
-
-    if (apOnly) WiFi.enableSTA(true); // В режиме AP модуль STA был выключен, включаем для сканирования
-
-
-    delay(50);
-  }
-
-  WiFi.scanDelete();
-  int16_t n = WiFi.scanNetworks(false, true); // Быстрое сканирование в текущем канале
-  if (n < 0)
-    n = 0;
-
-  auto escape = [](String v) {
-    v.replace("\\", "\\\\");
-    v.replace("\"", "\\\"");
-    return v;
-  };
-
-  String json = "[";
-  for (int i = 0; i < n; i++) {
-    String auth = "open";
-    wifi_auth_mode_t enc = WiFi.encryptionType(i);
-    switch (enc) {
-    case WIFI_AUTH_WEP:
-      auth = "WEP";
-      break;
-    case WIFI_AUTH_WPA_PSK:
-      auth = "WPA";
-      break;
-    case WIFI_AUTH_WPA2_PSK:
-      auth = "WPA2";
-      break;
-    case WIFI_AUTH_WPA_WPA2_PSK:
-      auth = "WPA/WPA2";
-      break;
-    case WIFI_AUTH_WPA3_PSK:
-      auth = "WPA3";
-      break;
-    case WIFI_AUTH_WPA2_WPA3_PSK:
-      auth = "WPA2/WPA3";
-      break;
-    default:
-      auth = "open";
-      break;
-    }
-    json += "{\"ssid\":\"" + escape(WiFi.SSID(i)) + "\",";
-    json += "\"rssi\":" + String(WiFi.RSSI(i)) + ",";
-    json += "\"auth\":\"" + auth + "\"}";
-    if (i < n - 1)
-      json += ",";
-  }
-  json += "]";
-  WiFi.scanDelete(); // Очищаем результаты сканирования
-
-  if (targetMode != prevMode) {
-
-    if (apOnly && !staWasEnabled)
-      WiFi.enableSTA(false); // Возвращаем исходное состояние STA
-
-    WiFi.mode(prevMode);
-  }
-  return json; // Готовый список сетей в JSON
+inline String wifiNetworkScanStateJson() {
+  using namespace wifi_internal;
+  ensureWifiScanMutex();
+  if (wifiScanMutex) xSemaphoreTake(wifiScanMutex, portMAX_DELAY);
+  const bool ready = manualScanReady;
+  const bool scanning = wifiScanActive || manualScanQueued;
+  const String networks = manualScanNetworksJson;
+  if (wifiScanMutex) xSemaphoreGive(wifiScanMutex);
+  return String("{\"scanning\":") + (scanning ? "true" : "false") +
+         ",\"ready\":" + (ready ? "true" : "false") +
+         ",\"networks\":" + networks + "}";
 }
 
 inline bool saveWifiConfig(const String &ssid, const String &pass, const String &backupSsid, const String &backupPass, const String &apSsidIn, const String &apPassIn, const String &hostNameIn) {
@@ -496,15 +620,18 @@ inline bool saveWifiConfig(const String &ssid, const String &pass, const String 
   saveValue<String>("apPASS", apPass);
   saveValue<String>("hostname", hostName);
 
-  WiFi.disconnect(true);
+  WiFi.disconnect(false, false);
   stopMdns();
   fallbackApActive = false;
   staAttemptInProgress = false;
   usingBackupSta = false;
   attemptCount = 0;                            // Сбрасываем счетчик — новые попытки возможны после изменения настроек
   checkInterval = 1000;                        // Проверяем статус чаще, пока нет подключения
-  lastSignalScan = millis();
-  chooseBestStaBySignal(false);
+  primaryHealthyScanCount = 0;
+  degradedPrimaryScanCount = 0;
+  primaryRetryNotBefore = 0;
+  lastAutoScanAt = millis();
+  usingBackupSta = !staSsid.length() && staBackupSsid.length(); // Новая конфигурация снова начинает с основной сети.
   startStaAttempt();
   return true;
 }
