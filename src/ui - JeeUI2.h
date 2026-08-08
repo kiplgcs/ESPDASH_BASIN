@@ -273,7 +273,7 @@ private:
     }
 
   GraphConfig parseGraphConfig(const String &config, const String &fallbackId){ // разбирает строку конфигурации графика
-        int defaultPoints = maxGraphPoints; // Если в конфигурации графика нет maxPoints, используем общий дефолт 100 точек.
+        int defaultPoints = defaultGraphPoints; // Если в конфигурации графика нет maxPoints, используем безопасный дефолт 100 точек.
         unsigned long defaultPeriod = maxGraphUpdateInterval; // Максимальный период выбора графика по умолчанию: 24 часа.
         unsigned long defaultStep = minGraphUpdateInterval; // Минимальный шаг графика по умолчанию: 5 секунд.
         GraphConfig cfg{fallbackId, defaultPoints, defaultPeriod, defaultStep}; // инициализирует конфигурацию начальными значениями

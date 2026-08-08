@@ -1916,7 +1916,12 @@ private:
       ".graph-axes .axis-name{position:absolute;}"  // Названия осей
       ".graph-axes .axis-name:first-child{right:10px;bottom:8px;}"  // Подпись оси X
       ".graph-axes .axis-name:last-child{left:8px;top:8px;writing-mode:vertical-rl;transform:rotate(180deg);}"  // Подпись оси Y
-      ".graph-table-wrap{max-height:220px;overflow-y:auto;overflow-x:auto;margin-top:0;padding:0;}"  // Прокрутка таблицы точек графика
+      ".graph-table-card{padding-bottom:8px;} " // Карточка истории точек
+      ".graph-table-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px;} " // Заголовок и счетчик истории
+      ".graph-table-head .stat-heading{margin:0;} " // Без лишнего отступа над таблицей
+      ".graph-table-count{font-size:0.85em;color:#9fb4c8;} " // Сколько точек доступно в истории
+      ".graph-table-more{color:#9fb4c8;font-style:italic;} " // Подсказка о более ранних строках
+      ".graph-table-wrap{max-height:260px;overflow-y:auto;overflow-x:auto;margin-top:0;padding:0;border:1px solid rgba(255,255,255,0.08);border-radius:10px;}"  // Прокрутка таблицы точек графика
       ".graph-table-wrap table{margin-top:0;border-collapse:separate;border-spacing:0;}"  // Таблица графика без сдвига заголовка при sticky.
       ".graph-table-wrap thead th{position:sticky;top:0;z-index:3;background:#303030;box-shadow:0 2px 0 #444;}"  // Фиксация заголовка таблицы графика
       ".level-sensor-card{display:grid;grid-template-columns:104px minmax(0,1fr);gap:14px;align-items:center;min-height:128px;}" // Карточка уровнемера с наглядной пиктограммой.
@@ -2519,7 +2524,7 @@ private:
                   if(updateStep > maxUpdatePeriod) updateStep = maxUpdatePeriod; // Ограничение шага
                   if(updateStep < 60000UL) updateStep = 5UL * 60000UL; // После часа список строим минутным шагом, а не секундами.
                   String maxPointsRaw = readSetting("maxPoints"); // Максимум точек
-                  int defaultGraphMax = maxPointsRaw.length() ? maxPointsRaw.toInt() : maxGraphPoints; // Значение по умолчанию: 100 точек.
+                  int defaultGraphMax = maxPointsRaw.length() ? maxPointsRaw.toInt() : defaultGraphPoints; // Значение по умолчанию: 100 точек.
                   if(defaultGraphMax < minGraphPoints) defaultGraphMax = minGraphPoints; // Минимум
                   if(defaultGraphMax > maxGraphPoints) defaultGraphMax = maxGraphPoints; // Максимум для значения по умолчанию
                   int maxSelectablePoints = maxGraphPoints; // Ограничение выбора
@@ -2528,17 +2533,22 @@ private:
                   GraphSettings seriesSettings{defaultUpdate, defaultGraphMax}; // Настройки серии
 
                   bool graphSettingsLoadedFromFlash = false; // Нужен для миграции старых конфигов, где maxPoints случайно стал 30.
-                  auto runtimeSeriesSettings = seriesConfig.find(seriesName); // Ищем уже примененные настройки серии в RAM.
-                  if(runtimeSeriesSettings != seriesConfig.end()){ // Для служебных графиков берем актуальный интервал без лишней записи во flash.
-                    seriesSettings = runtimeSeriesSettings->second; // Например, графики насосов следуют периоду дозирования.
+                  bool runtimeSettingsFound = false;
+                  {
+                    GraphDataGuard guard; // seriesConfig одновременно читается основной задачей графиков.
+                    auto runtimeSeriesSettings = seriesConfig.find(seriesName); // Ищем уже примененные настройки серии в RAM.
+                    if(runtimeSeriesSettings != seriesConfig.end()){
+                      seriesSettings = runtimeSeriesSettings->second; // Например, графики насосов следуют периоду дозирования.
+                      runtimeSettingsFound = true;
+                    }
                   }
-                  else if(!loadGraphSettings(seriesName, seriesSettings)){ // Загрузка сохранённых настроек
+                  if(!runtimeSettingsFound && !loadGraphSettings(seriesName, seriesSettings)){ // Загрузка сохранённых настроек
                     graphSettingsLoadedFromFlash = loadGraphSettings(valueName, seriesSettings);
-                  } else {
+                  } else if(!runtimeSettingsFound) {
                     graphSettingsLoadedFromFlash = true; // Настройки серии прочитаны из SPIFFS.
                   }
-                  if(graphSettingsLoadedFromFlash && maxPointsRaw.length() && defaultGraphMax == maxGraphPoints && seriesSettings.maxPoints == 30){ // Исправляем старый баг: при сохранении интервала мог записаться дефолт 30 вместо 100.
-                    seriesSettings.maxPoints = maxGraphPoints;
+                  if(graphSettingsLoadedFromFlash && maxPointsRaw.length() && defaultGraphMax > 30 && seriesSettings.maxPoints == 30){ // Исправляем старый баг: при сохранении интервала мог записаться дефолт 30.
+                    seriesSettings.maxPoints = defaultGraphMax;
                     saveGraphSettings(seriesName, seriesSettings);
                   }
                   int graphUpdateInterval = seriesSettings.updateInterval; // Интервал обновления графика
@@ -2612,10 +2622,13 @@ private:
                   html += "<input class='graph-max-points' data-graph='"+e.id+"' type='number' min='1' max='"+String(maxSelectablePoints)+"' value='"+graphMaxStr+"'>"; // Input max точек
                   html += "</div>";
                   html += "</div>";
-                  html += "<div class='card graph-table-wrap'>"; // Карточка таблицы
+                  html += "<div class='card graph-table-card'>"; // Карточка истории точек
+                  html += "<div class='graph-table-head'><div class='stat-heading'>История точек</div>";
+                  html += "<div class='graph-table-count' id='"+tableId+"_count'>--</div></div>"; // Счетчик истории
+                  html += "<div class='graph-table-wrap'>"; // Прокручиваемая область фиксированной высоты
                   html += "<table id='"+tableId+"' style='min-width:400px;'>"; // Таблица данных
                   html += "<thead><tr><th>№</th><th>Дата и время</th><th>Значение</th><th>События</th></tr></thead><tbody></tbody>"; // Заголовок таблицы
-                  html += "</table></div>";
+                  html += "</table></div></div>";
                   continue; // Переход к следующему элементу
               }
               if(e.type=="rs485Panel"){
@@ -4442,6 +4455,10 @@ function saveWiFi(){
 let customGraphCanvases = Array.from(document.querySelectorAll("canvas[id^='graph_']"));
 const customGraphTimers = new Map();
 const graphDataCache = new Map();
+const graphHistories = new Map(); // Полная клиентская история; на canvas рисуется только удобное окно.
+const graphViews = new Map(); // Смещение окна при просмотре прошлых суток колесом мыши.
+const GRAPH_AUTO_RETURN_MS = 20000;
+let deviceNowEpoch = 0; // Местное epoch устройства для подписей «сегодня/вчера».
 const graphTooltip = document.createElement('div');
 graphTooltip.className = 'graph-tooltip hidden';
 document.body.appendChild(graphTooltip);
@@ -4449,7 +4466,31 @@ document.body.appendChild(graphTooltip);
 customGraphCanvases.forEach(canvas=>{
   canvas.addEventListener('mousemove', evt=>showGraphTooltip(canvas, evt));
   canvas.addEventListener('mouseleave', hideGraphTooltip);
+  canvas.addEventListener('wheel', evt=>{
+    const view = getGraphView(canvas);
+    if(!view.total) return;
+    evt.preventDefault();
+    const step = Math.max(1, Math.round(view.windowSize / 8));
+    const direction = evt.deltaY < 0 ? 1 : -1;
+    view.offset = Math.min(view.maxOffset, Math.max(0, view.offset + direction * step));
+    view.touchedAt = Date.now();
+    redrawCustomGraph(canvas);
+  }, {passive:false});
 });
+
+setInterval(()=>{
+  graphViews.forEach((view, canvas)=>{
+    if(view.offset === 0 || !view.touchedAt || Date.now() - view.touchedAt < GRAPH_AUTO_RETURN_MS) return;
+    view.offset = 0;
+    view.touchedAt = 0;
+    redrawCustomGraph(canvas);
+  });
+}, 1000);
+
+function getGraphView(canvas){
+  if(!graphViews.has(canvas)) graphViews.set(canvas, {offset:0, windowSize:0, maxOffset:0, total:0, touchedAt:0});
+  return graphViews.get(canvas);
+}
 
 function graphStorageKey(canvas){
   return 'espdash.graph.' + encodeURIComponent(canvas.dataset.series || canvas.id);
@@ -4458,13 +4499,17 @@ function graphStorageKey(canvas){
 function loadStoredGraphPoints(canvas){
   try {
     const stored = JSON.parse(localStorage.getItem(graphStorageKey(canvas)) || '[]');
-    return Array.isArray(stored) ? stored : [];
+    return Array.isArray(stored)
+      ? stored.filter(point=>graphPointEpoch(point) > 0)
+      : [];
   } catch(_){
     return [];
   }
 }
 
 function cachedGraphPoints(canvas){
+  const history = graphHistories.get(canvas);
+  if(Array.isArray(history) && history.length) return history;
   const cached = graphDataCache.get(canvas);
   if(cached && Array.isArray(cached.points) && cached.points.length) return cached.points;
   return loadStoredGraphPoints(canvas);
@@ -4485,7 +4530,7 @@ function resizeCustomGraphs(){
     let resized = false;
     if(w > 0 && canvas.width !== w){ canvas.width = w; resized = true; }
     if(nextHeight > 0 && canvas.height !== nextHeight){ canvas.height = nextHeight; resized = true; }
-    if(resized && points.length) drawCustomGraph(canvas, points); // Изменение width/height очищает canvas, поэтому сразу восстанавливаем последнюю кривую.
+    if(resized && points.length) drawCustomGraph(canvas, points, false); // Изменение width/height очищает canvas, поэтому сразу восстанавливаем последнюю кривую.
   });
 }
 
@@ -4495,6 +4540,119 @@ function isChlorineGraph(canvas){ // Определяет именно ppm-гр�
   const valueName = (canvas.dataset.valueName || '').toLowerCase(); // Берем ключ live-значения, чтобы отличить ppmCl от FloatClOrp.
   return valueName === 'ppmcl' || yLabel.includes('ppm'); // ppm-график хлора определяется по источнику ppmCl или единице ppm.
 } // Завершаем helper определения ppm-графика хлора.
+
+function graphPointEpoch(point){
+  if(!point) return 0;
+  const epoch = Number(point.epoch);
+  return Number.isFinite(epoch) && epoch > 0 ? epoch : 0;
+}
+
+function graphPointDate(point){
+  const epoch = graphPointEpoch(point);
+  return epoch ? new Date(epoch * 1000) : null;
+}
+
+function graphDayIndex(epoch){
+  return Math.floor(Number(epoch) / 86400); // epoch устройства уже содержит применённый локальный GMT.
+}
+
+function formatGraphDateTime(point){
+  const date = graphPointDate(point);
+  if(!date) return '--';
+  const pad = value=>String(value).padStart(2, '0');
+  return pad(date.getUTCDate())+'.'+pad(date.getUTCMonth()+1)+'.'+date.getUTCFullYear()+' '+
+         pad(date.getUTCHours())+':'+pad(date.getUTCMinutes())+':'+pad(date.getUTCSeconds());
+}
+
+function formatGraphDayLabel(epoch, fallbackEpoch){
+  const reference = deviceNowEpoch > 0 ? deviceNowEpoch : (fallbackEpoch || Date.now() / 1000);
+  const diffDays = graphDayIndex(reference) - graphDayIndex(epoch);
+  if(diffDays === 0) return 'сегодня';
+  if(diffDays === 1) return 'вчера';
+  if(diffDays === 2) return 'позавчера';
+  const date = new Date(epoch * 1000);
+  const pad = value=>String(value).padStart(2, '0');
+  return pad(date.getUTCDate())+'.'+pad(date.getUTCMonth()+1);
+}
+
+function findGraphExtrema(points){
+  const result = [];
+  if(!points.length) return result;
+  if(points.length <= 2){ for(let i=0;i<points.length;i++) result.push(i); return result; }
+  result.push(0);
+  for(let i=1;i<points.length-1;i++){
+    const previous = Number(points[i-1].value);
+    const current = Number(points[i].value);
+    const next = Number(points[i+1].value);
+    if(!Number.isFinite(previous) || !Number.isFinite(current) || !Number.isFinite(next)) continue;
+    if((current > previous && current >= next) || (current < previous && current <= next)) result.push(i);
+  }
+  result.push(points.length - 1);
+  return result;
+}
+
+function drawGraphDayMarkers(ctx, metrics){
+  const points = metrics.points || [];
+  if(!points.length) return;
+  const latestEpoch = graphPointEpoch(points[points.length - 1]);
+  ctx.save();
+  ctx.font = '11px "Inter", "Segoe UI", system-ui, sans-serif';
+  ctx.textAlign = 'left';
+  let previousDay = null;
+  let lastLabelRight = -Infinity;
+  for(let i=0;i<points.length;i++){
+    const epoch = graphPointEpoch(points[i]);
+    if(!epoch) continue;
+    const day = graphDayIndex(epoch);
+    if(previousDay !== null && day === previousDay) continue;
+    const x = points.length <= 1
+      ? metrics.plotLeft
+      : metrics.plotLeft + i * (metrics.plotWidth / (points.length - 1));
+    if(previousDay !== null){
+      ctx.strokeStyle = 'rgba(120,190,255,0.35)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4,4]);
+      ctx.beginPath();
+      ctx.moveTo(x, metrics.plotTop);
+      ctx.lineTo(x, metrics.plotBottom);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    previousDay = day;
+    const label = formatGraphDayLabel(epoch, latestEpoch);
+    const labelWidth = ctx.measureText(label).width;
+    const right = metrics.plotLeft + metrics.plotWidth;
+    let labelX = Math.max(metrics.plotLeft + 3, x + 4);
+    if(labelX + labelWidth + 6 >= right) labelX = Math.max(metrics.plotLeft + 3, x - labelWidth - 6);
+    if(labelX > lastLabelRight + 8 && labelX + labelWidth + 3 < right){
+      ctx.fillStyle = 'rgba(5,7,10,0.78)';
+      ctx.fillRect(labelX - 3, metrics.plotBottom - 16, labelWidth + 6, 14);
+      ctx.fillStyle = 'rgba(150,205,255,0.95)';
+      ctx.fillText(label, labelX, metrics.plotBottom - 5);
+      lastLabelRight = labelX + labelWidth + 3;
+    }
+  }
+  ctx.restore();
+}
+
+function drawGraphViewHint(ctx, view, metrics){
+  if(!view || !view.total) return;
+  const scrolled = view.offset > 0;
+  const text = scrolled
+    ? '−'+view.offset+' точек от конца (всего '+view.total+')'
+    : 'последние '+view.windowSize+' из '+view.total;
+  ctx.save();
+  ctx.font = '11px "Inter", "Segoe UI", system-ui, sans-serif';
+  ctx.textAlign = 'right';
+  const textWidth = ctx.measureText(text).width;
+  const right = metrics.plotLeft + metrics.plotWidth;
+  const top = metrics.plotTop + 4;
+  ctx.fillStyle = scrolled ? 'rgba(60,40,10,0.82)' : 'rgba(5,7,10,0.72)';
+  ctx.fillRect(right - textWidth - 12, top, textWidth + 8, 16);
+  ctx.fillStyle = scrolled ? 'rgba(255,205,120,0.95)' : 'rgba(180,195,215,0.82)';
+  ctx.fillText(text, right - 8, top + 12);
+  ctx.restore();
+}
 
 function populateGraphTable(tableId, data){
   if(!tableId || !data) return;
@@ -4506,16 +4664,33 @@ function populateGraphTable(tableId, data){
   if(headerRow) headerRow.innerHTML = '<th>№</th><th>Дата и время</th><th>Значение</th>' + (chlorineTable ? '<th>ORP, мВ</th>' : '') + '<th>События</th>'; // Заголовки пересобираются под тип графика.
   const tbody = table.querySelector('tbody');
   if(!tbody) return;
-  tbody.innerHTML = '';
-  for(let i = data.length - 1, row = 1; i >= 0; i--, row++){
+  const maxRows = 500; // 5000 DOM-строк заметно тормозят браузер, полная история остаётся на графике.
+  const from = Math.max(0, data.length - maxRows);
+  const scroller = table.closest('.graph-table-wrap');
+  const keepScroll = scroller ? scroller.scrollTop : 0;
+  const fragment = document.createDocumentFragment();
+  for(let i = data.length - 1, row = 1; i >= from; i--, row++){
     const point = data[i];
     const tr = document.createElement('tr');
     const events = Number(point.events || 0);
     const eventText = events > 0 ? ('x' + events) : '';
-    const orpText = chlorineTable ? (typeof point.orp !== 'undefined' ? point.orp : '--') : ''; // ORP берется из скрытой серии; старые точки без ORP показывают прочерк.
-     tr.innerHTML = '<td>'+row+'</td><td>'+point.time+'</td><td>'+point.value+'</td>' + (chlorineTable ? '<td>'+orpText+'</td>' : '') + '<td>'+eventText+'</td>'; // Формируем строку таблицы с ORP только для хлорного графика.
-    tbody.appendChild(tr);
+    const orpText = chlorineTable ? (typeof point.orp !== 'undefined' ? formatGraphNumber(point.orp) : '--') : ''; // ORP берется из синхронной серии.
+    tr.innerHTML = '<td>'+row+'</td><td>'+formatGraphDateTime(point)+'</td><td>'+formatGraphNumber(point.value)+'</td>' + (chlorineTable ? '<td>'+orpText+'</td>' : '') + '<td>'+eventText+'</td>';
+    fragment.appendChild(tr);
   }
+  if(from > 0){
+    const tr = document.createElement('tr');
+    tr.className = 'graph-table-more';
+    tr.innerHTML = '<td colspan="'+(chlorineTable ? 5 : 4)+'">… ещё '+from+' более ранних записей доступны на графике прокруткой колесом</td>';
+    fragment.appendChild(tr);
+  }
+  tbody.innerHTML = '';
+  tbody.appendChild(fragment);
+  if(scroller) scroller.scrollTop = keepScroll;
+  const counter = document.getElementById(tableId + '_count');
+  if(counter) counter.textContent = data.length > maxRows
+    ? ('показаны последние '+maxRows+' из '+data.length)
+    : ('записей: '+data.length);
 }
 
 function formatGraphNumber(value){
@@ -4568,7 +4743,7 @@ function graphPointPosition(metrics, index){
   return {x, y};
 }
 
-function drawCustomGraph(canvas,data){
+function drawCustomGraph(canvas,data,refreshTable=true){
   if(!canvas || !canvas.getContext) return;
   const ctx = canvas.getContext('2d');
   if(!ctx) return;
@@ -4591,7 +4766,17 @@ function drawCustomGraph(canvas,data){
   const maxPoints = !isNaN(maxPointsAttr) && maxPointsAttr > 0
     ? maxPointsAttr
     : 10;
-  const pointsToDraw = data.slice(-maxPoints);
+  const history = data.slice(-maxPoints);
+  const view = getGraphView(canvas);
+  const windowSize = Math.min(history.length, Math.max(12, Math.floor(width / 6)));
+  const maxOffset = Math.max(0, history.length - windowSize);
+  if(view.offset > maxOffset) view.offset = maxOffset;
+  if(view.offset < 0) view.offset = 0;
+  const endIndex = history.length - view.offset;
+  const pointsToDraw = history.slice(Math.max(0, endIndex - windowSize), endIndex);
+  view.windowSize = windowSize;
+  view.maxOffset = maxOffset;
+  view.total = history.length;
   const values = pointsToDraw.map(point=>Number(point.value)).filter(Number.isFinite);
   let minValue = values.length ? Math.min(...values) : 0;
   let maxValue = values.length ? Math.max(...values) : 1;
@@ -4610,7 +4795,7 @@ function drawCustomGraph(canvas,data){
   const plotRight = Math.max(plotLeft + 10, width - 16);
   const plotWidth = plotRight - plotLeft;
   const plotHeight = plotBottom - plotTop;
-  const metrics = {points: pointsToDraw, plotLeft, plotWidth, plotBottom, plotHeight, minValue, maxValue};
+  const metrics = {points: pointsToDraw, plotLeft, plotWidth, plotTop, plotBottom, plotHeight, minValue, maxValue};
 
   ctx.strokeStyle = 'rgba(255,255,255,0.07)';
   ctx.lineWidth = 1;
@@ -4685,21 +4870,27 @@ function drawCustomGraph(canvas,data){
   } // Завершаем обход событий дозирования.
   ctx.restore(); // Возвращаем состояние canvas после служебных отметок.
 
-  const labelOffsets = [-14, 10, -24, 6];
-  const labelStride = Math.max(1, Math.ceil(pointsToDraw.length * 54 / Math.max(plotWidth, 1)));
   ctx.font = '12px "Inter", "Segoe UI", system-ui, sans-serif';
   ctx.textAlign = 'center';
   ctx.fillStyle = 'rgba(235, 242, 255, 0.86)';
-  for(let i=0;i<pointsToDraw.length;i++){
-    if(i % labelStride !== 0 && i !== pointsToDraw.length - 1) continue;
-    const {x, y} = graphPointPosition(metrics, i);
-    const offset = labelOffsets[i % labelOffsets.length];
-    const labelY = Math.min(height - 6, Math.max(12, y + offset));
-    const label = formatGraphNumber(pointsToDraw[i].value);
-    ctx.fillText(label, x, labelY);
+  const occupiedLabels = [];
+  for(const index of findGraphExtrema(pointsToDraw)){
+    const value = Number(pointsToDraw[index].value);
+    if(!Number.isFinite(value)) continue;
+    const {x, y} = graphPointPosition(metrics, index);
+    const label = formatGraphNumber(value);
+    const halfWidth = ctx.measureText(label).width / 2 + 4;
+    if(occupiedLabels.some(span=>x-halfWidth < span[1] && x+halfWidth > span[0])) continue;
+    const previous = index > 0 ? Number(pointsToDraw[index-1].value) : value;
+    const above = index === 0 || index === pointsToDraw.length-1 || value >= previous;
+    const labelY = above ? Math.max(plotTop + 12, y - 9) : Math.min(plotBottom - 6, y + 17);
+    ctx.fillText(label, Math.max(plotLeft + halfWidth, Math.min(plotRight - halfWidth, x)), labelY);
+    occupiedLabels.push([x-halfWidth, x+halfWidth]);
   }
+  drawGraphDayMarkers(ctx, metrics);
+  drawGraphViewHint(ctx, view, metrics);
   graphDataCache.set(canvas, metrics);
-  populateGraphTable(canvas.dataset.tableId, pointsToDraw);
+  if(refreshTable !== false) populateGraphTable(canvas.dataset.tableId, history);
 }
 
 function hideGraphTooltip(){
@@ -4726,31 +4917,59 @@ function showGraphTooltip(canvas, evt){
 
   const eventCount = Number(point.events || 0);
   const eventText = eventCount > 0 ? ` | ${graphEventName(canvas)} x${eventCount}` : '';
-  graphTooltip.textContent = `${point.time}: ${formatGraphHeadline(canvas, point.value)}${eventText}`;
+  graphTooltip.textContent = `${formatGraphDateTime(point)}: ${formatGraphHeadline(canvas, point.value)}${eventText}`;
   graphTooltip.style.left = `${rect.left + (x / scaleX)}px`;
   graphTooltip.style.top = `${rect.top + (y / scaleY)}px`;
   graphTooltip.classList.remove('hidden');
 }
 
 
+function redrawCustomGraph(canvas){
+  const history = graphHistories.get(canvas);
+  if(history) drawCustomGraph(canvas, history, false);
+}
+
 function fetchCustomGraph(canvas){
   if(!canvas) return;
   const series = canvas.dataset.series || canvas.id;
-  fetch('/graphData?series='+encodeURIComponent(series), {cache:'no-store'})
-    .then(r=>{ if(!r.ok) throw new Error('graph response'); return r.json(); })
-    .then(j=>{
-      if(!Array.isArray(j)) throw new Error('graph data');
-      const cached = cachedGraphPoints(canvas);
-      if(!j.length && cached.length){
-        drawCustomGraph(canvas, cached); // Временный пустой ответ не стирает достоверную историю.
-        return;
-      }
-      if(j.length) persistGraphPoints(canvas, j);
-      drawCustomGraph(canvas, j);
+  let history = graphHistories.get(canvas);
+  if(!Array.isArray(history)){
+    const maxPointsAttr = parseInt(canvas.dataset.maxPoints);
+    const limit = !isNaN(maxPointsAttr) && maxPointsAttr > 0 ? maxPointsAttr : 10;
+    history = loadStoredGraphPoints(canvas).slice(-limit);
+    graphHistories.set(canvas, history);
+    if(history.length) drawCustomGraph(canvas, history, true);
+  }
+  let lastEpoch = history.length ? graphPointEpoch(history[history.length - 1]) : 0;
+  if(deviceNowEpoch > 0 && lastEpoch > deviceNowEpoch + 120){ // После перевода часов назад перечитываем отсортированную историю целиком.
+    history = [];
+    graphHistories.set(canvas, history);
+    lastEpoch = 0;
+  }
+  const url = '/graphData?series='+encodeURIComponent(series)+(lastEpoch > 0 ? '&since='+lastEpoch : '');
+  fetch(url, {cache:'no-store'})
+    .then(response=>{ if(!response.ok) throw new Error('graph response'); return response.json(); })
+    .then(rows=>{
+      if(!Array.isArray(rows)) throw new Error('graph data');
+      const fresh = rows.map(row=>{
+        if(!Array.isArray(row)) return null;
+        const point = {epoch:Number(row[0]), value:Number(row[1]), events:Number(row[2] || 0)};
+        if(row.length > 3 && Number.isFinite(Number(row[3]))) point.orp = Number(row[3]);
+        return graphPointEpoch(point) > 0 && Number.isFinite(point.value) ? point : null;
+      }).filter(Boolean);
+      const merged = lastEpoch > 0 ? history.concat(fresh) : fresh;
+      const maxPointsAttr = parseInt(canvas.dataset.maxPoints);
+      const limit = !isNaN(maxPointsAttr) && maxPointsAttr > 0 ? maxPointsAttr : 10;
+      if(merged.length > limit) merged.splice(0, merged.length - limit);
+      graphHistories.set(canvas, merged);
+      if(merged.length) persistGraphPoints(canvas, merged);
+
+      const view = getGraphView(canvas);
+      if(view.offset > 0 && fresh.length) view.offset += fresh.length;
+      if(fresh.length || !graphDataCache.has(canvas)) drawCustomGraph(canvas, merged, true);
     })
     .catch(()=>{
-      const cached = cachedGraphPoints(canvas);
-      if(cached.length) drawCustomGraph(canvas, cached);
+      if(history.length && !graphDataCache.has(canvas)) drawCustomGraph(canvas, history, true);
     });
 }
 
@@ -4803,16 +5022,22 @@ document.querySelectorAll('.graph-max-points').forEach(input=>{
     const target = document.getElementById('graph_'+graphId);
     if(!target) return;
     target.dataset.maxPoints = value;
+    graphHistories.delete(target); // при увеличении лимита перечитываем ранее обрезанную историю с устройства
+    graphDataCache.delete(target);
+    try { localStorage.removeItem(graphStorageKey(target)); } catch(_){}
+    getGraphView(target).offset = 0;
     // fetch('/save?key=graphMaxPoints_'+graphId+'&val='+encodeURIComponent(value));
-    fetch('/save?key=graphMaxPoints_'+graphId+'&series='+encodeURIComponent(series)+'&val='+encodeURIComponent(value));
-    fetchCustomGraph(target);
+    fetch('/save?key=graphMaxPoints_'+graphId+'&series='+encodeURIComponent(series)+'&val='+encodeURIComponent(value))
+      .then(()=>fetchCustomGraph(target))
+      .catch(()=>fetchCustomGraph(target));
   });
 });
 
 window.addEventListener('resize', ()=>{
   resizeCustomGraphs();
   customGraphCanvases.forEach(canvas=>{
-    fetchCustomGraph(canvas);
+    if(graphHistories.has(canvas)) redrawCustomGraph(canvas);
+    else fetchCustomGraph(canvas);
   });
 });
 
@@ -4896,6 +5121,7 @@ window.addEventListener('resize', ()=>{
     const liveFetchOptions = liveController ? {cache:'no-store', signal:liveController.signal} : {cache:'no-store'};
     fetch('/live', liveFetchOptions).then(r=>r.json()).then(j=>{
         if(typeof j.Nx_dim_id !== 'undefined') updateLivePollDelay(j.Nx_dim_id);
+        if(typeof j.nowEpoch !== 'undefined') deviceNowEpoch = Number(j.nowEpoch) || 0;
         if(typeof j.CurrentTime !== 'undefined') updatePageDateTime(j.CurrentTime);
         if(typeof j.CurrentTime !== 'undefined') syncManualTimeInputs(j.CurrentTime);
         if(typeof j.gmtOffset !== 'undefined') updateSelectValue('gmtOffset', j.gmtOffset);
@@ -5024,8 +5250,7 @@ window.addEventListener('resize', ()=>{
       if(!key || typeof j[key] === 'undefined') return;
       canvas.dataset.liveValue = j[key];
       if(isChlorineGraph(canvas) && typeof j.ClOrpRangeState !== 'undefined') canvas.dataset.clOrpRangeState = j.ClOrpRangeState; // Для online-подписи хлора держим состояние ниже/внутри/выше таблицы.
-      const cached = graphDataCache.get(canvas);
-      if(cached && cached.points) drawCustomGraph(canvas, cached.points);
+      if(graphHistories.has(canvas)) redrawCustomGraph(canvas); // Меняем крупное live-значение, не теряя выбранный участок истории.
     });
     syncRs485Panel(j);
     
@@ -5189,6 +5414,7 @@ function setImg(x){
           syncNextionRtcFromEpoch(getCurrentEpoch()); // После сдвига GMT сразу обновляем RTC Nextion новым локальным временем.
         }
                 else if(key=="graphMainMaxPoints") {
+          GraphDataGuard guard;
           int valInt = valStr.toInt();
           if(valInt < minGraphPoints) valInt = minGraphPoints;
           if(valInt > maxGraphPoints) valInt = maxGraphPoints;
@@ -5199,6 +5425,7 @@ function setImg(x){
           seriesConfig["main"].maxPoints = maxPoints;
         }
         else if(key=="graphMainUpdateInterval") {
+          GraphDataGuard guard;
           int valInt = valStr.toInt();
           if(valInt < minGraphUpdateInterval) valInt = minGraphUpdateInterval;
           if(valInt > maxGraphUpdateInterval) valInt = maxGraphUpdateInterval;
@@ -5208,12 +5435,13 @@ function setImg(x){
           seriesLastUpdate["main"] = 0;
         }
         else if(key.startsWith("graphUpdateInterval_")) {
+          GraphDataGuard guard;
           String series = key.substring(String("graphUpdateInterval_").length());
           if(r->hasParam("series")) series = r->getParam("series")->value();
           int valInt = valStr.toInt();
           if(valInt < minGraphUpdateInterval) valInt = minGraphUpdateInterval;
           if(valInt > maxGraphUpdateInterval) valInt = maxGraphUpdateInterval;
-          int preservedMaxPoints = maxGraphPoints; // При сохранении только интервала не сбрасываем Max Points до глобальных 30.
+          int preservedMaxPoints = defaultGraphPoints; // При сохранении только интервала не сбрасываем выбранный Max Points.
           auto runtimeCfg = seriesConfig.find(series);
           if(runtimeCfg != seriesConfig.end() && runtimeCfg->second.maxPoints > 0) preservedMaxPoints = runtimeCfg->second.maxPoints;
           GraphSettings cfg{static_cast<unsigned long>(valInt), preservedMaxPoints};
@@ -5227,6 +5455,7 @@ function setImg(x){
           seriesLastUpdate[series] = 0;
         }
         else if(key.startsWith("graphMaxPoints_")) {
+          GraphDataGuard guard;
           String series = key.substring(String("graphMaxPoints_").length());
           if(r->hasParam("series")) series = r->getParam("series")->value();
           int valInt = valStr.toInt();
@@ -5525,6 +5754,7 @@ function setImg(x){
 
       JsonDocument doc;
       doc["CurrentTime"] = CurrentTime; // Временная метка для синхронизации времени страницы
+      doc["nowEpoch"] = static_cast<uint32_t>(getCurrentEpoch()); // Местное время устройства для подписей суток на графиках
       doc["gmtOffset"] = gmtOffset_correct; // Часовой пояс (GMT offset)
       doc["Nx_dim_id"] = Nx_dim_id; // Текущая локальная яркость Nextion для выбора частоты live-опроса Web.
       doc["FilterImageState"] = jpg; // Выбор картинки бассейна (анимация/статик)
@@ -5781,41 +6011,104 @@ function setImg(x){
 
 
     server.on("/graphData", HTTP_GET, [](AsyncWebServerRequest *r){
-            if(!ensureAuthorized(r)) return;
+      if(!ensureAuthorized(r)) return;
       String series = "main";
       if(r->hasParam("series")) series = r->getParam("series")->value();
-      const vector<GraphPoint> *points = &graphPoints;
-      if(series != "main"){
+      uint32_t since = 0;
+      if(r->hasParam("since")) since = static_cast<uint32_t>(strtoul(r->getParam("since")->value().c_str(), nullptr, 10));
+
+      struct GraphResponsePoint {
+        uint32_t epoch = 0;
+        float value = 0;
+        uint16_t events = 0;
+        float orp = 0;
+        bool hasOrp = false;
+      };
+      auto snapshot = std::make_shared<std::vector<GraphResponsePoint>>();
+      {
+        GraphDataGuard guard; // копируем стабильный снимок, пока main-loop не меняет vector
         static const vector<GraphPoint> emptySeries;
-        auto it = customGraphSeries.find(series);
-        if(it != customGraphSeries.end() && !it->second.empty()) points = &it->second;
-        else points = &emptySeries;
+        const vector<GraphPoint> *points = &graphPoints;
+        if(series != "main"){
+          auto it = customGraphSeries.find(series);
+          points = (it != customGraphSeries.end()) ? &it->second : &emptySeries;
+        }
+        const vector<GraphPoint> *orpPoints = nullptr;
+        if(isChlorinePpmGraphSeries(series)){
+          auto orpIt = customGraphSeries.find(chlorineOrpGraphSeriesId());
+          if(orpIt != customGraphSeries.end()) orpPoints = &orpIt->second;
+        }
+
+        size_t firstPoint = 0;
+        auto cfgIt = seriesConfig.find(series);
+        const size_t responseLimit = cfgIt != seriesConfig.end() && cfgIt->second.maxPoints > 0
+          ? static_cast<size_t>(cfgIt->second.maxPoints)
+          : static_cast<size_t>(defaultGraphPoints);
+        if(points->size() > responseLimit) firstPoint = points->size() - responseLimit; // Не передаём служебный запас сверх Max Points.
+        snapshot->reserve(since == 0 ? points->size() - firstPoint : std::min<size_t>(points->size() - firstPoint, 32)); // Повторный опрос обычно несёт одну точку.
+        size_t orpCursor = 0;
+        for(size_t pointIndex = firstPoint; pointIndex < points->size(); pointIndex++){
+          const auto &point = (*points)[pointIndex];
+          if(point.epoch <= since) continue;
+          GraphResponsePoint responsePoint;
+          responsePoint.epoch = point.epoch;
+          responsePoint.value = point.value;
+          responsePoint.events = point.events;
+          if(orpPoints){
+            while(orpCursor < orpPoints->size() && (*orpPoints)[orpCursor].epoch < point.epoch) orpCursor++;
+            if(orpCursor < orpPoints->size() && (*orpPoints)[orpCursor].epoch == point.epoch){
+              responsePoint.orp = (*orpPoints)[orpCursor].value;
+              responsePoint.hasOrp = true;
+            }
+          }
+          snapshot->push_back(responsePoint);
+        }
       }
-      const vector<GraphPoint> *orpPoints = nullptr; // Для ppm-графика отдельно подключаем ORP-серию без изменения формата GraphPoint.
-      if(isChlorinePpmGraphSeries(series)){ // ORP нужен только для таблицы видимого графика ppmCl.
-        auto orpIt = customGraphSeries.find(chlorineOrpGraphSeriesId()); // Ищем отдельную ORP-серию, записанную тем же стандартным форматом.
-        if(orpIt != customGraphSeries.end() && !orpIt->second.empty()) orpPoints = &orpIt->second; // Используем ORP только когда серия уже накопила точки.
-      } // Завершаем выбор ORP-серии.
-      auto findOrpForPoint = [&](const GraphPoint &point, int pointIndex)->String { // Находит ORP для строки таблицы хлора по времени или позиции.
-        if(!orpPoints || orpPoints->empty()) return ""; // Если ORP-истории еще нет, в таблице будет прочерк.
-        for(const auto &orpPoint : *orpPoints){ // Сначала ищем точное совпадение времени точки ppmCl и ORP.
-          if(orpPoint.time == point.time) return String(orpPoint.value, 0); // Совпавшее время дает самый честный ORP для этой строки.
-        } // Завершаем точный поиск по времени.
-        int offsetFromEnd = static_cast<int>(points->size()) - 1 - pointIndex; // При разной длине серий выравниваем последние точки по правому краю.
-        int orpIndex = static_cast<int>(orpPoints->size()) - 1 - offsetFromEnd; // Вычисляем индекс ORP-точки с таким же смещением от конца.
-        if(orpIndex < 0 || orpIndex >= static_cast<int>(orpPoints->size())) return ""; // Если соответствующей ORP-точки нет, не подставляем неверное значение.
-        return String((*orpPoints)[orpIndex].value, 0); // Возвращаем ORP в мВ без дробной части.
-      }; // Завершаем локальный поиск ORP для таблицы.
-      String s="[";
-      for(int i=0;i<points->size();i++){
-        s+="{\"time\":\""+(*points)[i].time+"\",\"value\":"+String((*points)[i].value);
-        if((*points)[i].events > 0) s+=",\"events\":"+String((*points)[i].events); // Передаем счетчик дозирований только там, где он есть.
-        if(orpPoints){ String orpValue = findOrpForPoint((*points)[i], i); if(orpValue.length()) s+=",\"orp\":"+orpValue; } // Для таблицы хлора добавляем ORP из отдельной серии.
-        s+="}";
-        if(i<points->size()-1) s+=",";
-      }
-      s+="]";
-      r->send(200,"application/json",s);
+
+      // Компактный поток: [epoch,value], при необходимости добавляются events и ORP.
+      struct GraphStreamState { size_t cursor = 0; uint8_t stage = 0; };
+      auto state = std::make_shared<GraphStreamState>();
+      AsyncWebServerResponse *response = r->beginChunkedResponse("application/json",
+        [snapshot, state](uint8_t *buffer, size_t maxLen, size_t) -> size_t {
+          size_t written = 0;
+          if(state->stage == 0){
+            if(maxLen < 1) return 0;
+            buffer[written++] = '[';
+            state->stage = 1;
+          }
+          if(state->stage == 1){
+            char item[96];
+            while(state->cursor < snapshot->size()){
+              const auto &point = (*snapshot)[state->cursor];
+              int len = 0;
+              if(point.hasOrp){
+                len = snprintf(item, sizeof(item), "%s[%lu,%.3f,%u,%.0f]", state->cursor ? "," : "",
+                  static_cast<unsigned long>(point.epoch), point.value, static_cast<unsigned>(point.events), point.orp);
+              } else if(point.events > 0){
+                len = snprintf(item, sizeof(item), "%s[%lu,%.3f,%u]", state->cursor ? "," : "",
+                  static_cast<unsigned long>(point.epoch), point.value, static_cast<unsigned>(point.events));
+              } else {
+                len = snprintf(item, sizeof(item), "%s[%lu,%.3f]", state->cursor ? "," : "",
+                  static_cast<unsigned long>(point.epoch), point.value);
+              }
+              if(len <= 0){ state->cursor++; continue; }
+              if(written + static_cast<size_t>(len) > maxLen) return written;
+              memcpy(buffer + written, item, static_cast<size_t>(len));
+              written += static_cast<size_t>(len);
+              state->cursor++;
+            }
+            state->stage = 2;
+          }
+          if(state->stage == 2){
+            if(written + 1 > maxLen) return written;
+            buffer[written++] = ']';
+            state->stage = 3;
+            return written;
+          }
+          return 0;
+        });
+      response->addHeader("Cache-Control", "no-store");
+      r->send(response);
     });
 
 server.on("/getImage", HTTP_GET, [](AsyncWebServerRequest *r){

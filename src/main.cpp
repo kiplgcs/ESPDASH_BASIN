@@ -569,11 +569,12 @@ loop_CL2(calibrationFast ? 300 : 2100); // Обработка логики хл�
   // ---------- Добавление точек в графики с интервалом ----------
   loop_WS2815(); // Перед возможными SPIFFS-записями даем ленте шанс выдать очередной кадр.
   captureDosingPumpGraphEvents(); // Перед записью точки фиксируем включения дозаторов для меток на PH/CL.
-  addGraphPoint(CurrentTime, RandomVal); // Обновление графика RandomVal
+  const uint32_t graphStamp = static_cast<uint32_t>(getCurrentEpoch()); // Единая числовая метка нужна для границ суток и совпадения PH/CL с ORP.
+  addGraphPoint(graphStamp, RandomVal); // Обновление графика RandomVal
   for(auto &entry : graphValueProviders){
     float graphValue = entry.second(); // Читаем значение один раз, чтобы событие и точка относились к одному измерению.
     uint16_t graphEvents = dosingEventsForGraphSeries(entry.first); // Для PH/CL добавляем число включений дозатора за интервал.
-    bool pointAdded = addSeriesPoint(entry.first, CurrentTime, graphValue, graphEvents); // Обновление всех графиков.
+    bool pointAdded = addSeriesPoint(entry.first, graphStamp, graphValue, graphEvents); // Обновление всех графиков с одной меткой времени.
     clearDosingEventsAfterGraphSample(entry.first, pointAdded); // После записи точки сбрасываем только записанные события дозирования.
   }
 

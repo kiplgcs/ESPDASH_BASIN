@@ -3,6 +3,7 @@
 
 #include <Arduino.h> // базовые типы Arduino, millis(), String и т.п.
 #include <ArduinoJson.h> // работа с JSON для сохранения/загрузки настроек
+#include <algorithm> // lower_bound для сохранения хронологического порядка точек
 #include <functional> // std::function для callback'ов источников данных
 #include <map> // ассоциативные контейнеры для хранения серий и настроек
 #include <vector> // динамические массивы точек графика
@@ -11,9 +12,12 @@
 
 using std::vector; // упрощение записи vector<>
 
+// Числовая метка времени заметно компактнее строки "08.08.2026 13:15:09".
+// Это важно для истории до 5000 точек и одновременно позволяет браузеру
+// корректно разбивать график на сегодня, вчера и предыдущие дни.
 struct GraphPoint {
-  String time; // Время точки графика.
-  float value; // Значение измеряемого параметра.
+  uint32_t epoch = 0; // Локальное время устройства в формате Unix epoch.
+  float value = 0; // Значение измеряемого параметра.
   uint16_t events = 0; // Сколько служебных событий попало в интервал этой точки.
 }; // одна точка графика: время + значение + необязательные события
 
@@ -29,18 +33,55 @@ inline String sanitizeSeriesId(const String &series){ // приводит имя
 
 inline void trimGraphPoints(vector<GraphPoint> &points, size_t limit){ // ограничивает количество точек в серии
   if(limit == 0) return; // если лимит нулевой — ничего не делаем
-  while(points.size() > limit) points.erase(points.begin()); // удаляем самые старые точки
+  if(points.size() <= limit) return; // серия уже укладывается в лимит
+  points.erase(points.begin(), points.begin() + (points.size() - limit)); // удаляем старый блок одной операцией
 }
 
 inline const unsigned long minGraphUpdateInterval = 5000; // Минимальный интервал обновления графика: 5 секунд.
 inline const unsigned long maxGraphUpdateInterval = 24UL * 60UL * 60UL * 1000UL; // Максимальный интервал обновления графика: 24 часа.
 inline const unsigned long defaultGraphUpdateInterval = 60UL * 60UL * 1000UL; // Интервал графиков по умолчанию: 60 минут.
-inline const unsigned long graphSaveIntervalMs = 15000; // SPIFFS сохраняем реже, чтобы flash-записи не рвали плавность RGB.
 inline const int minGraphPoints = 1; // минимальное допустимое количество точек
-inline const int maxGraphPoints = 100; // максимальное допустимое количество точек
+inline const int defaultGraphPoints = 100; // безопасный стартовый размер; пользователь может увеличить его до максимума
+inline const int maxGraphPoints = 5000; // верхняя граница выбора Max Points для каждой серии
 inline const char* chlorinePpmGraphSeriesId(){ return "FloatСl"; } // ID видимого графика хлора ppmCl; буква С здесь кириллическая, как в UI.
 inline const char* chlorineOrpGraphSeriesId(){ return "FloatClOrp"; } // ID отдельного графика ORP, который также дает ORP-колонку таблице ppmCl.
 inline bool isChlorinePpmGraphSeries(const String &series){ return series == chlorinePpmGraphSeriesId(); } // Проверяем, что запрошена видимая серия хлора.
+
+// При длинной истории нельзя полностью переписывать файл после каждой точки.
+// Новые записи сбрасываются хвостом, а полная перезапись выполняется только
+// после накопления запаса сверх выбранного лимита.
+inline const size_t graphTrimSlackMin = 64;
+inline const unsigned long graphFlushIntervalMs = 30000;
+inline const size_t graphFlushPendingLimit = 32;
+inline std::map<String, size_t> seriesUnsavedTail;
+inline std::map<String, unsigned long> seriesLastFlush;
+
+inline size_t graphTrimSlackFor(size_t limit){
+  const size_t half = limit / 2;
+  return half > graphTrimSlackMin ? half : graphTrimSlackMin;
+}
+
+// Web и основная логика работают на разных ядрах, поэтому снимок истории и
+// добавление точки не должны одновременно менять один и тот же vector/map.
+inline SemaphoreHandle_t graphDataMutex = nullptr;
+
+inline void ensureGraphDataMutex(){
+  if(graphDataMutex == nullptr) graphDataMutex = xSemaphoreCreateMutex();
+}
+
+class GraphDataGuard {
+ public:
+  GraphDataGuard(){
+    ensureGraphDataMutex();
+    locked = graphDataMutex != nullptr && xSemaphoreTake(graphDataMutex, portMAX_DELAY) == pdTRUE;
+  }
+  ~GraphDataGuard(){ if(locked) xSemaphoreGive(graphDataMutex); }
+  GraphDataGuard(const GraphDataGuard&) = delete;
+  GraphDataGuard& operator=(const GraphDataGuard&) = delete;
+
+ private:
+  bool locked = false;
+};
 
 inline String graphDataPath(const String &series){ // формирует путь к файлу данных графика
   return "/graph_" + sanitizeSeriesId(series) + ".dat"; // имя файла на основе серии
@@ -86,28 +127,50 @@ inline void saveGraphSettings(const String &series, const GraphSettings &setting
   f.close(); // закрываем файл
 }
 
-inline void saveGraphSeries(const String &series, const vector<GraphPoint> &points){ // сохранение данных графика
-  if(!spiffsMounted) return; // если SPIFFS недоступен — выходим
+inline bool saveGraphSeries(const String &series, const vector<GraphPoint> &points){ // полная перезапись данных графика
+  if(!spiffsMounted) return false; // если SPIFFS недоступен — выходим
   String path = graphDataPath(series); // путь к файлу данных
   File f = SPIFFS.open(path, FILE_WRITE); // открываем файл на запись
   if(!f){ // если файл не открылся
     Serial.println("Failed to open graph file for writing: " + path); // вывод ошибки
-    return; // выходим
+    return false; // выходим
   }
   for(const auto &p : points){ // перебираем все точки
-    f.printf("%s,%.3f,%u\n", p.time.c_str(), p.value, static_cast<unsigned>(p.events)); // сохраняем время, значение и события в CSV-формате
+    f.printf("%lu,%.3f,%u\n", static_cast<unsigned long>(p.epoch), p.value, static_cast<unsigned>(p.events)); // epoch, значение и события
   }
   f.close(); // закрываем файл
+  seriesUnsavedTail[series] = 0; // файл полностью соответствует массиву
+  seriesLastFlush[series] = millis(); // запоминаем момент полной записи
+  return true;
 }
 
-inline std::map<String, unsigned long> graphLastSave; // Последняя запись серии в SPIFFS.
+inline bool appendGraphTailToFile(const String &series, const vector<GraphPoint> &points, size_t count){ // дозапись накопленного хвоста
+  if(!spiffsMounted || count == 0 || points.empty()) return false; // нечего или некуда писать
+  if(count > points.size()) count = points.size(); // защита от рассинхронизации счётчика
+  File f = SPIFFS.open(graphDataPath(series), FILE_APPEND); // открываем файл один раз на всю пачку
+  if(!f) return false;
+  for(size_t i = points.size() - count; i < points.size(); i++){
+    const auto &p = points[i];
+    f.printf("%lu,%.3f,%u\n", static_cast<unsigned long>(p.epoch), p.value, static_cast<unsigned>(p.events));
+  }
+  f.close();
+  return true;
+}
 
-inline void saveGraphSeriesThrottled(const String &series, const vector<GraphPoint> &points){ // Сохраняем серию без частых flash-записей.
-  unsigned long now = millis(); // Текущее время для ограничения частоты записи.
-  unsigned long last = graphLastSave[series]; // Последняя запись конкретной серии.
-  if(last != 0 && now - last < graphSaveIntervalMs) return; // В RAM данные уже обновлены, SPIFFS подождет.
-  graphLastSave[series] = now; // Фиксируем время до записи, чтобы не повторять при долгой операции.
-  saveGraphSeries(series, points); // Фактическая запись на SPIFFS.
+// Разбор старой строки "08.08.2026 13:15:09" нужен для сохранения уже
+// накопленной пользователем истории при переходе на компактный формат.
+inline uint32_t parseLegacyGraphTime(const String &text){
+  if(text.length() < 19) return 0;
+  struct tm timeInfo = {};
+  timeInfo.tm_mday = text.substring(0, 2).toInt();
+  timeInfo.tm_mon = text.substring(3, 5).toInt() - 1;
+  timeInfo.tm_year = text.substring(6, 10).toInt() - 1900;
+  timeInfo.tm_hour = text.substring(11, 13).toInt();
+  timeInfo.tm_min = text.substring(14, 16).toInt();
+  timeInfo.tm_sec = text.substring(17, 19).toInt();
+  if(timeInfo.tm_year < 100 || timeInfo.tm_mon < 0 || timeInfo.tm_mon > 11) return 0;
+  const time_t parsed = mktime(&timeInfo);
+  return parsed > 0 ? static_cast<uint32_t>(parsed) : 0;
 }
 
 inline void loadGraphSeries(const String &series, vector<GraphPoint> &points){ // загрузка точек графика из файла
@@ -120,25 +183,31 @@ inline void loadGraphSeries(const String &series, vector<GraphPoint> &points){ /
     Serial.println("Failed to open graph file for reading: " + path); // вывод ошибки
     return; // выходим
   }
+  bool convertedLegacy = false; // старый строковый файл после чтения будет переписан компактно
   while(f.available()){ // читаем файл построчно
     String line = f.readStringUntil('\n'); // читаем одну строку
     line.trim(); // удаляем пробелы и переводы строк
     if(line.length() == 0) continue; // пропускаем пустые строки
-    int sep = line.indexOf(','); // ищем разделитель CSV
+    const int sep = line.indexOf(','); // первый разделитель отделяет время
     if(sep < 0) continue; // если формат неверный — пропускаем
+    const int sep2 = line.indexOf(',', sep + 1); // необязательный счётчик событий
+    const String stamp = line.substring(0, sep);
     GraphPoint gp; // создаём точку графика
-    gp.time = line.substring(0, sep); // извлекаем временную метку
-    int sep2 = line.indexOf(',', sep + 1); // второй разделитель появился в новых файлах с событиями.
-    if(sep2 < 0){ // Старый формат: время,значение.
-      gp.value = line.substring(sep+1).toFloat(); // извлекаем значение
-      gp.events = 0; // В старых точках событий не было.
-    } else { // Новый формат: время,значение,события.
-      gp.value = line.substring(sep+1, sep2).toFloat(); // извлекаем значение
-      gp.events = static_cast<uint16_t>(line.substring(sep2+1).toInt()); // извлекаем количество событий
+    if(stamp.indexOf('.') >= 0 || stamp.indexOf(':') >= 0){
+      gp.epoch = parseLegacyGraphTime(stamp);
+      convertedLegacy = true;
+    } else {
+      gp.epoch = static_cast<uint32_t>(strtoul(stamp.c_str(), nullptr, 10));
     }
+    if(gp.epoch == 0) continue; // точка без достоверного времени не участвует в графике
+    gp.value = line.substring(sep + 1, sep2 < 0 ? line.length() : sep2).toFloat();
+    gp.events = sep2 < 0 ? 0 : static_cast<uint16_t>(line.substring(sep2 + 1).toInt());
     points.push_back(gp); // добавляем точку в массив
   }
   f.close(); // закрываем файл
+  seriesUnsavedTail[series] = 0;
+  seriesLastFlush[series] = millis();
+  if(convertedLegacy && !points.empty()) saveGraphSeries(series, points); // история не теряется, а только меняет формат
 }
 
 // Основная серия графика "main"
@@ -160,9 +229,13 @@ inline std::map<String, GraphSettings> seriesConfig; // настройки (ин
 // Время последнего обновления каждой серии
 inline std::map<String, unsigned long> seriesLastUpdate; // таймстемп последнего добавления точки в серию
 
+inline bool storeGraphPoint(const String &series, vector<GraphPoint> &points,
+                            const GraphPoint &point, size_t limit); // реализация расположена после регистрации источников
+
 // Загружает основной график и его настройки
 inline void loadGraph(){ // инициализация основной серии графика
-  GraphSettings mainCfg{defaultGraphUpdateInterval, maxGraphPoints}; // По умолчанию график обновляется раз в 60 минут и хранит 100 точек.
+  GraphDataGuard guard; // защищаем общие контейнеры от сетевой задачи
+  GraphSettings mainCfg{defaultGraphUpdateInterval, defaultGraphPoints}; // Служебная серия main по умолчанию не занимает память под все 5000 точек.
   loadGraphSettings("main", mainCfg); // попытка загрузить сохранённые настройки из SPIFFS
 
   if(mainCfg.updateInterval < minGraphUpdateInterval) mainCfg.updateInterval = minGraphUpdateInterval; // защита от слишком частых обновлений
@@ -174,13 +247,19 @@ inline void loadGraph(){ // инициализация основной сери
   maxPoints = mainCfg.maxPoints; // сохраняем лимит точек как глобальный
 
   loadGraphSeries("main", graphPoints); // загружаем сохранённые точки основной серии
+  if(graphPoints.size() > static_cast<size_t>(mainCfg.maxPoints)){
+    trimGraphPoints(graphPoints, static_cast<size_t>(mainCfg.maxPoints));
+    saveGraphSeries("main", graphPoints);
+  }
 
   seriesConfig["main"] = mainCfg; // сохраняем конфигурацию основной серии
   seriesLastUpdate["main"] = 0; // сбрасываем время последнего обновления
 }
 
 // Добавляет точку в основной график с учетом интервала
-inline void addGraphPoint(String t, float v){ // добавление новой точки в основную серию
+inline void addGraphPoint(uint32_t epoch, float v){ // добавление новой точки в основную серию
+  if(epoch == 0 || !isfinite(v)) return; // без достоверного времени/значения точка бессмысленна
+  GraphDataGuard guard; // web может одновременно запрашивать снимок истории
   GraphSettings cfg = seriesConfig.count("main") ? seriesConfig["main"] : GraphSettings{updateInterval, maxPoints}; // берём настройки серии или используем глобальные
   if(cfg.updateInterval < minGraphUpdateInterval) cfg.updateInterval = minGraphUpdateInterval; // Подстраховка от старых настроек 100 мс/1 сек.
   if(cfg.updateInterval > maxGraphUpdateInterval) cfg.updateInterval = maxGraphUpdateInterval; // Ограничиваем редкие интервалы 24 часами.
@@ -191,10 +270,8 @@ inline void addGraphPoint(String t, float v){ // добавление новой
 
   seriesLastUpdate["main"] = now; // обновляем время последнего добавления
 
-  graphPoints.push_back({t, v, 0}); // добавляем новую точку (время + значение без событий)
-  trimGraphPoints(graphPoints, maxPoints); // обрезаем массив по глобальному лимиту
-  trimGraphPoints(graphPoints, cfg.maxPoints); // дополнительно учитываем лимит серии
-  saveGraphSeriesThrottled("main", graphPoints); // сохраняем обновлённую серию в SPIFFS без частых блокировок
+  const size_t limit = static_cast<size_t>(cfg.maxPoints < maxPoints ? cfg.maxPoints : maxPoints); // строгий из двух лимитов
+  storeGraphPoint("main", graphPoints, {epoch, v, 0}, limit); // сохраняем точку пакетно
 }
 
 // Регистрирует источник данных для графика
@@ -205,6 +282,7 @@ inline void registerGraphSource( // регистрация новой серии
   unsigned long defaultInterval=updateInterval, // интервал обновления по умолчанию
   int defaultMaxPoints=maxPoints // количество точек по умолчанию
 ){
+  GraphDataGuard guard; // регистрация затрагивает общие карты и массивы
   graphValueProviders[name] = getter; // сохраняем функцию-источник значений
 
   vector<GraphPoint> stored; // временное хранилище загруженных точек
@@ -229,13 +307,56 @@ inline void registerGraphSource( // регистрация новой серии
   seriesLastUpdate[name] = 0; // инициализируем таймер обновления
 
   if(!stored.empty()){ // если данные серии были загружены
+    const bool oversized = stored.size() > static_cast<size_t>(cfg.maxPoints);
     trimGraphPoints(stored, cfg.maxPoints); // приводим количество точек к допустимому
     customGraphSeries[name] = stored; // сохраняем точки пользовательской серии
+    if(oversized) saveGraphSeries(name, customGraphSeries[name]); // файл также приводим к выбранному лимиту
   }
 }
 
+// Добавляет точку в серию, сохраняя порядок даже после ручной коррекции часов.
+inline bool storeGraphPoint(const String &series, vector<GraphPoint> &points,
+                            const GraphPoint &point, size_t limit){
+  if(point.epoch == 0 || !isfinite(point.value)) return false;
+
+  if(!points.empty() && point.epoch <= points.back().epoch){
+    auto it = std::lower_bound(points.begin(), points.end(), point.epoch,
+      [](const GraphPoint &existing, uint32_t epoch){ return existing.epoch < epoch; });
+    if(it != points.end() && it->epoch == point.epoch){
+      *it = point; // одинаковую секунду обновляем, не создавая дубль
+    } else {
+      points.insert(it, point); // после перевода часов назад сохраняем хронологию
+    }
+    trimGraphPoints(points, limit);
+    saveGraphSeries(series, points); // вставка в середину требует полной синхронизации файла
+    return true;
+  }
+
+  points.push_back(point);
+  size_t &pending = seriesUnsavedTail[series];
+  pending++;
+  unsigned long &lastFlush = seriesLastFlush[series];
+  const unsigned long now = millis();
+
+  if(limit > 0 && points.size() > limit + graphTrimSlackFor(limit)){
+    trimGraphPoints(points, limit);
+    saveGraphSeries(series, points);
+    return true;
+  }
+
+  if(pending >= graphFlushPendingLimit || lastFlush == 0 || now - lastFlush >= graphFlushIntervalMs){
+    if(appendGraphTailToFile(series, points, pending)){
+      pending = 0;
+      lastFlush = now;
+    }
+  }
+  return true;
+}
+
 // Добавляет точку в пользовательскую серию
-inline bool addSeriesPoint(const String &series, const String &t, float value, uint16_t events = 0){ // добавление точки в указанную серию
+inline bool addSeriesPoint(const String &series, uint32_t epoch, float value, uint16_t events = 0){ // добавление точки в указанную серию
+  if(epoch == 0 || !isfinite(value)) return false; // недостоверные показания не портят масштаб графика
+  GraphDataGuard guard; // web может одновременно копировать эту серию в ответ
   GraphSettings cfg = seriesConfig.count(series)
                         ? seriesConfig[series]
                         : GraphSettings{updateInterval, maxPoints}; // получаем настройки серии или используем дефолт
@@ -252,8 +373,5 @@ inline bool addSeriesPoint(const String &series, const String &t, float value, u
   seriesLastUpdate[series] = now; // фиксируем время обновления
 
   auto &points = customGraphSeries[series]; // получаем массив точек серии
-  points.push_back({t, value, events}); // добавляем новую точку вместе со счетчиком событий
-  trimGraphPoints(points, cfg.maxPoints); // обрезаем массив по лимиту
-  saveGraphSeriesThrottled(series, points); // сохраняем серию в файл без частых блокировок
-  return true; // сообщаем вызывающему коду, что точка реально добавлена
+  return storeGraphPoint(series, points, {epoch, value, events}, static_cast<size_t>(cfg.maxPoints)); // пакетное сохранение с лимитом
 }
