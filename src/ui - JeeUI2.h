@@ -462,7 +462,7 @@ inline UIDeclarativeRegistry uiRegistry; // глобальный реестр д
 inline void appendUiRegistryValues(JsonDocument &doc){
     for(auto *element : uiRegistry.all()){
         if(!element) continue;
-        if(doc.containsKey(element->id)) continue;
+        if(!doc[element->id].isNull()) continue;
         doc[element->id] = element->valueString();
     }
 }

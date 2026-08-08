@@ -246,88 +246,9 @@ switch (flag_slow) {
   
   flag_slow++;
   break;
-  case 2: {
-
-  //Lumen_Ul = readAnalog(36);
-  // GPIO3 работает как чистый аналоговый вход. На ESP32-S3 raw 4095 не означает 3.3 В, поэтому напряжение берем через калиброванные mV.
-  constexpr uint8_t LumenAdcPin = 3;
-  constexpr uint8_t LumenAdcSampleCount = 24; // Пачка быстрых замеров нужна, чтобы отбрасывать редкие выбросы вверх.
-  constexpr int LumenSensorFullScaleMv = 3300; // Внешний датчик дает 0..3.3 В.
-  constexpr int LumenSensorBrightMv = 2450; // По фактическим замерам: ярко на GPIO3 примерно 2.35..2.45 В.
-  constexpr int LumenSensorDarkMv = 3300; // В темноте напряжение растет; 3.3 В считаем нижней точкой шкалы освещенности.
-  constexpr int LumenAdcSaturationRaw = 4080; // Запас ниже 4095, чтобы видеть почти насыщенный канал.
-  uint32_t lumenRawSum = 0; // Среднее оставляем только для диагностики.
-  uint32_t lumenMilliVoltSum = 0; // Среднее напряжение пачки для сравнения с минимальным значением.
-  int lumenMinRaw = 4095;
-  int lumenMaxRaw = 0;
-  int lumenMinMilliVolts = LumenSensorFullScaleMv;
-  int lumenMaxMilliVolts = 0;
-#ifdef ARDUINO_ARCH_ESP32
-  static esp_adc_cal_characteristics_t lumenAdcChars = {}; // Калибровка ADC1/GPIO3 для перевода raw в mV.
-  static bool lumenAdcCharsReady = false;
-  if (!lumenAdcCharsReady) {
-    esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_12, 1100, &lumenAdcChars);
-    lumenAdcCharsReady = true;
-  }
-  (void)adc1_get_raw(ADC1_CHANNEL_2); // Первый замер после мультиплексора ADC не используем.
-  delayMicroseconds(80);
-#endif
-  for (uint8_t lumenSample = 0; lumenSample < LumenAdcSampleCount; ++lumenSample) {
-#ifdef ARDUINO_ARCH_ESP32
-    int lumenRawSample = adc1_get_raw(ADC1_CHANNEL_2); // GPIO3 = ADC1_CHANNEL_2 на ESP32-S3; читаем напрямую через IDF.
-    if (lumenRawSample < 0) lumenRawSample = analogRead(LumenAdcPin); // Резерв на случай ошибки драйвера.
-    int lumenMilliVoltSample = static_cast<int>(esp_adc_cal_raw_to_voltage(static_cast<uint32_t>(lumenRawSample), &lumenAdcChars)); // Калиброванный mV без raw*3.3/4095.
-#else
-    const int lumenRawSample = analogRead(LumenAdcPin);
-    int lumenMilliVoltSample = analogReadMilliVolts(LumenAdcPin);
-#endif
-    lumenRawSample = constrain(lumenRawSample, 0, 4095);
-    lumenMilliVoltSample = constrain(lumenMilliVoltSample, 0, LumenSensorFullScaleMv);
-    lumenRawSum += static_cast<uint32_t>(lumenRawSample);
-    lumenMilliVoltSum += static_cast<uint32_t>(lumenMilliVoltSample);
-    if (lumenRawSample < lumenMinRaw) lumenMinRaw = lumenRawSample;
-    if (lumenRawSample > lumenMaxRaw) lumenMaxRaw = lumenRawSample;
-    if (lumenMilliVoltSample < lumenMinMilliVolts) lumenMinMilliVolts = lumenMilliVoltSample;
-    if (lumenMilliVoltSample > lumenMaxMilliVolts) lumenMaxMilliVolts = lumenMilliVoltSample;
-    delayMicroseconds(80); // Короткая пауза дает входному конденсатору ADC стабилизироваться при высоком сопротивлении датчика.
-  }
-  Lumen_Ul_Raw = static_cast<int>(lumenRawSum / LumenAdcSampleCount); // Сохраняем средний raw для диагностики.
-  Lumen_Ul_AverageMilliVolts = static_cast<int>(lumenMilliVoltSum / LumenAdcSampleCount);
-  Lumen_Ul_MinMilliVolts = lumenMinMilliVolts;
-  Lumen_Ul_MaxMilliVolts = lumenMaxMilliVolts;
-  Lumen_Ul_SampleCount = LumenAdcSampleCount;
-  Lumen_Ul_AdcSaturated = lumenMaxRaw >= LumenAdcSaturationRaw;
-  static int lumenFilteredMilliVolts = -1;
-  const int lumenSelectedMilliVolts = constrain(lumenMinMilliVolts, 0, LumenSensorFullScaleMv); // Для защиты от наводок берем нижний замер из пачки.
-  if (lumenFilteredMilliVolts < 0) lumenFilteredMilliVolts = lumenSelectedMilliVolts;
-  else lumenFilteredMilliVolts = (lumenFilteredMilliVolts * 2 + lumenSelectedMilliVolts + 1) / 3; // Сглаживаем, но оставляем видимую динамику за несколько циклов.
-  Lumen_Ul_FilteredMilliVolts = constrain(lumenFilteredMilliVolts, 0, LumenSensorFullScaleMv);
-  Lumen_Ul_MilliVolts = Lumen_Ul_FilteredMilliVolts;
-  //jee.var("Lumen_Ul", String(Lumen_Ul));
-  // if(Lumen_Ul != Saved_Lumen_Ul) {Saved_Lumen_Ul = Lumen_Ul;
-  const int lumenPercentRangeMv = max(1, LumenSensorDarkMv - LumenSensorBrightMv);
-  const int lumenPercentMilliVolts = constrain(Lumen_Ul_MilliVolts, LumenSensorBrightMv, LumenSensorDarkMv);
-  Lumen_Ul = constrain(((LumenSensorDarkMv - lumenPercentMilliVolts) * 100 + (lumenPercentRangeMv / 2)) / lumenPercentRangeMv, 0, 100); // 0% = темно, 100% = ярко.
-
-  const float lumenVoltage = static_cast<float>(Lumen_Ul_MilliVolts) / 1000.0f; // Диагностическое напряжение на GPIO3.
-  InfoString2 = "Освещенность = " + String(Lumen_Ul) + " % (" + String(lumenVoltage, 2) + " В)";
-  LightSensorDiagnosticInfo = String("GPIO3 ADC: выбрано min ") + String(Lumen_Ul_MinMilliVolts) + " мВ из " + String(Lumen_Ul_SampleCount) +
-                              " замеров; фильтр " + String(Lumen_Ul_FilteredMilliVolts) + " мВ; среднее " + String(Lumen_Ul_AverageMilliVolts) +
-                              " мВ; диапазон пачки " + String(Lumen_Ul_MinMilliVolts) + ".." + String(Lumen_Ul_MaxMilliVolts) +
-                              " мВ; raw среднее " + String(Lumen_Ul_Raw) + ", raw min/max " + String(lumenMinRaw) + "/" + String(lumenMaxRaw) +
-                              ". Шкала освещенности: " + String(LumenSensorBrightMv) + " мВ = 100%, " + String(LumenSensorDarkMv) + " мВ = 0%.";
-  if (Lumen_Ul_AdcSaturated) {
-    LightSensorDiagnosticInfo += " Raw близко к 4095: если показания перестают различать 2.5..3.3 В, нужен делитель или буфер перед GPIO3.";
-  }
-
-    //  jee.var("Lumen_Ul", ""); //освещенность на улице в процентах
-    //  delay(5);
-    //  jee.var("Lumen_Ul", String(Lumen_Ul_percent)); 
-    // } //освещенность на улице в процентах
-
-  flag_slow++;
-  break;
-  }
+  case 2:
+    flag_slow++;
+    break;
 
   case 3: 
 

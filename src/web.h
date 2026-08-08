@@ -71,6 +71,25 @@ inline String resolveUiValueOverride(const String &id, const String &fallback){ 
 
 // ---------- Создание веб-сервера ----------
 inline AsyncWebServer server(80);  // Создаем веб-сервер на порту 80
+inline constexpr const char *webUiCachePath = "/web_ui_cache.html"; // Готовая страница отдается из SPIFFS без отдельного 260 КБ RAM-буфера на клиента.
+inline constexpr const char *webUiCacheTempPath = "/web_ui_cache.tmp";
+inline bool webUiCacheBuildInProgress = false; // Не даем двум клиентам одновременно строить большую HTML-страницу.
+inline String liveJsonCache; // Короткий общий кеш /live: несколько браузеров получают один готовый снимок без повторной тяжелой сборки.
+inline unsigned long liveJsonCacheAt = 0;
+inline bool liveJsonBuildInProgress = false;
+inline uint32_t liveJsonSeq = 0;
+
+inline void invalidateLiveJsonCache(){
+  liveJsonCacheAt = 0;
+}
+
+inline void invalidateWebUiCache(){
+  if(!spiffsMounted) return;
+  webUiCacheBuildInProgress = false;
+  invalidateLiveJsonCache();
+  if(SPIFFS.exists(webUiCachePath)) SPIFFS.remove(webUiCachePath);
+  if(SPIFFS.exists(webUiCacheTempPath)) SPIFFS.remove(webUiCacheTempPath);
+}
 
 // ---------- Глобальные переменные для UI ----------
 inline String ThemeColor = "#1e1e1e"; // Цвет темы интерфейса
@@ -188,9 +207,11 @@ int Lumen_Ul_AverageMilliVolts; // Среднее напряжение пачк�
 int Lumen_Ul_FilteredMilliVolts; // Отфильтрованное напряжение, которое идет в процент и Web.
 int Lumen_Ul_SampleCount; // Сколько быстрых ADC-замеров использовано в последней пачке.
 bool Lumen_Ul_AdcSaturated; // Флаг насыщения ADC GPIO3 по raw-значению.
+bool Lumen_Ul_InputOutOfExpectedRange; // Напряжение не соответствует делителю LDR -> 3.3 В / 10 кОм -> GND.
+unsigned long Lumen_Ul_LastSampleAt; // Время последней реально выполненной пачки ADC.
 String LightSensorLiveInfo = ""; // Живая строка с текущими показаниями датчика освещенности.
 String LightSensorDiagnosticInfo = ""; // Подробная диагностика ADC для popup настроек порогов.
-String LightThresholdHelp = "Освещенность в Web уже перевернута под реальный датчик: 0% = темно, 100% = ярко. На GPIO3 напряжение растет при затемнении, поэтому полный авто-режим включает свет при падении ниже нижнего порога и выключает при росте выше верхнего. Режим 'датчик -> таймер' включает по нижнему порогу только внутри окна таймера и выключает в конце этого окна.";
+String LightThresholdHelp = "0% = темно, 100% = ярко. Для текущей схемы LDR + внешний 10 кОм к GND затемнение повышает напряжение GPIO3, поэтому шкала инверсная: примерно 2.80 В = ярко, 3.30 В = темно. Полный авто-режим включает свет ниже нижнего порога и выключает выше верхнего. Режим 'датчик -> таймер' включает по нижнему порогу только внутри окна таймера и выключает в конце этого окна.";
 String LampLightAutoState = ""; // Текущее состояние автоматики лампы бассейна по освещенности.
 String UlLightAutoState = ""; // Текущее состояние автоматики уличного освещения по освещенности.
 String RgbLightAutoState = ""; // Текущее состояние автоматики RGB по освещенности.
@@ -1524,6 +1545,7 @@ private:
   void setupServer(){
     MiniDash *self=this; // Указатель на текущий экземпляр для использования в колбэках
     normalizeLightThresholds(); // Пороги автосвета должны быть валидны до первой отдачи Web и до /live.
+    invalidateWebUiCache(); // После загрузки новой прошивки структура страницы строится заново один раз.
 
     // Подключаем кастомные генераторы значений UI, чтобы объединять состояния и форматировать строки
     registerUiValueProvider("DS1", [](){ return formatTemperatureString(DS1, DS1Available); }); // отображение температуры с учетом доступности датчика
@@ -1594,7 +1616,8 @@ private:
       return String(Lumen_Ul);
     });
     registerUiValueProvider("LightSensorLiveInfo", [](){
-      return String("Сейчас: ") + String(Lumen_Ul) + "%, " + String(static_cast<float>(Lumen_Ul_FilteredMilliVolts) / 1000.0f, 2) + " В на GPIO3. 0% = темно, 100% = ярко; напряжение датчика растет при затемнении.";
+      if(LightSensorLiveInfo.length()) return LightSensorLiveInfo;
+      return String("ADC GPIO3 еще не получил измерения.");
     });
     registerUiValueProvider("LightSensorDiagnosticInfo", [](){
       if (LightSensorDiagnosticInfo.length()) return LightSensorDiagnosticInfo;
@@ -1700,6 +1723,23 @@ private:
       server.on("/", HTTP_GET, [self](AsyncWebServerRequest *r){
       if(!ensureAuthorized(r)) return;
 
+      if(spiffsMounted && SPIFFS.exists(webUiCachePath)){
+        AsyncWebServerResponse *cachedResponse = r->beginResponse(SPIFFS, webUiCachePath, "text/html; charset=UTF-8");
+        cachedResponse->addHeader("Cache-Control", "no-store");
+        r->send(cachedResponse);
+        return;
+      }
+
+      if(spiffsMounted && webUiCacheBuildInProgress){
+        AsyncWebServerResponse *busyResponse = r->beginResponse(200, "text/html; charset=UTF-8",
+          "<!doctype html><html><head><meta charset='utf-8'><meta http-equiv='refresh' content='1'></head><body style='background:#040639;color:#dbeafe;font-family:Arial,sans-serif'>Загрузка интерфейса ESP32...</body></html>");
+        busyResponse->addHeader("Cache-Control", "no-store");
+        busyResponse->addHeader("Retry-After", "1");
+        r->send(busyResponse);
+        return;
+      }
+      if(spiffsMounted) webUiCacheBuildInProgress = true;
+
       const uint32_t requestStartMs = millis(); // Общее время GET /: потом сравниваем с таймингами этапов
       uint32_t stageStartMs = requestStartMs; // Точка отсчёта длительности текущего этапа рендера
       uint32_t stageBuildHeaderMs = 0; // Время этапа сборки head/CSS для поиска узкого места
@@ -1718,6 +1758,7 @@ private:
       if(!html.reserve(htmlReserveBytes)){
         if(kWebVerboseSerial) Serial.printf("[WEB:/] html.reserve(%u) failed\n", static_cast<unsigned>(htmlReserveBytes)); // Явно фиксируем OOM/фрагментацию только в debug-режиме.
         logWebHeapStats("reserve-failed"); // Фиксируем состояние памяти в точке отказа reserve
+        webUiCacheBuildInProgress = false;
         r->send(500, "text/plain", "Insufficient heap for HTML page"); // Явный ответ вместо краша при нехватке памяти
         return; // Прерываем обработку, чтобы не усугублять ситуацию с памятью
       }
@@ -5021,9 +5062,34 @@ function setImg(x){
       if(kWebVerboseSerial) Serial.printf("[WEB:/] html-built | bytes=%u reserve=%u buildMs=%u\n", static_cast<unsigned>(html.length()), static_cast<unsigned>(htmlReserveBytes), static_cast<unsigned>(htmlBuildMs)); // Контроль итогового размера только в debug-режиме.
       logWebHeapStats("after-html-build-before-send"); // Проверяем heap после сборки и до сетевой отправки
 
+      if(spiffsMounted){
+        if(SPIFFS.exists(webUiCacheTempPath)) SPIFFS.remove(webUiCacheTempPath);
+        File cacheFile = SPIFFS.open(webUiCacheTempPath, FILE_WRITE);
+        bool cacheReady = false;
+        if(cacheFile){
+          const size_t expectedBytes = html.length();
+          const size_t writtenBytes = cacheFile.write(reinterpret_cast<const uint8_t*>(html.c_str()), expectedBytes);
+          cacheFile.close();
+          if(writtenBytes == expectedBytes){
+            if(SPIFFS.exists(webUiCachePath)) SPIFFS.remove(webUiCachePath);
+            cacheReady = SPIFFS.rename(webUiCacheTempPath, webUiCachePath);
+          }
+        }
+        if(cacheReady){
+          html = String(); // Освобождаем крупный heap-буфер до начала сетевой передачи.
+          AsyncWebServerResponse *cachedResponse = r->beginResponse(SPIFFS, webUiCachePath, "text/html; charset=UTF-8");
+          cachedResponse->addHeader("Cache-Control", "no-store");
+          webUiCacheBuildInProgress = false;
+          r->send(cachedResponse);
+          return;
+        }
+        if(SPIFFS.exists(webUiCacheTempPath)) SPIFFS.remove(webUiCacheTempPath);
+      }
+
       if(kWebVerboseSerial) Serial.println("[WEB:/] chunked-send begin"); // Лог chunked-send выключен в обычной работе.
       const uint32_t sendStartMs = millis(); // Отсчёт длительности этапа постановки chunked-отправки
       auto htmlPtr = std::make_shared<String>(std::move(html)); // Буфер живёт до конца chunk-отправки и не освобождается преждевременно
+      webUiCacheBuildInProgress = false;
       const size_t htmlTotalLen = htmlPtr->length(); // Полная длина ответа для корректной нарезки чанков
       AsyncWebServerResponse *response = r->beginChunkedResponse("text/html; charset=UTF-8", // Chunked режим устраняет единичную тяжёлую отправку 120KB+
         [htmlPtr, htmlTotalLen, sendStartMs](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
@@ -5071,6 +5137,7 @@ function setImg(x){
       if(r->hasParam("key") && r->hasParam("val")){
         String key = r->getParam("key")->value();
         String valStr = r->getParam("val")->value();
+        invalidateLiveJsonCache();
                 if(ui.updateTimerField(key, valStr)){
           r->send(200,"text/plain","OK");
           return;
@@ -5116,7 +5183,7 @@ function setImg(x){
           return;
         }
 
-           if(key=="ThemeColor") { ThemeColor = valStr; saveValue<String>(key.c_str(), valStr); }
+           if(key=="ThemeColor") { ThemeColor = valStr; saveValue<String>(key.c_str(), valStr); invalidateWebUiCache(); }
           else if(key=="gmtOffset") {
           applyGmtOffsetFromEsp(valStr.toInt(), true); // Веб-изменение GMT сразу сохраняем в ESP, сдвигаем локальное время и отправляем в Nextion.
           syncNextionRtcFromEpoch(getCurrentEpoch()); // После сдвига GMT сразу обновляем RTC Nextion новым локальным временем.
@@ -5335,6 +5402,7 @@ function setImg(x){
       saveValue<String>("authPass", authPassword);
       saveValue<String>("adminUser", adminUsername);
       saveValue<String>("adminPass", adminPassword);
+      invalidateWebUiCache();
       r->send(200, "application/json", "{\\\"status\\\":\\\"saved\\\"}");
     });
 
@@ -5343,6 +5411,7 @@ function setImg(x){
       if(r->hasParam("id") && r->hasParam("state")){
         String id = r->getParam("id")->value();
         int state = r->getParam("state")->value().toInt();
+        invalidateLiveJsonCache();
        if(applyWaterControlRequest(id, state != 0)){ // Кнопки слива/долива применяем через защитную логику.
           r->send(200, "text/plain", "OK");
           return;
@@ -5370,6 +5439,7 @@ function setImg(x){
         return;
       }
       AktualReadRelay = false;
+      invalidateLiveJsonCache();
       String json = "{\"status\":\"ok\",\"relay\":" + String(relay) + ",\"state\":" + String(rs485RelayCommandState(static_cast<uint8_t>(relay)) ? 1 : 0) + "}";
       r->send(200, "application/json", json);
     });
@@ -5378,6 +5448,7 @@ function setImg(x){
       if(!ensureAuthorized(r)) return;
       applyRs485AllOffRequest();
       AktualReadRelay = false;
+      invalidateLiveJsonCache();
       r->send(200, "application/json", "{\"status\":\"ok\"}");
     });
 
@@ -5427,18 +5498,39 @@ function setImg(x){
     });
 
     server.on("/live", HTTP_GET, [](AsyncWebServerRequest *r){
-          if(!ensureAuthorized(r)) return;
-      JsonDocument doc; // ArduinoJson v7 сам расширяет документ: не держим 64 КБ heap на каждый быстрый /live.
-      static uint32_t liveSeq = 0;
+      if(!ensureAuthorized(r)) return;
+      const unsigned long now = millis();
+      constexpr unsigned long liveJsonCacheTtlMs = 300;
+      if(liveJsonCache.length() > 0 && liveJsonCacheAt != 0 && now - liveJsonCacheAt < liveJsonCacheTtlMs){
+        AsyncWebServerResponse *cachedResponse = r->beginResponse(200, "application/json", liveJsonCache);
+        cachedResponse->addHeader("Cache-Control", "no-store");
+        r->send(cachedResponse);
+        return;
+      }
+      if(liveJsonBuildInProgress){
+        if(liveJsonCache.length() > 0){
+          AsyncWebServerResponse *staleResponse = r->beginResponse(200, "application/json", liveJsonCache);
+          staleResponse->addHeader("Cache-Control", "no-store");
+          r->send(staleResponse);
+        } else {
+          AsyncWebServerResponse *busyResponse = r->beginResponse(503, "application/json", "{\"busy\":1}");
+          busyResponse->addHeader("Cache-Control", "no-store");
+          busyResponse->addHeader("Retry-After", "1");
+          r->send(busyResponse);
+        }
+        return;
+      }
+      liveJsonBuildInProgress = true;
       WifiStatusInfo wifiInfo = getWifiStatus();
 
+      JsonDocument doc;
       doc["CurrentTime"] = CurrentTime; // Временная метка для синхронизации времени страницы
       doc["gmtOffset"] = gmtOffset_correct; // Часовой пояс (GMT offset)
       doc["Nx_dim_id"] = Nx_dim_id; // Текущая локальная яркость Nextion для выбора частоты live-опроса Web.
       doc["FilterImageState"] = jpg; // Выбор картинки бассейна (анимация/статик)
       doc["BasinImage"] = currentBasinImagePath(); // Картинка бассейна по состоянию RGB и лампы
       doc["PoolLevelIcon"] = currentPoolLevelIconPath(); // Маленькая PNG-пиктограмма уровня на общей странице бассейна.
-      doc["LiveSeq"] = ++liveSeq; // Счетчик live-ответов для диагностики пропусков.
+      doc["LiveSeq"] = ++liveJsonSeq; // Счетчик live-ответов для диагностики пропусков.
       doc["UptimeSec"] = millis() / 1000UL; // Если uptime сбросился, ESP32 реально перезагружался.
       doc["FreeHeap"] = ESP.getFreeHeap();
 #ifdef ARDUINO_ARCH_ESP32
@@ -5487,17 +5579,21 @@ function setImg(x){
       doc["ppmCl"] = ppmCl; // Онлайн-значение для верхней подписи графика хлора
       doc["corrected_ORP_Eh_mV_Graph"] = corrected_ORP_Eh_mV_Graph; // Онлайн-значение для верхней подписи отдельного ORP-графика.
       doc["ClOrpRangeState"] = ClOrpRangeState; // Состояние диапазона ORP для подписи <0.2/>2.5 ppm на графике хлора.
-            appendUiRegistryValues(doc);
+      appendUiRegistryValues(doc);
       doc["PH_Lower"] = PH_Lower; // В live-ответе всегда отдаем актуальный нижний предел pH из рабочей переменной.
       doc["PH_Upper"] = PH_Upper; // В live-ответе всегда отдаем актуальный верхний предел pH из рабочей переменной.
       doc["PH_setting"] = PH_Upper; // Старый ключ Web синхронизируем с верхним пределом pH.
       doc["CL_Lower"] = CL_Lower; // В live-ответе всегда отдаем актуальный нижний предел CL из рабочей переменной.
       doc["CL_Upper"] = CL_Upper; // В live-ответе всегда отдаем актуальный верхний предел CL из рабочей переменной.
-      // String s;
-      // serializeJson(doc, s);
-      // r->send(200, "application/json", s);
-      AsyncResponseStream *response = r->beginResponseStream("application/json");
-      serializeJson(doc, *response);
+
+      liveJsonCache = String();
+      liveJsonCache.reserve(measureJson(doc) + 16);
+      serializeJson(doc, liveJsonCache);
+      liveJsonCacheAt = millis();
+      liveJsonBuildInProgress = false;
+
+      AsyncWebServerResponse *response = r->beginResponse(200, "application/json", liveJsonCache);
+      response->addHeader("Cache-Control", "no-store");
       r->send(response);
     });
 
@@ -5663,6 +5759,7 @@ function setImg(x){
       StoredAPSSID = apSsid;
       StoredAPPASS = apPass;
       saveWifiConfig(ssid, pass, backupSsid, backupPass, apSsid, apPass, host);
+      invalidateWebUiCache();
       WifiStatusInfo wifiInfo = getWifiStatus();
 
       String response = "{\\\"saved\\\":1,\\\"connected\\\":" + String(wifiIsConnected() ? 1 : 0) + ",";

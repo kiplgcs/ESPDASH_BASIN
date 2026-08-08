@@ -5,6 +5,8 @@
 #include <Wire.h> // I2C и ADS1115 подключаем здесь, чтобы не дублировать в PH_CL2.h
 #include <esp_system.h>
 #include <driver/adc.h>
+#include <driver/gpio.h>
+#include <driver/rtc_io.h>
 #include <esp_adc_cal.h>
 #include "NPT_Time.h"
 
@@ -35,6 +37,7 @@ Adafruit_ADS1115 ads2; // Второй ADS1115 - Хлор
 #include "LED_WS2815.h"
 
 #include "PH_CL2.h"
+#include "light_sensor.h"
 
 #include <Slow.h> //Периодически выполняем  - для обратной связи с устройствами
 
@@ -123,6 +126,10 @@ void setup() {
   analogSetPinAttenuation(3, ADC_11db); // Максимальная доступная шкала ESP32-S3 ADC; верх 0..3.3 В требует внешнего делителя для точности.
   adc1_config_width(ADC_WIDTH_BIT_12); // Для прямого IDF-чтения GPIO3 используем 12 бит: 0..4095.
   adc1_config_channel_atten(ADC1_CHANNEL_2, ADC_ATTEN_DB_11); // GPIO3 = ADC1_CHANNEL_2 на ESP32-S3.
+  gpio_pullup_dis(GPIO_NUM_3); // На GPIO3 работает внешний делитель датчика: LDR к 3.3 В и 10 кОм к GND.
+  gpio_pulldown_dis(GPIO_NUM_3); // Внутренние подтяжки отключены, чтобы не менять сопротивление внешнего 10 кОм.
+  rtc_gpio_pullup_dis(GPIO_NUM_3); // На RTC-части GPIO3 тоже убираем скрытые подтяжки.
+  rtc_gpio_pulldown_dis(GPIO_NUM_3);
 #endif
 
   // Подключение к Wi-Fi с использованием сохранённых данных и кнопок
@@ -265,6 +272,7 @@ void loop() {
   } // Закрываем одноразовый блок диагностики ядра основной логики.
 
   loop_WS2815(); // Обслуживаем RGB в начале цикла, чтобы лента не ждала тяжелые блоки UI/Nextion/SPIFFS.
+  updateLumenSensor(250); // GPIO3 измеряется независимо от медленной синхронизации Nextion и Web-клиентов.
 
   handleDs18ScanButton(); // Обрабатываем кнопку поиска датчиков DS18B20.
 

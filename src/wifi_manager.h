@@ -205,6 +205,19 @@ inline String wifiAuthText(wifi_auth_mode_t authMode) {
   }
 }
 
+inline String wifiScanNetworkJsonEntry(const String &ssid, int rssi, const String &authText) {
+  return "{\"ssid\":\"" + wifiScanEscape(ssid) + "\"," +
+         "\"rssi\":" + String(rssi) + ',' +
+         "\"auth\":\"" + wifiScanEscape(authText) + "\"}";
+}
+
+inline String connectedNetworkFallbackJson() {
+  if (WiFi.status() != WL_CONNECTED) return "[]";
+  const String currentSsid = WiFi.SSID();
+  if (!currentSsid.length()) return "[]";
+  return "[" + wifiScanNetworkJsonEntry(currentSsid, WiFi.RSSI(), "подключена") + "]";
+}
+
 inline void evaluateScanForAutomaticSwitch(int primaryRssi, int backupRssi) {
   const unsigned long now = millis();
   if (WiFi.status() == WL_CONNECTED) {
@@ -258,7 +271,7 @@ inline bool startAsyncWifiScan() {
   if (mode == WIFI_MODE_NULL) WiFi.mode(WIFI_MODE_STA);
   else if (mode == WIFI_MODE_AP) WiFi.mode(WIFI_MODE_APSTA); // Видимая аварийная AP при сканировании не останавливается.
   WiFi.scanDelete();
-  const int16_t state = WiFi.scanNetworks(true, true, false, 120); // Async: CPU и прикладная автоматика не ждут радио.
+  const int16_t state = WiFi.scanNetworks(true, true, false, 300); // Async по всем каналам; 300 мс/канал надежнее на занятом Wi-Fi.
   if (state == WIFI_SCAN_RUNNING) {
     wifiScanActive = true;
     wifiScanStartedAt = millis();
@@ -294,22 +307,27 @@ inline void pollAsyncWifiScan() {
   wifiScanActive = false;
   if (count < 0) {
     WiFi.scanDelete();
-    finishManualScan("[]");
+    finishManualScan(connectedNetworkFallbackJson());
     return;
   }
 
   int primaryRssi = -1000;
   int backupRssi = -1000;
   String networksJson = "[";
+  bool currentConnectedSsidFound = false;
+  const String currentConnectedSsid = WiFi.status() == WL_CONNECTED ? WiFi.SSID() : String();
   for (int i = 0; i < count; i++) {
     const String foundSsid = WiFi.SSID(i);
     const int foundRssi = WiFi.RSSI(i);
     if (foundSsid == staSsid && foundRssi > primaryRssi) primaryRssi = foundRssi;
     if (foundSsid == staBackupSsid && foundRssi > backupRssi) backupRssi = foundRssi;
+    if (currentConnectedSsid.length() && foundSsid == currentConnectedSsid) currentConnectedSsidFound = true;
     if (i) networksJson += ',';
-    networksJson += "{\"ssid\":\"" + wifiScanEscape(foundSsid) + "\",";
-    networksJson += "\"rssi\":" + String(foundRssi) + ',';
-    networksJson += "\"auth\":\"" + wifiAuthText(WiFi.encryptionType(i)) + "\"}";
+    networksJson += wifiScanNetworkJsonEntry(foundSsid, foundRssi, wifiAuthText(WiFi.encryptionType(i)));
+  }
+  if (currentConnectedSsid.length() && !currentConnectedSsidFound) {
+    if (count > 0) networksJson += ',';
+    networksJson += wifiScanNetworkJsonEntry(currentConnectedSsid, WiFi.RSSI(), "подключена");
   }
   networksJson += ']';
   lastPrimaryRssi = primaryRssi;
@@ -411,15 +429,51 @@ inline String buildStatusText() {
 
 inline String disconnectReasonText(uint8_t reason) {
   switch (reason) {
-    case 0: return "Нет данных";
-    case 2: return "Истекла авторизация";
-    case 15: return "Таймаут WPA handshake";
-    case 200: return "Потеря маяков точки доступа";
-    case 201: return "Точка доступа не найдена";
-    case 202: return "Ошибка авторизации";
-    case 203: return "Ошибка ассоциации";
-    case 204: return "Таймаут handshake";
-    default: return "Код WiFi " + String(reason);
+    case 0: return "После запуска отключений не зафиксировано";
+    case 1: return "Соединение прервано без уточненной причины";
+    case 2: return "Роутер завершил сеанс авторизации; возможна его перезагрузка";
+    case 3: return "Роутер завершил подключение ESP32";
+    case 4: return "Роутер слишком долго не подтверждал подключение";
+    case 5: return "Роутер не принимает новые устройства: достигнут лимит клиентов";
+    case 6:
+    case 7:
+    case 9: return "ESP32 потеряла авторизацию или регистрацию на роутере";
+    case 8:
+    case 36: return "Штатное отключение ESP32 при переподключении или смене сети";
+    case 10:
+    case 11: return "Параметры WiFi роутера несовместимы с ESP32";
+    case 12:
+    case 46:
+    case 47: return "Роутер инициировал переход или отключение ESP32";
+    case 13:
+    case 14:
+    case 17:
+    case 18:
+    case 19:
+    case 20:
+    case 21:
+    case 22:
+    case 23:
+    case 24:
+    case 29: return "Не совпали параметры защиты WiFi; проверьте пароль и режим WPA2/WPA3";
+    case 15:
+    case 16:
+    case 204: return "Не удалось вовремя завершить защищенное WPA-подключение";
+    case 33: return "Роутеру не хватает пропускной способности для соединения";
+    case 34: return "Потеряно слишком много пакетов подтверждения; радиоканал нестабилен";
+    case 39: return "Роутер не ответил за отведенное время";
+    case 67: return "Не удалось установить устойчивый радиоканал";
+    case 68: return "Рабочий WiFi-канал занят или сильно перегружен";
+    case 200: return "Пропал радиосигнал роутера или роутер был перезагружен";
+    case 201: return "Сеть с указанным именем не найдена";
+    case 202: return "Роутер отклонил авторизацию; проверьте пароль WiFi";
+    case 203: return "Роутер не принял подключение ESP32";
+    case 205: return "Общая ошибка подключения к роутеру";
+    case 206: return "Роутер перезапустил внутренний счетчик времени соединения";
+    case 207: return "ESP32 выполняла переход между точками доступа";
+    case 208:
+    case 209: return "Роутер слишком долго откладывал повторное подключение";
+    default: return "Редкая ошибка WiFi; диагностический код " + String(reason);
   }
 }
 
@@ -583,7 +637,7 @@ inline bool requestWifiNetworkScan() {
   if (wifiScanMutex) xSemaphoreGive(wifiScanMutex);
   if (wifiScanActive) return true;
   if (startAsyncWifiScan()) return true;
-  finishManualScan("[]");
+  finishManualScan(connectedNetworkFallbackJson());
   return false;
 }
 
