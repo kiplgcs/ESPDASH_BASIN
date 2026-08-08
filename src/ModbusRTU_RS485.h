@@ -66,13 +66,17 @@ void handleData(ModbusMessage msg, uint32_t token)
         ReadRelayArray[i] = ((InArray[4] >> i) & 0x01) == 0 ? false : true; // Записываем первые 8 бит из InArray[4]
         ReadRelayArray[i + 8] = ((InArray[3] >> i) & 0x01) == 0 ? false : true; // Записываем следующие 8 бит из InArray[5]
         AktualReadRelay=true; //Флаг что данные актульны
-    }} else 
+    }
+      Rs485LastRelaySuccessMs = millis(); // Timestamp не сбрасывается потребителем и подходит для MQTT freshness.
+    } else
     if(token ==40060){
       for (int i = 0; i < 8; ++i) {
         ReadInputArray[i] = ((InArray[4] >> i) & 0x01) == 0 ? false : true; // Записываем первые 8 бит из InArray[4]
         ReadInputArray[i + 8] = ((InArray[3] >> i) & 0x01) == 0 ? false : true; // Записываем следующие 8 бит из InArray[5]
         AktualReadInput=true; //Флаг что данные актульны
-    }}
+    }
+      Rs485LastInputSuccessMs = millis(); // Старые DIN больше не считаются актуальными бесконечно.
+    }
 
   // InStr=String(CharArray);
   // Serial.println(InStr);
@@ -84,7 +88,20 @@ void handleData(ModbusMessage msg, uint32_t token)
 void setup_Modbus() {
  //Настраиваем Serial2, подключенный к Modbus RTU
 // Serial2.begin(19200, SERIAL_8N1, GPIO_NUM_18, GPIO_NUM_17);
-  Serial2.begin(19200, SERIAL_8N1, RXD2, TXD2); //18,17
+  Rs485ActiveBaudRate = Rs485BaudRate;
+  if (Rs485ActiveBaudRate <= 0) Rs485ActiveBaudRate = 19200;
+  Rs485ActiveUartMode = Rs485UartMode;
+  Rs485ActiveUartMode.trim();
+  Rs485ActiveUartMode.toUpperCase();
+  uint32_t serialConfig = SERIAL_8N1;
+  if (Rs485ActiveUartMode == "8N2") serialConfig = SERIAL_8N2;
+  else if (Rs485ActiveUartMode == "8O1") serialConfig = SERIAL_8O1;
+  else if (Rs485ActiveUartMode == "8E1") serialConfig = SERIAL_8E1;
+  else Rs485ActiveUartMode = "8N1";
+  Rs485ActiveSlaveId = Rs485SlaveId;
+  if (Rs485ActiveSlaveId < 1) Rs485ActiveSlaveId = 1;
+  if (Rs485ActiveSlaveId > 247) Rs485ActiveSlaveId = 247;
+  Serial2.begin(Rs485ActiveBaudRate, serialConfig, RXD2, TXD2); // Параметры загружены до setup_Modbus; изменение в Web применяется после reboot.
 
   //Настраиваем клиент ModbusClientRTU. предоставить функции обработчика onData и onError
   RS485.onDataHandler(&handleData);
@@ -100,17 +117,17 @@ inline bool modbusQueueHasRoom(uint32_t maxPending) {
 }
 
 inline Error modbusWriteRelay(uint16_t relay, bool enabled) {
-  return RS485.addRequest(40001, 1, 0x05, relay, enabled ? devices[0].value : devices[1].value);
+  return RS485.addRequest(40001, Rs485ActiveSlaveId, 0x05, relay, enabled ? devices[0].value : devices[1].value);
 }
 
 inline Error modbusReadRelays() {
   AktualReadRelay = false; // Ждем свежий ответ именно на новый запрос чтения реле.
-  return RS485.addRequest(40050, 1, 0x03, 0, 1);
+  return RS485.addRequest(40050, Rs485ActiveSlaveId, 0x03, 0, 1);
 }
 
 inline Error modbusReadInputs() {
   AktualReadInput = false; // Ждем свежий ответ именно на новый запрос чтения входов.
-  return RS485.addRequest(40060, 1, 0x03, 4, 1);
+  return RS485.addRequest(40060, Rs485ActiveSlaveId, 0x03, 4, 1);
 }
 
 

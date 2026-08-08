@@ -55,6 +55,7 @@ inline const unsigned long graphFlushIntervalMs = 30000;
 inline const size_t graphFlushPendingLimit = 32;
 inline std::map<String, size_t> seriesUnsavedTail;
 inline std::map<String, unsigned long> seriesLastFlush;
+inline std::map<String, bool> seriesRewriteRequired; // Повтор атомарной rewrite только после реальной ошибки файловой системы.
 
 inline size_t graphTrimSlackFor(size_t limit){
   const size_t half = limit / 2;
@@ -130,16 +131,44 @@ inline void saveGraphSettings(const String &series, const GraphSettings &setting
 inline bool saveGraphSeries(const String &series, const vector<GraphPoint> &points){ // полная перезапись данных графика
   if(!spiffsMounted) return false; // если SPIFFS недоступен — выходим
   String path = graphDataPath(series); // путь к файлу данных
-  File f = SPIFFS.open(path, FILE_WRITE); // открываем файл на запись
+  const String temporaryPath = path + ".tmp";
+  const String backupPath = path + ".bak";
+  if(SPIFFS.exists(temporaryPath)) SPIFFS.remove(temporaryPath);
+  File f = SPIFFS.open(temporaryPath, FILE_WRITE); // сначала пишем отдельный файл, не повреждая рабочую историю
   if(!f){ // если файл не открылся
     Serial.println("Failed to open graph file for writing: " + path); // вывод ошибки
     return false; // выходим
   }
+  bool writeOk = true;
   for(const auto &p : points){ // перебираем все точки
-    f.printf("%lu,%.3f,%u\n", static_cast<unsigned long>(p.epoch), p.value, static_cast<unsigned>(p.events)); // epoch, значение и события
+    if(f.printf("%lu,%.3f,%u\n", static_cast<unsigned long>(p.epoch), p.value, static_cast<unsigned>(p.events)) == 0){
+      writeOk = false;
+      break;
+    }
   }
+  f.flush();
+  if(f.getWriteError() != 0) writeOk = false;
   f.close(); // закрываем файл
+  if(!writeOk){
+    SPIFFS.remove(temporaryPath);
+    Serial.println("Failed to write complete graph file: " + path);
+    return false;
+  }
+
+  if(SPIFFS.exists(backupPath)) SPIFFS.remove(backupPath);
+  const bool hadOriginal = SPIFFS.exists(path);
+  if(hadOriginal && !SPIFFS.rename(path, backupPath)){
+    SPIFFS.remove(temporaryPath);
+    return false;
+  }
+  if(!SPIFFS.rename(temporaryPath, path)){
+    if(hadOriginal && SPIFFS.exists(backupPath)) SPIFFS.rename(backupPath, path);
+    SPIFFS.remove(temporaryPath);
+    return false;
+  }
+  if(SPIFFS.exists(backupPath)) SPIFFS.remove(backupPath);
   seriesUnsavedTail[series] = 0; // файл полностью соответствует массиву
+  seriesRewriteRequired[series] = false;
   seriesLastFlush[series] = millis(); // запоминаем момент полной записи
   return true;
 }
@@ -151,10 +180,15 @@ inline bool appendGraphTailToFile(const String &series, const vector<GraphPoint>
   if(!f) return false;
   for(size_t i = points.size() - count; i < points.size(); i++){
     const auto &p = points[i];
-    f.printf("%lu,%.3f,%u\n", static_cast<unsigned long>(p.epoch), p.value, static_cast<unsigned>(p.events));
+    if(f.printf("%lu,%.3f,%u\n", static_cast<unsigned long>(p.epoch), p.value, static_cast<unsigned>(p.events)) == 0){
+      f.close();
+      return false;
+    }
   }
+  f.flush();
+  const bool writeOk = f.getWriteError() == 0;
   f.close();
-  return true;
+  return writeOk;
 }
 
 // Разбор старой строки "08.08.2026 13:15:09" нужен для сохранения уже
@@ -177,6 +211,13 @@ inline void loadGraphSeries(const String &series, vector<GraphPoint> &points){ /
   points.clear(); // очищаем текущие данные
   if(!spiffsMounted) return; // если SPIFFS недоступен — выходим
   String path = graphDataPath(series); // путь к файлу данных
+  const String temporaryPath = path + ".tmp";
+  const String backupPath = path + ".bak";
+  if(!SPIFFS.exists(path) && SPIFFS.exists(backupPath)) SPIFFS.rename(backupPath, path); // восстановление после сбоя между двумя rename
+  if(SPIFFS.exists(path)){
+    if(SPIFFS.exists(backupPath)) SPIFFS.remove(backupPath);
+    if(SPIFFS.exists(temporaryPath)) SPIFFS.remove(temporaryPath);
+  }
   if(!SPIFFS.exists(path)) return; // если файл отсутствует — выходим
   File f = SPIFFS.open(path, FILE_READ); // открываем файл на чтение
   if(!f){ // если файл не открылся
@@ -206,6 +247,7 @@ inline void loadGraphSeries(const String &series, vector<GraphPoint> &points){ /
   }
   f.close(); // закрываем файл
   seriesUnsavedTail[series] = 0;
+  seriesRewriteRequired[series] = false;
   seriesLastFlush[series] = millis();
   if(convertedLegacy && !points.empty()) saveGraphSeries(series, points); // история не теряется, а только меняет формат
 }
@@ -323,12 +365,21 @@ inline bool storeGraphPoint(const String &series, vector<GraphPoint> &points,
     auto it = std::lower_bound(points.begin(), points.end(), point.epoch,
       [](const GraphPoint &existing, uint32_t epoch){ return existing.epoch < epoch; });
     if(it != points.end() && it->epoch == point.epoch){
-      *it = point; // одинаковую секунду обновляем, не создавая дубль
+      *it = point; // одинаковую секунду обновляем без дубля
+      points.erase(it + 1, points.end()); // старый future-tail после перевода часов больше не должен возвращаться клиенту
     } else {
-      points.insert(it, point); // после перевода часов назад сохраняем хронологию
+      points.erase(it, points.end()); // новая шкала времени начинается здесь; будущие метки от старых часов недостоверны
+      points.push_back(point);
     }
     trimGraphPoints(points, limit);
-    saveGraphSeries(series, points); // вставка в середину требует полной синхронизации файла
+    if(!saveGraphSeries(series, points)) seriesRewriteRequired[series] = true;
+    return true; // точка уже принята в RAM; ошибку SPIFFS повторим без дублирования события
+  }
+
+  if(seriesRewriteRequired[series]){
+    points.push_back(point); // после ошибки нельзя append к старому файлу с future-tail
+    trimGraphPoints(points, limit);
+    saveGraphSeries(series, points); // флаг снимется только после успешной атомарной замены
     return true;
   }
 
@@ -340,7 +391,7 @@ inline bool storeGraphPoint(const String &series, vector<GraphPoint> &points,
 
   if(limit > 0 && points.size() > limit + graphTrimSlackFor(limit)){
     trimGraphPoints(points, limit);
-    saveGraphSeries(series, points);
+    if(!saveGraphSeries(series, points)) seriesRewriteRequired[series] = true;
     return true;
   }
 
@@ -348,6 +399,10 @@ inline bool storeGraphPoint(const String &series, vector<GraphPoint> &points,
     if(appendGraphTailToFile(series, points, pending)){
       pending = 0;
       lastFlush = now;
+    } else if(saveGraphSeries(series, points)){
+      pending = 0; // Полная атомарная rewrite исправляет возможный частичный append.
+    } else {
+      seriesRewriteRequired[series] = true;
     }
   }
   return true;

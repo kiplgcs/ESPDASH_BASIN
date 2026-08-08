@@ -569,18 +569,8 @@ void read_lamp_sw0_sw1_sw2(){
       }
     }
 
-    if (Power_Time1) {
-      SetLamp = "timer";
-    } else if (Lamp_autosvet) {
-      SetLamp = "auto";
-    } else {
-      SetLamp = Lamp ? "on" : "off";
-    }
-
-    saveButtonState("button_Lamp", Lamp ? 1 : 0);
-    saveValue<int>("Lamp_autosvet", Lamp_autosvet ? 1 : 0);
-    saveValue<int>("Power_Time1", Power_Time1 ? 1 : 0);
-    saveValue<String>("SetLamp", SetLamp);
+    const String requestedLampMode = Power_Time1 ? "timer" : (Lamp_autosvet ? "auto" : (Lamp ? "on" : "off"));
+    applyLampControlMode(requestedLampMode); // Nextion использует ту же взаимоисключающую логику, что Web/MQTT/RS485.
 
   }
 void trigger4(){ read_lamp_sw0_sw1_sw2();}
@@ -695,21 +685,12 @@ void read_RGB_sw0_sw2_sw3(){
 
 //     Saved_WS2815_Time1=WS2815_Time1 = myNex.readNumber("set_RGB.sw0.val"); delay(50);
 //     jee.var("WS2815_Time1", WS2815_Time1 ? "true" : "false"); 
-    if (WS2815_Time1) {
-      SetRGB = "timer";
-    } else if (Pow_WS2815_autosvet) {
-      SetRGB = "auto";
-    } else {
-      SetRGB = Pow_WS2815 ? "on" : "off";
-    }
+    const String requestedRgbMode = WS2815_Time1 ? "timer" : (Pow_WS2815_autosvet ? "auto" : (Pow_WS2815 ? "on" : "off"));
+    applyRgbControlMode(requestedRgbMode); // Один источник истины для режима и сохраненных флагов.
 //     Saved_Pow_WS2815_autosvet = Pow_WS2815_autosvet = myNex.readNumber("set_RGB.sw2.val"); 
 //     jee.var("Pow_WS2815_autosvet", Pow_WS2815_autosvet ? "true" : "false"); 
 // }
 // void trigger7(){read_RGB_sw0_sw2_sw3();}
-    saveButtonState("button_WS2815", Pow_WS2815 ? 1 : 0);
-    saveValue<int>("Pow_WS2815_autosvet", Pow_WS2815_autosvet ? 1 : 0);
-    saveValue<int>("WS2815_Time1", WS2815_Time1 ? 1 : 0);
-    saveValue<String>("SetRGB", SetRGB);
 }
 void trigger7(){read_RGB_sw0_sw2_sw3();}
 

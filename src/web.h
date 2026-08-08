@@ -137,10 +137,10 @@ inline String SetRGB = "timer"; // Режим управления RGB подс�
 inline String SetUlLight = "timer"; // Режим уличного освещения: по умолчанию включение по таймеру
 inline String StoredAPSSID;      // Сохраненный SSID точки доступа
 inline String StoredAPPASS;      // Сохраненный пароль точки доступа
-inline String authUsername;      // Логин для доступа к веб-интерфейсу
 inline String authPassword;      // Пароль для доступа к веб-интерфейсу
-inline String adminUsername;     // Логин администратора для всплывающих окон
 inline String adminPassword;     // Пароль администратора для всплывающих окон
+inline String authSessionToken;  // Случайный токен Web-сессии; сбрасывается при перезагрузке и смене пароля
+inline constexpr size_t maxWebPasswordBytes = 512; // До 128 UTF-8 символов без ложного отказа для кириллицы.
 inline int button1 = 0;          // Состояние кнопки 1
 inline int button2 = 0;          // Состояние кнопки 2
 inline int RangeMin = 10;        // Минимальное значение диапазонного слайдера
@@ -183,6 +183,28 @@ inline int Rs485SlaveId = 1;
 inline int Rs485PollIntervalMs = 1000;
 inline bool Rs485ForcePoll = false;
 inline bool Rs485ManualRelayState[16] = {false};
+inline int Rs485ActiveBaudRate = 19200; // Фактическая скорость, примененная при setup_Modbus().
+inline String Rs485ActiveUartMode = "8N1"; // Фактический формат кадра до следующей перезагрузки.
+inline int Rs485ActiveSlaveId = 1; // Фактический адрес платы, используемый текущей Modbus-сессией.
+inline unsigned long Rs485LastRelaySuccessMs = 0; // Время последнего успешного readback реле.
+inline unsigned long Rs485LastInputSuccessMs = 0; // Время последнего успешного чтения DIN.
+
+inline unsigned long rs485FreshnessWindowMs() {
+  unsigned long pollMs = Rs485PollIntervalMs > 0 ? static_cast<unsigned long>(Rs485PollIntervalMs) : 1000UL;
+  if (pollMs < 200UL) pollMs = 200UL;
+  if (pollMs > 5000UL) pollMs = 5000UL;
+  unsigned long windowMs = pollMs * 3UL + 500UL; // Допускаем три цикла опроса и короткий Modbus timeout.
+  if (windowMs < 1500UL) windowMs = 1500UL;
+  return windowMs;
+}
+
+inline bool rs485RelayDataFresh() {
+  return Rs485Enabled && Rs485LastRelaySuccessMs != 0 && millis() - Rs485LastRelaySuccessMs <= rs485FreshnessWindowMs();
+}
+
+inline bool rs485InputDataFresh() {
+  return Rs485Enabled && Rs485LastInputSuccessMs != 0 && millis() - Rs485LastInputSuccessMs <= rs485FreshnessWindowMs();
+}
 
 
 String formatTemperatureString(float value, bool available);
@@ -594,20 +616,45 @@ inline bool applyLightThresholdSettingRequest(const String &id, const String &ra
   return true;
 }
 
-inline bool applyLightModeSettingRequest(const String &id, const String &rawValue) { // Взаимоисключающие режимы уличного освещения по датчику.
+inline void applyLampControlMode(const String &rawMode);
+inline void applyRgbControlMode(const String &rawMode);
+inline void applyUlLightControlMode(const String &rawMode);
+
+inline bool applyLightModeSettingRequest(const String &id, const String &rawValue) { // Legacy-флаги переводим в единый canonical mode.
   const bool requestedState = rawValue.toInt() != 0;
+  if (id == "Power_Time1") {
+    if (requestedState) applyLampControlMode("timer");
+    else if (SetLamp == "timer") applyLampControlMode("off");
+    return true;
+  }
+  if (id == "Lamp_autosvet") {
+    if (requestedState) applyLampControlMode("auto");
+    else if (SetLamp == "auto") applyLampControlMode("off");
+    return true;
+  }
+  if (id == "WS2815_Time1") {
+    if (requestedState) applyRgbControlMode("timer");
+    else if (SetRGB == "timer") applyRgbControlMode("off");
+    return true;
+  }
+  if (id == "Pow_WS2815_autosvet") {
+    if (requestedState) applyRgbControlMode("auto");
+    else if (SetRGB == "auto") applyRgbControlMode("off");
+    return true;
+  }
+  if (id == "Ul_light_Time") {
+    if (requestedState) applyUlLightControlMode("timer");
+    else if (SetUlLight == "timer") applyUlLightControlMode("off");
+    return true;
+  }
   if (id == "UlLight_autosvet") {
-    UlLight_autosvet = requestedState;
-    if (UlLight_autosvet) UlLight_sensorTimerOff = false;
-    saveValue<int>("UlLight_autosvet", UlLight_autosvet ? 1 : 0);
-    saveValue<int>("UlLight_sensorTimerOff", UlLight_sensorTimerOff ? 1 : 0);
+    if (requestedState) applyUlLightControlMode("auto");
+    else if (SetUlLight == "auto") applyUlLightControlMode("off");
     return true;
   }
   if (id == "UlLight_sensorTimerOff") {
-    UlLight_sensorTimerOff = requestedState;
-    if (UlLight_sensorTimerOff) UlLight_autosvet = false;
-    saveValue<int>("UlLight_sensorTimerOff", UlLight_sensorTimerOff ? 1 : 0);
-    saveValue<int>("UlLight_autosvet", UlLight_autosvet ? 1 : 0);
+    if (requestedState) applyUlLightControlMode("auto_timer_off");
+    else if (SetUlLight == "auto_timer_off") applyUlLightControlMode("off");
     return true;
   }
   return false;
@@ -632,6 +679,49 @@ inline bool applyLightSensorOnTimerOff(bool currentState, int offThreshold, bool
   if (!timerWindowActive) return false;
   if (currentState) return true;
   return Lumen_Ul <= clampLightThresholdValue(offThreshold);
+}
+
+inline String normalizeLightControlMode(String mode) { // Единый набор режимов для Web, MQTT, RS485 и Nextion.
+  mode.trim();
+  mode.toLowerCase();
+  if (mode == "off" || mode == "on" || mode == "auto" || mode == "auto_timer_off" || mode == "timer") return mode;
+  return "off";
+}
+
+inline void applyLampControlMode(const String &rawMode) {
+  SetLamp = normalizeLightControlMode(rawMode);
+  Lamp = SetLamp == "on";
+  Lamp_autosvet = SetLamp == "auto";
+  Power_Time1 = SetLamp == "timer";
+  saveValue<String>("SetLamp", SetLamp);
+  saveButtonState("button_Lamp", Lamp ? 1 : 0);
+  saveValue<int>("Lamp_autosvet", Lamp_autosvet ? 1 : 0);
+  saveValue<int>("Power_Time1", Power_Time1 ? 1 : 0);
+}
+
+inline void applyRgbControlMode(const String &rawMode) {
+  SetRGB = normalizeLightControlMode(rawMode);
+  Pow_WS2815 = SetRGB == "on";
+  Pow_WS2815_autosvet = SetRGB == "auto";
+  WS2815_Time1 = SetRGB == "timer";
+  saveValue<String>("SetRGB", SetRGB);
+  saveButtonState("button_WS2815", Pow_WS2815 ? 1 : 0);
+  saveValue<int>("Pow_WS2815", Pow_WS2815 ? 1 : 0);
+  saveValue<int>("Pow_WS2815_autosvet", Pow_WS2815_autosvet ? 1 : 0);
+  saveValue<int>("WS2815_Time1", WS2815_Time1 ? 1 : 0);
+}
+
+inline void applyUlLightControlMode(const String &rawMode) {
+  SetUlLight = normalizeLightControlMode(rawMode);
+  Pow_Ul_light = SetUlLight == "on";
+  UlLight_autosvet = SetUlLight == "auto";
+  UlLight_sensorTimerOff = SetUlLight == "auto_timer_off";
+  Ul_light_Time = SetUlLight == "timer";
+  saveValue<String>("SetUlLight", SetUlLight);
+  saveButtonState("Pow_Ul_light", Pow_Ul_light ? 1 : 0);
+  saveValue<int>("Ul_light_Time", Ul_light_Time ? 1 : 0);
+  saveValue<int>("UlLight_autosvet", UlLight_autosvet ? 1 : 0);
+  saveValue<int>("UlLight_sensorTimerOff", UlLight_sensorTimerOff ? 1 : 0);
 }
 
 inline String buildLightAutoStateText(const String &name, bool currentState, int offThreshold, int onThreshold) { // Короткий статус для popup.
@@ -821,24 +911,10 @@ inline bool applyRs485RelayRequest(uint8_t relay, bool requestedState) {
   if (relay >= 16) return false;
   switch (relay) {
     case 0:
-      SetLamp = requestedState ? "on" : "off";
-      Lamp = requestedState;
-      Lamp_autosvet = false;
-      Power_Time1 = false;
-      saveValue<String>("SetLamp", SetLamp);
-      saveButtonState("button_Lamp", Lamp ? 1 : 0);
-      saveValue<int>("Lamp_autosvet", 0);
-      saveValue<int>("Power_Time1", 0);
+      applyLampControlMode(requestedState ? "on" : "off");
       return true;
     case 1:
-      SetRGB = requestedState ? "on" : "off";
-      Pow_WS2815 = requestedState;
-      Pow_WS2815_autosvet = false;
-      WS2815_Time1 = false;
-      saveValue<String>("SetRGB", SetRGB);
-      saveButtonState("button_WS2815", Pow_WS2815 ? 1 : 0);
-      saveValue<int>("Pow_WS2815_autosvet", 0);
-      saveValue<int>("WS2815_Time1", 0);
+      applyRgbControlMode(requestedState ? "on" : "off");
       return true;
     case 2:
     case 3:
@@ -889,16 +965,7 @@ inline bool applyRs485RelayRequest(uint8_t relay, bool requestedState) {
       saveValue<int>("Power_Warm_floor_heating", Power_Warm_floor_heating ? 1 : 0);
       return true;
     case 15:
-      SetUlLight = requestedState ? "on" : "off";
-      Pow_Ul_light = requestedState;
-      Ul_light_Time = false;
-      UlLight_autosvet = false;
-      UlLight_sensorTimerOff = false;
-      saveValue<String>("SetUlLight", SetUlLight);
-      saveButtonState("Pow_Ul_light", Pow_Ul_light ? 1 : 0);
-      saveValue<int>("Ul_light_Time", 0);
-      saveValue<int>("UlLight_autosvet", 0);
-      saveValue<int>("UlLight_sensorTimerOff", 0);
+      applyUlLightControlMode(requestedState ? "on" : "off");
       return true;
     default:
       return false;
@@ -906,14 +973,8 @@ inline bool applyRs485RelayRequest(uint8_t relay, bool requestedState) {
 }
 
 inline void applyRs485AllOffRequest() {
-  SetLamp = "off";
-  Lamp = false;
-  Lamp_autosvet = false;
-  Power_Time1 = false;
-  SetRGB = "off";
-  Pow_WS2815 = false;
-  Pow_WS2815_autosvet = false;
-  WS2815_Time1 = false;
+  applyLampControlMode("off");
+  applyRgbControlMode("off");
   Power_Heat = false;
   Activation_Heat = false;
   Power_H2O2 = false;
@@ -936,23 +997,11 @@ inline void applyRs485AllOffRequest() {
   applyWaterControlRequest("Power_Topping", false);
   RoomTemper = false;
   Power_Warm_floor_heating = false;
-  SetUlLight = "off";
-  Pow_Ul_light = false;
-  Ul_light_Time = false;
-  UlLight_autosvet = false;
-  UlLight_sensorTimerOff = false;
+  applyUlLightControlMode("off");
   for (uint8_t relay = 0; relay < 16; relay++) {
     Rs485ManualRelayState[relay] = false;
     persistRs485ManualRelay(relay);
   }
-  saveValue<String>("SetLamp", SetLamp);
-  saveButtonState("button_Lamp", 0);
-  saveValue<int>("Lamp_autosvet", 0);
-  saveValue<int>("Power_Time1", 0);
-  saveValue<String>("SetRGB", SetRGB);
-  saveButtonState("button_WS2815", 0);
-  saveValue<int>("Pow_WS2815_autosvet", 0);
-  saveValue<int>("WS2815_Time1", 0);
   saveValue<int>("Activation_Heat", 0);
   saveButtonState("Power_Filtr", 0);
   saveButtonState("AirPump", 0);
@@ -961,11 +1010,6 @@ inline void applyRs485AllOffRequest() {
   saveButtonState("SolSandDump", 0);
   saveValue<int>("RoomTemper", 0);
   saveValue<int>("Power_Warm_floor_heating", 0);
-  saveValue<String>("SetUlLight", SetUlLight);
-  saveButtonState("Pow_Ul_light", 0);
-  saveValue<int>("Ul_light_Time", 0);
-  saveValue<int>("UlLight_autosvet", 0);
-  saveValue<int>("UlLight_sensorTimerOff", 0);
 }
 
 
@@ -1106,10 +1150,11 @@ bool Pow_WS2815_autosvet, Saved_Pow_WS2815_autosvet;
 bool WS2815_Time1, Saved_WS2815_Time1;
 
 inline const char* currentBasinImagePath() { // Выбирает изображение бассейна по фактическому состоянию подсветки.
+  if (CleanSequenceActive) return "/Basin.gif"; // Во время промывки показываем живое течение воды; в простое GIF не загружается.
   if (Pow_WS2815 && Lamp) return "/Basin_RGB_LAMP.jpg";
   if (Pow_WS2815) return "/Basin_RGB.jpg";
   if (Lamp) return "/Basin_Lamp.jpg";
-  return "/Basin.jpg";
+  return "/Basin.gif"; // Базовая схема теперь тоже живая; статические варианты остаются для режимов подсветки.
 }
 
 inline const char* currentPoolLevelIconPath() { // Выбирает маленькую PNG-пиктограмму уровня для общей страницы бассейна.
@@ -1454,30 +1499,78 @@ inline bool readPsramStats(uint32_t &freePsram, uint32_t &totalPsram){
   return false; // PSRAM недоступна
 }
 
+inline bool secureStringEquals(const String &left, const String &right){
+  if(left.length() != right.length()) return false;
+  uint8_t difference = 0;
+  for(size_t i = 0; i < left.length(); ++i){
+    difference |= static_cast<uint8_t>(left.charAt(i) ^ right.charAt(i));
+  }
+  return difference == 0;
+}
+
+inline void regenerateAuthSession(){
+  char token[33];
+  snprintf(token, sizeof(token), "%08lx%08lx%08lx%08lx",
+           static_cast<unsigned long>(esp_random()),
+           static_cast<unsigned long>(esp_random()),
+           static_cast<unsigned long>(esp_random()),
+           static_cast<unsigned long>(esp_random()));
+  authSessionToken = token;
+}
+
+inline String requestCookie(AsyncWebServerRequest *request, const String &name){
+  const AsyncWebHeader *cookieHeader = request->getHeader("Cookie");
+  if(!cookieHeader) return String();
+  const String cookies = cookieHeader->value();
+  const String needle = name + "=";
+  int position = cookies.indexOf(needle);
+  while(position >= 0){
+    const bool atBoundary = position == 0 || cookies.charAt(position - 1) == ';' || cookies.charAt(position - 1) == ' ';
+    if(atBoundary){
+      const int valueStart = position + needle.length();
+      int valueEnd = cookies.indexOf(';', valueStart);
+      if(valueEnd < 0) valueEnd = cookies.length();
+      String value = cookies.substring(valueStart, valueEnd);
+      value.trim();
+      return value;
+    }
+    position = cookies.indexOf(needle, position + 1);
+  }
+  return String();
+}
+
 inline bool isAuthConfigured(){
-  return authUsername.length() > 0 && authPassword.length() > 0; // Проверка, заданы ли логин и пароль
+  return authPassword.length() > 0;
+}
+
+inline bool hasValidAuthSession(AsyncWebServerRequest *request){
+  return authSessionToken.length() == 32 && secureStringEquals(requestCookie(request, "esp_session"), authSessionToken);
 }
 
 inline bool ensureAuthorized(AsyncWebServerRequest *request){
-  if(!isAuthConfigured()) return true; // Если авторизация не настроена — доступ разрешён
-  if(!request->authenticate(authUsername.c_str(), authPassword.c_str())){ // Проверка логина и пароля
-    request->requestAuthentication(); // Запрос авторизации у клиента
-    return false; // Доступ запрещён
+  if(!isAuthConfigured() || hasValidAuthSession(request)) return true;
+  if(request->url() == "/"){
+    request->redirect("/login");
+  } else {
+    AsyncWebServerResponse *response = request->beginResponse(401, "application/json", "{\"error\":\"unauthorized\"}");
+    response->addHeader("Cache-Control", "no-store");
+    request->send(response);
   }
-  return true; // Авторизация успешна
+  return false;
 }
 
 inline bool isAdminAuthConfigured(){
-  return adminUsername.length() > 0 && adminPassword.length() > 0; // Проверка, заданы ли учётные данные администратора
+  return adminPassword.length() > 0;
 }
 
 inline bool ensureAdminAuthorized(AsyncWebServerRequest *request){
-  if(!isAdminAuthConfigured()) return true; // Если админ-авторизация не настроена — доступ разрешён
-  if(!request->authenticate(adminUsername.c_str(), adminPassword.c_str())){ // Проверка админских учётных данных
-    request->requestAuthentication(); // Запрос авторизации у клиента
-    return false; // Доступ запрещён
-  }
-  return true; // Администратор успешно авторизован
+  if(!isAdminAuthConfigured()) return true;
+  String provided;
+  if(request->hasParam("pass", true)) provided = request->getParam("pass", true)->value();
+  else if(request->hasParam("pass")) provided = request->getParam("pass")->value();
+  if(secureStringEquals(provided, adminPassword)) return true;
+  request->send(401, "application/json", "{\"error\":\"unauthorized\"}");
+  return false;
 }
 
 
@@ -1615,6 +1708,18 @@ private:
     registerUiValueProvider("Lumen_Ul", [](){ // Освещенность на Web должна брать живой процент, а не стартовое значение.
       return String(Lumen_Ul);
     });
+    registerUiValueProvider("button_Lamp", [](){ // Кнопка показывает подтвержденное реле лампы, а при потере RS-485 — логическую команду.
+      const bool active = rs485RelayDataFresh() ? ReadRelayArray[0] : Lamp;
+      return active ? String("1") : String("0");
+    });
+    registerUiValueProvider("button_WS2815", [](){ // Для RGB используем фактический readback реле 2, как и для новых кнопок света.
+      const bool active = rs485RelayDataFresh() ? ReadRelayArray[1] : Pow_WS2815;
+      return active ? String("1") : String("0");
+    });
+    registerUiValueProvider("Pow_Ul_light", [](){ // Уличное освещение подтверждается реле 16; fallback не оставляет кнопку без состояния.
+      const bool active = rs485RelayDataFresh() ? ReadRelayArray[15] : Pow_Ul_light;
+      return active ? String("1") : String("0");
+    });
     registerUiValueProvider("LightSensorLiveInfo", [](){
       if(LightSensorLiveInfo.length()) return LightSensorLiveInfo;
       return String("ADC GPIO3 еще не получил измерения.");
@@ -1695,27 +1800,27 @@ private:
     // Кнопки промывки должны отражать и логику автоматики, и фактическое состояние реле.
     // Поэтому объединяем: ручной флаг UI + автофлаг шага + обратное чтение Modbus.
     registerUiValueProvider("AirPump", [](){
-      const bool active = AirPump || AirPumpAuto || ReadRelayArray[9];
+      const bool active = AirPump || AirPumpAuto || (rs485RelayDataFresh() && ReadRelayArray[9]);
       return active ? String("1") : String("0");
     }); // компрессор воздуха
     registerUiValueProvider("SolValveFilBack", [](){
-      const bool active = SolValveFilBack || ValveBackwashAuto || ReadRelayArray[11];
+      const bool active = SolValveFilBack || ValveBackwashAuto || (rs485RelayDataFresh() && ReadRelayArray[11]);
       return active ? String("1") : String("0");
     }); // соленоид трехходовых клапанов
       registerUiValueProvider("SolValveFiltration", [](){
-      const bool active = SolValveFiltration || ValveFiltrationAuto || ReadRelayArray[10];
+      const bool active = SolValveFiltration || ValveFiltrationAuto || (rs485RelayDataFresh() && ReadRelayArray[10]);
       return active ? String("1") : String("0");
     }); // соленоид трехходовых клапанов в FILTRATION
     registerUiValueProvider("SolSandDump", [](){
-      const bool active = SolSandDump || SolSandDumpAuto || ReadRelayArray[12];
+      const bool active = SolSandDump || SolSandDumpAuto || (rs485RelayDataFresh() && ReadRelayArray[12]);
       return active ? String("1") : String("0");
     }); // соленоид сброса песка
     registerUiValueProvider("Power_Filtr", [](){
-      const bool active = Power_Filtr || ReadRelayArray[8];
+      const bool active = Power_Filtr || (rs485RelayDataFresh() && ReadRelayArray[8]);
       return active ? String("1") : String("0");
     }); // насос фильтрации: команда + факт реле
     registerUiValueProvider("Power_Clean", [](){
-      const bool active = Power_Clean || CleanSequenceActive || ReadRelayArray[3];
+      const bool active = Power_Clean || CleanSequenceActive;
       return active ? String("1") : String("0");
     }); // промывка: логический цикл + факт реле
 
@@ -1864,6 +1969,7 @@ private:
       ".rs485-relay-row span{font-weight:800;color:#dfeeff;} "
       ".rs485-relay-btn{height:38px;border-radius:8px;border:1px solid #555;background:#242321;color:#fff;font-weight:900;letter-spacing:0.02em;cursor:pointer;} "
       ".rs485-relay-btn.on{background:#0e6b38;border-color:#22a357;color:#fff;} "
+      ".rs485-relay-btn.stale,.rs485-input-chip.stale{border-color:#8a6d2f;background:#3a3019;color:#ffd98a;} "
       ".rs485-input-grid{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:8px;} "
       ".rs485-input-chip{height:34px;border-radius:7px;border:1px solid rgba(255,255,255,0.12);background:#232a32;color:#dceeff;font-weight:800;display:flex;align-items:center;justify-content:center;} "
       ".rs485-input-chip.on{background:#0d4269;border-color:#318bd0;color:#fff;} "
@@ -1911,11 +2017,19 @@ private:
       ".graph-controls select,.graph-controls input{margin-bottom:0;flex:1;} " // Поля управления графиком
       ".graph-card{position:relative;overflow:hidden;background:linear-gradient(180deg,#171924,#10131d);border-radius:8px;}"  // Карточка графика
       ".graph-heading{text-align:center;font-size:1.05em;font-weight:500;color:#dce5f2;margin-bottom:10px;}"  // Заголовок графика
-      ".dash-graph{width:100%;background:#05070a;border-radius:0;}"  // Холст графика
+      ".graph-canvas-wrap{position:relative;min-width:0;} " // Оси позиционируются относительно canvas, а не панели навигации.
+      ".dash-graph{width:100%;background:#05070a;border-radius:0;cursor:grab;touch-action:pan-y;outline:none;}"  // Холст графика
+      ".dash-graph:active{cursor:grabbing;}" // Курсор при перетаскивании истории
+      ".dash-graph:focus-visible{box-shadow:0 0 0 2px rgba(66,200,255,.8);}" // Видимый фокус для стрелок клавиатуры
       ".graph-axes{position:absolute;inset:0;pointer-events:none;font-size:0.85em;color:#cbd4df;}"  // Подписи осей
       ".graph-axes .axis-name{position:absolute;}"  // Названия осей
       ".graph-axes .axis-name:first-child{right:10px;bottom:8px;}"  // Подпись оси X
       ".graph-axes .axis-name:last-child{left:8px;top:8px;writing-mode:vertical-rl;transform:rotate(180deg);}"  // Подпись оси Y
+      ".graph-nav{display:grid;grid-template-columns:auto minmax(90px,1fr) auto auto;gap:8px;align-items:center;margin-top:8px;position:relative;z-index:2;}" // Навигация по длинной истории
+      ".graph-nav button{min-height:34px;padding:6px 10px;border:1px solid rgba(255,255,255,.16);border-radius:8px;background:#202733;color:#e8f1ff;font-weight:700;cursor:pointer;}" // Кнопки истории
+      ".graph-nav button:disabled{opacity:.38;cursor:default;}" // Недоступное направление истории
+      ".graph-nav input[type=range]{width:100%;margin:0;min-width:80px;}" // Полоса положения в истории
+      "@media(max-width:680px){.graph-nav{grid-template-columns:1fr 1fr 1fr}.graph-nav input[type=range]{grid-column:1/-1;grid-row:1}.graph-nav button{font-size:.82rem;padding:6px 5px;}}" // Компактная мобильная навигация
       ".graph-table-card{padding-bottom:8px;} " // Карточка истории точек
       ".graph-table-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px;} " // Заголовок и счетчик истории
       ".graph-table-head .stat-heading{margin:0;} " // Без лишнего отступа над таблицей
@@ -2570,8 +2684,15 @@ private:
                   }
                   html += "<div class='card graph-card' style='"+containerStyle+"'>"; // Карточка графика
                   html += "<div class='graph-heading'>"+e.label+"</div>"; // Заголовок графика
-                  html += "<canvas id='graph_"+e.id+"' class='dash-graph' data-graph-id='"+e.id+"' width='"+String(canvasWidth)+"' height='"+String(canvasHeight)+"' data-series='"+seriesName+"' data-value-name='"+valueName+"' data-table-id='"+tableId+"' data-update-interval='"+String(graphUpdateInterval)+"' data-max-points='"+String(graphMaxPoints)+"' data-line-color='"+lineColor+"' data-point-color='"+pointColor+"' data-x-label='"+xLabel+"' data-y-label='"+yLabel+"' style='border:1px solid rgba(255,255,255,0.08);height:"+heightStyle+";'></canvas>"; // Canvas графика
+                  html += "<div class='graph-canvas-wrap'>";
+                  html += "<canvas id='graph_"+e.id+"' class='dash-graph' data-graph-id='"+e.id+"' width='"+String(canvasWidth)+"' height='"+String(canvasHeight)+"' data-series='"+seriesName+"' data-value-name='"+valueName+"' data-table-id='"+tableId+"' data-update-interval='"+String(graphUpdateInterval)+"' data-max-points='"+String(graphMaxPoints)+"' data-line-color='"+lineColor+"' data-point-color='"+pointColor+"' data-x-label='"+xLabel+"' data-y-label='"+yLabel+"' tabindex='0' aria-label='График "+e.label+". Стрелки влево и вправо перемещают историю.' style='border:1px solid rgba(255,255,255,0.08);height:"+heightStyle+";'></canvas>"; // Canvas графика
                   html += "<div class='graph-axes'><span class='axis-name'>"+xLabel+"</span><span class='axis-name'>"+yLabel+"</span></div>"; // Подписи осей
+                  html += "</div>";
+                  html += "<div class='graph-nav' data-graph-nav='"+e.id+"'>"
+                          "<button type='button' data-graph-action='older' aria-label='Показать более ранние точки'>← Раньше</button>"
+                          "<input type='range' min='0' max='0' value='0' data-graph-position='"+e.id+"' aria-label='Положение в истории графика'>"
+                          "<button type='button' data-graph-action='newer' aria-label='Показать более поздние точки'>Позже →</button>"
+                          "<button type='button' data-graph-action='latest'>К последним</button></div>"; // Кнопки и полоса истории
               html += "</div>"; // Закрытие карточки графика
                   html += "<div class='card graph-controls' style='margin-bottom:0;'>"; // Панель управления графиком
                   html += "<div class='control-group'><label>Интервал обновления</label>"; // Выбор интервала
@@ -2640,7 +2761,7 @@ private:
                   html += "<div class='rs485-card rs485-hero'>"
                           "<div><div class='rs485-title'>"+e.label+"</div>"
                           "<div class='rs485-sub'>Modbus RTU: Huaqingjun FC05/FC03 0/4, N4D3E16 FC06/FC03 0x0070/0x00C0<br>"
-                          "Huaqingjun 16CH+DI16, Serial2 19200 8N1, RX GPIO16, TX GPIO17, DE/RE auto</div></div>"
+                          "Huaqingjun 16CH+DI16, Serial2 по настройкам ниже, RX GPIO18, TX GPIO17, DE/RE auto</div></div>"
                           "<div id='rs485-status' class='rs485-status'>RS485 disabled</div>"
                           "</div>";
                   html += "<div class='rs485-card rs485-board'>"
@@ -2667,6 +2788,7 @@ private:
                           "<div class='rs485-field'><label>UART</label><select id='Rs485UartMode'><option selected>8N1</option><option>8N2</option><option>8O1</option><option>8E1</option></select></div>"
                           "<div class='rs485-field'><label>Modbus Slave ID</label><input id='Rs485SlaveId' type='number' min='1' max='247' value='1'></div>"
                           "<div class='rs485-field'><label>Опрос, мс</label><input id='Rs485PollIntervalMs' type='number' min='200' max='5000' step='100' value='1000'></div>"
+                          "<div class='profile-hint'>Скорость, UART и Slave ID применяются после перезагрузки ESP; интервал опроса — сразу.</div>"
                           "<button class='rs485-action' id='rs485-poll-now' type='button'>Опросить сейчас</button>"
                           "<button class='rs485-action danger' id='rs485-all-off' type='button'>Выключить все</button>"
                           "</div>";
@@ -3035,7 +3157,7 @@ private:
             html += "<div class='rs485-panel' id='Rs485Panel'>";
             html += "<div class='rs485-card rs485-hero'><div><div class='rs485-title'>RS485 16CH + DI16</div>"
                     "<div class='rs485-sub'>Modbus RTU: Huaqingjun FC05/FC03 0/4, N4D3E16 FC06/FC03 0x0070/0x00C0<br>"
-                    "Huaqingjun 16CH+DI16, Serial2 19200 8N1, RX GPIO16, TX GPIO17, DE/RE auto</div></div>"
+                    "Huaqingjun 16CH+DI16, Serial2 по настройкам ниже, RX GPIO18, TX GPIO17, DE/RE auto</div></div>"
                     "<div id='rs485-status' class='rs485-status off'>RS485 disabled</div></div>";
             html += "<div class='rs485-card rs485-board'><div class='rs485-side'>"
                     "<label class='rs485-enable'><input id='Rs485Enabled' type='checkbox'> RS485 включено</label>"
@@ -3057,6 +3179,7 @@ private:
                     "<div class='rs485-field'><label>UART</label><select id='Rs485UartMode'><option selected>8N1</option><option>8N2</option><option>8O1</option><option>8E1</option></select></div>"
                     "<div class='rs485-field'><label>Modbus Slave ID</label><input id='Rs485SlaveId' type='number' min='1' max='247' value='1'></div>"
                     "<div class='rs485-field'><label>Опрос, мс</label><input id='Rs485PollIntervalMs' type='number' min='200' max='5000' step='100' value='1000'></div>"
+                    "<div class='profile-hint'>Скорость, UART и Slave ID применяются после перезагрузки ESP; интервал опроса — сразу.</div>"
                     "<button class='rs485-action' id='rs485-poll-now' type='button'>Опросить сейчас</button>"
                     "<button class='rs485-action danger' id='rs485-all-off' type='button'>Выключить все</button></div>";
             html += "<div class='rs485-card'><div class='rs485-grid-title'>Реле</div><div class='rs485-relay-grid'>";
@@ -3253,19 +3376,15 @@ private:
       html += "<div id='"+profilePage.id+"' class='page'><h3>"+profilePage.title+"</h3>"
               "<div class='card compact'>"
               "<h4>Доступ к веб-интерфейсу</h4>"
-              "<div class='mqtt-grid'>"
-              "<div class='mqtt-field'><label>Логин</label><input id='profile-user' value='"+authUsername+"'></div>"
-              "<div class='mqtt-field'><label>Пароль</label><input id='profile-pass' type='password' value='"+authPassword+"'></div>"
-              "</div>"
-              "<span class='profile-hint'>Пустые поля отключают аутентификацию.</span>"
+              "<div class='mqtt-field'><label>Новый пароль</label><input id='profile-pass' type='password' maxlength='128' autocomplete='new-password' placeholder='Пусто — оставить без изменений'></div>"
+              "<label class='mqtt-enable-line'><input id='profile-clear-pass' type='checkbox'>Отключить пароль Web-доступа</label>"
+              "<span class='profile-hint'>Сейчас: "+String(isAuthConfigured() ? "пароль установлен" : "доступ без пароля")+". Имя пользователя не требуется.</span>"
               "</div>"
               "<div class='card compact'>"
               "<h4>Администратор (для всплывающих окон)</h4>"
-              "<div class='mqtt-grid'>"
-              "<div class='mqtt-field'><label>Логин администратора</label><input id='profile-admin-user' value='"+adminUsername+"'></div>"
-              "<div class='mqtt-field'><label>Пароль администратора</label><input id='profile-admin-pass' type='password' value='"+adminPassword+"'></div>"
-              "</div>"
-              "<span class='profile-hint'>Пустые поля отключают аутентификацию.</span>"
+              "<div class='mqtt-field'><label>Новый пароль администратора</label><input id='profile-admin-pass' type='password' maxlength='128' autocomplete='new-password' placeholder='Пусто — оставить без изменений'></div>"
+              "<label class='mqtt-enable-line'><input id='profile-clear-admin-pass' type='checkbox'>Отключить пароль всплывающих окон</label>"
+              "<span class='profile-hint'>Сейчас: "+String(isAdminAuthConfigured() ? "пароль установлен" : "доступ без отдельного пароля")+". Имя администратора не требуется.</span>"
               "</div>"
               "<div class='mqtt-actions'>"
               "<button class='btn-primary btn-mqtt btn-success' onclick='saveProfileSettings()'>Сохранить</button>"
@@ -3359,7 +3478,11 @@ private:
     const timeoutId = controller ? setTimeout(()=>controller.abort(), espHealthRequestTimeoutMs) : null;
     const options = controller ? {cache:'no-store', signal:controller.signal} : {cache:'no-store'};
     fetch('/health', options)
-      .then(response=>{ if(!response.ok) throw new Error('health'); return response.json(); })
+      .then(response=>{
+        if(response.status === 401){ window.location.replace('/login'); throw new Error('unauthorized'); }
+        if(!response.ok) throw new Error('health');
+        return response.json();
+      })
       .then(info=>markEspLiveOk(info, Date.now() - startedAt))
       .catch(()=>{})
       .finally(()=>{
@@ -3378,16 +3501,8 @@ private:
     document.querySelectorAll('#sidebar button').forEach(b=>b.classList.remove('active'));
     if(btn) btn.classList.add('active'); // Активируем кнопку меню
 
-      if(id.startsWith('tab')){
-      resizeCustomGraphs(); // Подгоняем размеры графиков под контейнер
-      customGraphCanvases.forEach(canvas=>{
-        const page = canvas.closest('.page');
-        if(page && page.id===id){
-          fetchCustomGraph(canvas); // Загружаем данные для графика
-          restartCustomGraphInterval(canvas); // Запускаем интервал обновления
-        }
-      });
-    }
+    if(id.startsWith('tab')) resizeCustomGraphs(); // Подгоняем размеры только что открытого графика под контейнер.
+    refreshCustomGraphActivity(); // Опрос активного графика запускаем, а таймеры скрытых страниц останавливаем.
     if(id === 'stats') startStatsUpdates();
     else stopStatsUpdates();
     if(id === 'wifi') startWifiStatusUpdates();
@@ -3453,14 +3568,12 @@ private:
   async function ensurePopupAuthorized(){
     if(!popupAuthRequired) return true;
 
-    const user = prompt('Логин администратора');
-    if(user === null) return false;
     const pass = prompt('Пароль администратора');
     if(pass === null) return false;
-    const token = btoa(`${user}:${pass}`);
     try {
       const res = await fetch('/popup/auth', {
-        headers: { Authorization: `Basic ${token}` },
+        method: 'POST',
+        body: new URLSearchParams({pass}),
       });
       if(res.ok){
         return true;
@@ -3468,7 +3581,7 @@ private:
     } catch (err) {
       console.warn('Popup auth verification failed', err);
     }
-    alert('Неверный логин или пароль.');
+    alert('Неверный пароль администратора.');
             return false;
     }
 
@@ -3602,9 +3715,11 @@ function toggleSidebar(){
   function syncRs485Panel(j){
     const status = document.getElementById('rs485-status');
     const enabled = j.Rs485Enabled == 1 || j.Rs485Enabled === true || j.Rs485Enabled === '1';
+    const relayFresh = j.Rs485RelayDataFresh == 1 || j.Rs485RelayDataFresh === true || j.Rs485RelayDataFresh === '1';
+    const inputFresh = j.Rs485InputDataFresh == 1 || j.Rs485InputDataFresh === true || j.Rs485InputDataFresh === '1';
     if(status){
-      status.innerText = enabled ? 'RS485 enabled' : 'RS485 disabled';
-      status.classList.toggle('off', !enabled);
+      status.innerText = !enabled ? 'RS485 disabled' : ((relayFresh || inputFresh) ? 'RS485 online' : 'RS485: нет свежего ответа');
+      status.classList.toggle('off', !enabled || (!relayFresh && !inputFresh));
     }
     const enabledInput = document.getElementById('Rs485Enabled');
     if(enabledInput && !isUserEditing(enabledInput)) enabledInput.checked = enabled;
@@ -3617,17 +3732,23 @@ function toggleSidebar(){
     const poll = document.getElementById('Rs485PollIntervalMs');
     if(poll && !isUserEditing(poll) && typeof j.Rs485PollIntervalMs !== 'undefined') poll.value = String(j.Rs485PollIntervalMs);
 
-    const relayStates = Array.isArray(j.Rs485RelayActual) ? j.Rs485RelayActual : j.Rs485Relays;
+    const relayStates = relayFresh && Array.isArray(j.Rs485RelayActual) ? j.Rs485RelayActual : j.Rs485Relays;
     if(Array.isArray(relayStates)){
       relayStates.forEach((state, idx)=>{
-        setRs485RelayButton(document.querySelector(`.rs485-relay-btn[data-relay="${idx}"]`), state == 1 || state === true || state === '1');
+        const button = document.querySelector(`.rs485-relay-btn[data-relay="${idx}"]`);
+        const isOn = state == 1 || state === true || state === '1';
+        setRs485RelayButton(button, isOn);
+        if(button && !relayFresh){ button.classList.add('stale'); button.innerText = `${isOn ? 'ON' : 'OFF'} ?`; }
+        else if(button) button.classList.remove('stale');
       });
     }
     if(Array.isArray(j.Rs485Inputs)){
       j.Rs485Inputs.forEach((state, idx)=>{
         const chip = document.querySelector(`.rs485-input-chip[data-input="${idx}"]`);
         if(!chip) return;
+        if(!inputFresh){ chip.classList.remove('on'); chip.classList.add('stale'); chip.innerText = `DI${idx + 1}: --`; return; }
         const isOn = state == 1 || state === true || state === '1';
+        chip.classList.remove('stale');
         chip.classList.toggle('on', isOn);
         chip.innerText = `DI${idx + 1}: ${isOn ? 'ON' : 'OFF'}`;
       });
@@ -3735,17 +3856,29 @@ function toggleSidebar(){
 
 function saveProfileSettings(){
  const statusEl = document.getElementById('profile-status');
-    const user = (document.getElementById('profile-user') || {}).value || '';
-    const pass = (document.getElementById('profile-pass') || {}).value || '';
-    const adminUser = (document.getElementById('profile-admin-user') || {}).value || '';
-    const adminPass = (document.getElementById('profile-admin-pass') || {}).value || '';
+    const passInput = document.getElementById('profile-pass');
+    const adminPassInput = document.getElementById('profile-admin-pass');
+    const clearPassInput = document.getElementById('profile-clear-pass');
+    const clearAdminPassInput = document.getElementById('profile-clear-admin-pass');
+    const pass = passInput ? passInput.value : '';
+    const adminPass = adminPassInput ? adminPassInput.value : '';
+    const clearPass = clearPassInput && clearPassInput.checked ? '1' : '0';
+    const clearAdminPass = clearAdminPassInput && clearAdminPassInput.checked ? '1' : '0';
     if(statusEl) statusEl.innerText = 'Сохранение...';
 
-    const payload = new URLSearchParams({user, pass, adminUser, adminPass});
+    const payload = new URLSearchParams({pass, adminPass, clearPass, clearAdminPass});
     fetch('/profile/save', {method:'POST', body: payload})
-      .then(()=>{ if(statusEl) statusEl.innerText = 'Сохранено.'; })
+      .then(async response=>{
+        const data = await response.json().catch(()=>({}));
+        if(!response.ok) throw new Error(data.error || 'save failed');
+        if(passInput) passInput.value = '';
+        if(adminPassInput) adminPassInput.value = '';
+        if(clearPassInput) clearPassInput.checked = false;
+        if(clearAdminPassInput) clearAdminPassInput.checked = false;
+        if(statusEl) statusEl.innerText = 'Сохранено. Новые правила доступа уже действуют.';
+      })
       .catch(()=>{ if(statusEl) statusEl.innerText = 'Ошибка сохранения.'; })
-      .finally(()=>{ setTimeout(()=>{ if(statusEl) statusEl.innerText = ''; }, 2500); });
+      .finally(()=>{ setTimeout(()=>{ if(statusEl) statusEl.innerText = ''; }, 4000); });
   }
 
   function toggleMqttActivation(){
@@ -4454,42 +4587,135 @@ function saveWiFi(){
 
 let customGraphCanvases = Array.from(document.querySelectorAll("canvas[id^='graph_']"));
 const customGraphTimers = new Map();
+const customGraphFetchStates = new Map(); // Не допускает наложения медленных запросов одной серии.
 const graphDataCache = new Map();
 const graphHistories = new Map(); // Полная клиентская история; на canvas рисуется только удобное окно.
-const graphViews = new Map(); // Смещение окна при просмотре прошлых суток колесом мыши.
-const GRAPH_AUTO_RETURN_MS = 20000;
+const graphViews = new Map(); // Смещение видимого окна относительно самых свежих данных.
+const graphDragStates = new Map(); // Состояние горизонтального drag/swipe отдельно для каждого canvas.
+const graphPersistTimers = new Map(); // Отложенная запись localStorage вместо сериализации 5000 точек на каждом ответе.
+const graphTableRenderKeys = new Map(); // Таблицу перестраиваем только при изменении истории, но новую точку показываем сразу.
+const graphClientPollIntervalMs = 5000; // Частота легкого delta-опроса браузером не зависит от интервала записи точек на ESP.
 let deviceNowEpoch = 0; // Местное epoch устройства для подписей «сегодня/вчера».
 const graphTooltip = document.createElement('div');
 graphTooltip.className = 'graph-tooltip hidden';
 document.body.appendChild(graphTooltip);
 
 customGraphCanvases.forEach(canvas=>{
-  canvas.addEventListener('mousemove', evt=>showGraphTooltip(canvas, evt));
+  canvas.addEventListener('mousemove', evt=>{ if(!graphDragStates.has(canvas)) showGraphTooltip(canvas, evt); });
   canvas.addEventListener('mouseleave', hideGraphTooltip);
   canvas.addEventListener('wheel', evt=>{
     const view = getGraphView(canvas);
-    if(!view.total) return;
+    if(!view.total || view.maxOffset <= 0) return;
+    const horizontalDelta = Math.abs(evt.deltaX) >= Math.abs(evt.deltaY)
+      ? evt.deltaX
+      : (evt.shiftKey ? evt.deltaY : 0);
+    if(!horizontalDelta) return; // Обычное вертикальное колесо прокручивает страницу, а не захватывается canvas.
     evt.preventDefault();
     const step = Math.max(1, Math.round(view.windowSize / 8));
-    const direction = evt.deltaY < 0 ? 1 : -1;
-    view.offset = Math.min(view.maxOffset, Math.max(0, view.offset + direction * step));
-    view.touchedAt = Date.now();
-    redrawCustomGraph(canvas);
+    shiftGraphView(canvas, horizontalDelta < 0 ? step : -step);
   }, {passive:false});
+
+  canvas.addEventListener('keydown', evt=>{
+    const view = getGraphView(canvas);
+    if(evt.key !== 'ArrowLeft' && evt.key !== 'ArrowRight' && evt.key !== 'Home' && evt.key !== 'End') return;
+    evt.preventDefault();
+    const step = Math.max(1, Math.round(view.windowSize / 4));
+    if(evt.key === 'ArrowLeft') shiftGraphView(canvas, step);
+    else if(evt.key === 'ArrowRight') shiftGraphView(canvas, -step);
+    else if(evt.key === 'Home') setGraphViewOffset(canvas, view.maxOffset);
+    else setGraphViewOffset(canvas, 0);
+  });
+
+  canvas.addEventListener('pointerdown', evt=>{
+    if(evt.button !== undefined && evt.button !== 0) return;
+    const view = getGraphView(canvas);
+    if(view.maxOffset <= 0) return;
+    graphDragStates.set(canvas, {pointerId:evt.pointerId, startX:evt.clientX, startY:evt.clientY, startOffset:view.offset, horizontal:false});
+    hideGraphTooltip();
+    try { canvas.setPointerCapture(evt.pointerId); } catch(_){}
+  });
+  canvas.addEventListener('pointermove', evt=>{
+    const drag = graphDragStates.get(canvas);
+    if(!drag || drag.pointerId !== evt.pointerId) return;
+    const deltaX = evt.clientX - drag.startX;
+    const deltaY = evt.clientY - drag.startY;
+    if(!drag.horizontal){
+      if(Math.abs(deltaX) < 7) return;
+      if(Math.abs(deltaY) > Math.abs(deltaX)){
+        graphDragStates.delete(canvas);
+        return;
+      }
+      drag.horizontal = true;
+    }
+    evt.preventDefault();
+    const view = getGraphView(canvas);
+    const width = Math.max(1, canvas.getBoundingClientRect().width);
+    setGraphViewOffset(canvas, drag.startOffset + Math.round(deltaX * view.windowSize / width));
+  });
+  const finishGraphDrag = evt=>{
+    const drag = graphDragStates.get(canvas);
+    if(!drag || drag.pointerId !== evt.pointerId) return;
+    graphDragStates.delete(canvas);
+    try { canvas.releasePointerCapture(evt.pointerId); } catch(_){}
+  };
+  canvas.addEventListener('pointerup', finishGraphDrag);
+  canvas.addEventListener('pointercancel', finishGraphDrag);
+
+  const nav = document.querySelector(`[data-graph-nav="${canvas.dataset.graphId}"]`);
+  if(nav){
+    nav.querySelectorAll('[data-graph-action]').forEach(button=>{
+      button.addEventListener('click', ()=>{
+        const view = getGraphView(canvas);
+        const step = Math.max(1, Math.round(view.windowSize * 0.75));
+        const action = button.dataset.graphAction;
+        if(action === 'older') shiftGraphView(canvas, step);
+        else if(action === 'newer') shiftGraphView(canvas, -step);
+        else if(action === 'latest') setGraphViewOffset(canvas, 0);
+      });
+    });
+    const position = nav.querySelector('[data-graph-position]');
+    if(position) position.addEventListener('input', ()=>{
+      const view = getGraphView(canvas);
+      setGraphViewOffset(canvas, view.maxOffset - Number(position.value || 0));
+    });
+  }
+  updateGraphNavigation(canvas);
 });
 
-setInterval(()=>{
-  graphViews.forEach((view, canvas)=>{
-    if(view.offset === 0 || !view.touchedAt || Date.now() - view.touchedAt < GRAPH_AUTO_RETURN_MS) return;
-    view.offset = 0;
-    view.touchedAt = 0;
-    redrawCustomGraph(canvas);
-  });
-}, 1000);
-
 function getGraphView(canvas){
-  if(!graphViews.has(canvas)) graphViews.set(canvas, {offset:0, windowSize:0, maxOffset:0, total:0, touchedAt:0});
+  if(!graphViews.has(canvas)) graphViews.set(canvas, {offset:0, windowSize:0, maxOffset:0, total:0});
   return graphViews.get(canvas);
+}
+
+function setGraphViewOffset(canvas, offset){
+  const view = getGraphView(canvas);
+  const nextOffset = Math.min(view.maxOffset, Math.max(0, Math.round(Number(offset) || 0)));
+  if(nextOffset === view.offset){ updateGraphNavigation(canvas); return; }
+  hideGraphTooltip();
+  view.offset = nextOffset;
+  redrawCustomGraph(canvas);
+}
+
+function shiftGraphView(canvas, deltaPoints){
+  setGraphViewOffset(canvas, getGraphView(canvas).offset + deltaPoints);
+}
+
+function updateGraphNavigation(canvas){
+  const nav = document.querySelector(`[data-graph-nav="${canvas.dataset.graphId}"]`);
+  if(!nav) return;
+  const view = getGraphView(canvas);
+  const older = nav.querySelector('[data-graph-action="older"]');
+  const newer = nav.querySelector('[data-graph-action="newer"]');
+  const latest = nav.querySelector('[data-graph-action="latest"]');
+  const position = nav.querySelector('[data-graph-position]');
+  if(older) older.disabled = view.maxOffset <= 0 || view.offset >= view.maxOffset;
+  if(newer) newer.disabled = view.offset <= 0;
+  if(latest) latest.disabled = view.offset <= 0;
+  if(position){
+    position.max = String(view.maxOffset);
+    position.value = String(Math.max(0, view.maxOffset - view.offset));
+    position.disabled = view.maxOffset <= 0;
+  }
 }
 
 function graphStorageKey(canvas){
@@ -4512,17 +4738,36 @@ function cachedGraphPoints(canvas){
   if(Array.isArray(history) && history.length) return history;
   const cached = graphDataCache.get(canvas);
   if(cached && Array.isArray(cached.points) && cached.points.length) return cached.points;
-  return loadStoredGraphPoints(canvas);
+  const stored = loadStoredGraphPoints(canvas);
+  if(stored.length) graphHistories.set(canvas, stored); // Один JSON.parse на первое открытие даже при resize перед fetch.
+  return stored;
 }
 
-function persistGraphPoints(canvas, points){
+function persistGraphPointsNow(canvas, points){
   if(!Array.isArray(points) || !points.length) return;
   try { localStorage.setItem(graphStorageKey(canvas), JSON.stringify(points)); } catch(_){}
 }
 
+function persistGraphPoints(canvas, points){
+  if(!Array.isArray(points) || !points.length) return;
+  if(graphPersistTimers.has(canvas)) return; // Throttle: опрос раз в 5 с не должен бесконечно откладывать запись.
+  graphPersistTimers.set(canvas, setTimeout(()=>{
+    graphPersistTimers.delete(canvas);
+    persistGraphPointsNow(canvas, graphHistories.get(canvas) || points);
+  }, 15000));
+}
+
+window.addEventListener('pagehide', ()=>{
+  graphPersistTimers.forEach((timer, canvas)=>{
+    clearTimeout(timer);
+    persistGraphPointsNow(canvas, graphHistories.get(canvas) || []);
+  });
+  graphPersistTimers.clear();
+});
+
 function resizeCustomGraphs(){
   customGraphCanvases.forEach(canvas=>{
-    if(!canvas.parentElement) return;
+    if(!canvas.parentElement || !graphCanvasIsActive(canvas)) return;
     const points = cachedGraphPoints(canvas);
     const w = Math.round(canvas.parentElement.clientWidth || 0);
     const h = parseFloat(getComputedStyle(canvas).height);
@@ -4575,20 +4820,29 @@ function formatGraphDayLabel(epoch, fallbackEpoch){
   return pad(date.getUTCDate())+'.'+pad(date.getUTCMonth()+1);
 }
 
-function findGraphExtrema(points){
-  const result = [];
-  if(!points.length) return result;
-  if(points.length <= 2){ for(let i=0;i<points.length;i++) result.push(i); return result; }
-  result.push(0);
-  for(let i=1;i<points.length-1;i++){
-    const previous = Number(points[i-1].value);
-    const current = Number(points[i].value);
-    const next = Number(points[i+1].value);
-    if(!Number.isFinite(previous) || !Number.isFinite(current) || !Number.isFinite(next)) continue;
-    if((current > previous && current >= next) || (current < previous && current <= next)) result.push(i);
+function findGraphPeaks(points){
+  if(!points.length) return [];
+  const values = points.map(point=>Number(point.value));
+  const finiteValues = values.filter(Number.isFinite);
+  if(!finiteValues.length) return [];
+  const visibleRange = Math.max(...finiteValues) - Math.min(...finiteValues);
+  const minimumProminence = visibleRange > 0 ? visibleRange * 0.015 : 0;
+  const peaks = [];
+  for(let start=1; start<values.length-1; start++){
+    const current = values[start];
+    if(!Number.isFinite(current)) continue;
+    let end = start;
+    while(end + 1 < values.length && values[end + 1] === current) end++;
+    if(end >= values.length - 1) break;
+    const previous = values[start - 1];
+    const next = values[end + 1];
+    if(Number.isFinite(previous) && Number.isFinite(next) && current > previous && current > next &&
+       current - Math.max(previous, next) >= minimumProminence){
+      peaks.push(Math.floor((start + end) / 2));
+    }
+    start = end;
   }
-  result.push(points.length - 1);
-  return result;
+  return peaks;
 }
 
 function drawGraphDayMarkers(ctx, metrics){
@@ -4665,6 +4919,19 @@ function populateGraphTable(tableId, data){
   const tbody = table.querySelector('tbody');
   if(!tbody) return;
   const maxRows = 500; // 5000 DOM-строк заметно тормозят браузер, полная история остаётся на графике.
+  const lastPoint = data.length ? data[data.length - 1] : null;
+  const renderKey = lastPoint
+    ? [data.length, graphPointEpoch(lastPoint), lastPoint.value, lastPoint.events || 0,
+       typeof lastPoint.orp !== 'undefined' ? lastPoint.orp : ''].join('|')
+    : 'empty';
+  if(tbody.children.length && graphTableRenderKeys.get(tableId) === renderKey){
+    const counter = document.getElementById(tableId + '_count');
+    if(counter) counter.textContent = data.length > maxRows
+      ? ('показаны последние '+maxRows+' из '+data.length)
+      : ('записей: '+data.length);
+    return;
+  }
+  graphTableRenderKeys.set(tableId, renderKey);
   const from = Math.max(0, data.length - maxRows);
   const scroller = table.closest('.graph-table-wrap');
   const keepScroll = scroller ? scroller.scrollTop : 0;
@@ -4681,7 +4948,7 @@ function populateGraphTable(tableId, data){
   if(from > 0){
     const tr = document.createElement('tr');
     tr.className = 'graph-table-more';
-    tr.innerHTML = '<td colspan="'+(chlorineTable ? 5 : 4)+'">… ещё '+from+' более ранних записей доступны на графике прокруткой колесом</td>';
+    tr.innerHTML = '<td colspan="'+(chlorineTable ? 5 : 4)+'">… ещё '+from+' более ранних записей доступны на графике кнопками, ползунком или горизонтальным жестом</td>';
     fragment.appendChild(tr);
   }
   tbody.innerHTML = '';
@@ -4758,6 +5025,9 @@ function drawCustomGraph(canvas,data,refreshTable=true){
   ctx.fillRect(0,0,width,height);
   if(!data.length){
     graphDataCache.set(canvas, {points: [], plotLeft: 0, plotWidth: width, plotBottom: height, minValue: 0, maxValue: 1});
+    const emptyView = getGraphView(canvas);
+    emptyView.offset = emptyView.windowSize = emptyView.maxOffset = emptyView.total = 0;
+    updateGraphNavigation(canvas);
     populateGraphTable(canvas.dataset.tableId, []);
     return;
   }
@@ -4777,6 +5047,7 @@ function drawCustomGraph(canvas,data,refreshTable=true){
   view.windowSize = windowSize;
   view.maxOffset = maxOffset;
   view.total = history.length;
+  updateGraphNavigation(canvas);
   const values = pointsToDraw.map(point=>Number(point.value)).filter(Number.isFinite);
   let minValue = values.length ? Math.min(...values) : 0;
   let maxValue = values.length ? Math.max(...values) : 1;
@@ -4874,16 +5145,14 @@ function drawCustomGraph(canvas,data,refreshTable=true){
   ctx.textAlign = 'center';
   ctx.fillStyle = 'rgba(235, 242, 255, 0.86)';
   const occupiedLabels = [];
-  for(const index of findGraphExtrema(pointsToDraw)){
+  for(const index of findGraphPeaks(pointsToDraw)){
     const value = Number(pointsToDraw[index].value);
     if(!Number.isFinite(value)) continue;
     const {x, y} = graphPointPosition(metrics, index);
     const label = formatGraphNumber(value);
     const halfWidth = ctx.measureText(label).width / 2 + 4;
     if(occupiedLabels.some(span=>x-halfWidth < span[1] && x+halfWidth > span[0])) continue;
-    const previous = index > 0 ? Number(pointsToDraw[index-1].value) : value;
-    const above = index === 0 || index === pointsToDraw.length-1 || value >= previous;
-    const labelY = above ? Math.max(plotTop + 12, y - 9) : Math.min(plotBottom - 6, y + 17);
+    const labelY = Math.max(plotTop + 12, y - 9);
     ctx.fillText(label, Math.max(plotLeft + halfWidth, Math.min(plotRight - halfWidth, x)), labelY);
     occupiedLabels.push([x-halfWidth, x+halfWidth]);
   }
@@ -4929,8 +5198,37 @@ function redrawCustomGraph(canvas){
   if(history) drawCustomGraph(canvas, history, false);
 }
 
+function graphCanvasIsActive(canvas){
+  if(!canvas || document.hidden) return false;
+  const page = canvas.closest('.page');
+  return !page || page.classList.contains('active');
+}
+
+function getCustomGraphFetchState(canvas){
+  if(!customGraphFetchStates.has(canvas)) customGraphFetchStates.set(canvas, {inFlight:false, controller:null, refreshRequested:false});
+  return customGraphFetchStates.get(canvas);
+}
+
+function stopCustomGraphInterval(canvas){
+  if(customGraphTimers.has(canvas)){
+    clearTimeout(customGraphTimers.get(canvas));
+    customGraphTimers.delete(canvas);
+  }
+  const state = getCustomGraphFetchState(canvas);
+  if(state.controller){
+    try { state.controller.abort(); } catch(_){}
+  }
+}
+
 function fetchCustomGraph(canvas){
-  if(!canvas) return;
+  if(!canvas || !graphCanvasIsActive(canvas)) return;
+  const fetchState = getCustomGraphFetchState(canvas);
+  if(fetchState.inFlight){ fetchState.refreshRequested = true; return; }
+  if(customGraphTimers.has(canvas)){
+    clearTimeout(customGraphTimers.get(canvas));
+    customGraphTimers.delete(canvas);
+  }
+  fetchState.inFlight = true;
   const series = canvas.dataset.series || canvas.id;
   let history = graphHistories.get(canvas);
   if(!Array.isArray(history)){
@@ -4947,7 +5245,12 @@ function fetchCustomGraph(canvas){
     lastEpoch = 0;
   }
   const url = '/graphData?series='+encodeURIComponent(series)+(lastEpoch > 0 ? '&since='+lastEpoch : '');
-  fetch(url, {cache:'no-store'})
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  fetchState.controller = controller;
+  const timeoutId = controller ? setTimeout(()=>controller.abort(), 8000) : null;
+  const fetchOptions = controller ? {cache:'no-store', signal:controller.signal} : {cache:'no-store'};
+  let requestSucceeded = false;
+  fetch(url, fetchOptions)
     .then(response=>{ if(!response.ok) throw new Error('graph response'); return response.json(); })
     .then(rows=>{
       if(!Array.isArray(rows)) throw new Error('graph data');
@@ -4962,31 +5265,50 @@ function fetchCustomGraph(canvas){
       const limit = !isNaN(maxPointsAttr) && maxPointsAttr > 0 ? maxPointsAttr : 10;
       if(merged.length > limit) merged.splice(0, merged.length - limit);
       graphHistories.set(canvas, merged);
-      if(merged.length) persistGraphPoints(canvas, merged);
+      if(merged.length && fresh.length) persistGraphPoints(canvas, merged);
 
       const view = getGraphView(canvas);
       if(view.offset > 0 && fresh.length) view.offset += fresh.length;
       if(fresh.length || !graphDataCache.has(canvas)) drawCustomGraph(canvas, merged, true);
+      requestSucceeded = true;
     })
     .catch(()=>{
       if(history.length && !graphDataCache.has(canvas)) drawCustomGraph(canvas, history, true);
+    })
+    .finally(()=>{
+      if(timeoutId) clearTimeout(timeoutId);
+      const refreshRequested = fetchState.refreshRequested;
+      fetchState.inFlight = false;
+      fetchState.controller = null;
+      fetchState.refreshRequested = false;
+      if(refreshRequested && graphCanvasIsActive(canvas)) fetchCustomGraph(canvas);
+      else restartCustomGraphInterval(canvas, requestSucceeded ? 0 : 3000);
     });
 }
 
-function restartCustomGraphInterval(canvas){
+function restartCustomGraphInterval(canvas, retryDelay=0){
   if(!canvas) return;
-  if(customGraphTimers.has(canvas)) clearInterval(customGraphTimers.get(canvas));
-  const interval = parseInt(canvas.dataset.updateInterval);
-  const delay = (!isNaN(interval) && interval >= 5000) ? interval : 5000;
-  const timer = setInterval(()=>fetchCustomGraph(canvas), delay);
+  if(customGraphTimers.has(canvas)){
+    clearTimeout(customGraphTimers.get(canvas));
+    customGraphTimers.delete(canvas);
+  }
+  if(!graphCanvasIsActive(canvas) || getCustomGraphFetchState(canvas).inFlight) return;
+  const delay = retryDelay > 0 ? retryDelay : graphClientPollIntervalMs;
+  const timer = setTimeout(()=>fetchCustomGraph(canvas), delay);
   customGraphTimers.set(canvas, timer);
 }
 
+function refreshCustomGraphActivity(){
+  customGraphCanvases.forEach(canvas=>{
+    if(graphCanvasIsActive(canvas)) fetchCustomGraph(canvas);
+    else stopCustomGraphInterval(canvas);
+  });
+}
+
 resizeCustomGraphs();
-customGraphCanvases.forEach(canvas=>{
-  fetchCustomGraph(canvas);
-  restartCustomGraphInterval(canvas);
-});
+refreshCustomGraphActivity();
+
+document.addEventListener('visibilitychange', refreshCustomGraphActivity);
 
 
 document.querySelectorAll('.graph-update-interval').forEach(select=>{
@@ -5000,11 +5322,16 @@ document.querySelectorAll('.graph-update-interval').forEach(select=>{
     select.value = value;
     const target = document.getElementById('graph_'+graphId);
     if(!target) return;
+    const previousInterval = target.dataset.updateInterval || String(value);
     target.dataset.updateInterval = value;
     // fetch('/save?key=graphUpdateInterval_'+graphId+'&val='+encodeURIComponent(value));
-    fetch('/save?key=graphUpdateInterval_'+graphId+'&series='+encodeURIComponent(series)+'&val='+encodeURIComponent(value));
-    fetchCustomGraph(target);
-    restartCustomGraphInterval(target);
+    fetch('/save?key=graphUpdateInterval_'+graphId+'&series='+encodeURIComponent(series)+'&val='+encodeURIComponent(value))
+      .then(response=>{ if(!response.ok) throw new Error('graph settings'); fetchCustomGraph(target); })
+      .catch(()=>{
+        target.dataset.updateInterval = previousInterval;
+        select.value = previousInterval;
+        restartCustomGraphInterval(target);
+      });
   });
 });
 
@@ -5021,21 +5348,36 @@ document.querySelectorAll('.graph-max-points').forEach(input=>{
     input.value = value;
     const target = document.getElementById('graph_'+graphId);
     if(!target) return;
+    const previousMaxPoints = target.dataset.maxPoints || String(value);
+    const activeFetch = getCustomGraphFetchState(target);
+    if(activeFetch.controller){ try { activeFetch.controller.abort(); } catch(_){} }
     target.dataset.maxPoints = value;
     graphHistories.delete(target); // при увеличении лимита перечитываем ранее обрезанную историю с устройства
     graphDataCache.delete(target);
+    graphTableRenderKeys.delete(target.dataset.tableId);
+    if(graphPersistTimers.has(target)){
+      clearTimeout(graphPersistTimers.get(target));
+      graphPersistTimers.delete(target);
+    }
     try { localStorage.removeItem(graphStorageKey(target)); } catch(_){}
     getGraphView(target).offset = 0;
     // fetch('/save?key=graphMaxPoints_'+graphId+'&val='+encodeURIComponent(value));
     fetch('/save?key=graphMaxPoints_'+graphId+'&series='+encodeURIComponent(series)+'&val='+encodeURIComponent(value))
-      .then(()=>fetchCustomGraph(target))
-      .catch(()=>fetchCustomGraph(target));
+      .then(response=>{ if(!response.ok) throw new Error('graph settings'); fetchCustomGraph(target); })
+      .catch(()=>{
+        target.dataset.maxPoints = previousMaxPoints;
+        input.value = previousMaxPoints;
+        graphHistories.delete(target);
+        graphDataCache.delete(target);
+        fetchCustomGraph(target);
+      });
   });
 });
 
 window.addEventListener('resize', ()=>{
   resizeCustomGraphs();
   customGraphCanvases.forEach(canvas=>{
+    if(!graphCanvasIsActive(canvas)) return;
     if(graphHistories.has(canvas)) redrawCustomGraph(canvas);
     else fetchCustomGraph(canvas);
   });
@@ -5246,6 +5588,7 @@ window.addEventListener('resize', ()=>{
     if(typeof j.Power_H2O2 !== 'undefined') updateStat('Power_H2O2', j.Power_H2O2);
     if(typeof j.Temper_Reference !== 'undefined') updateInputValue('Temper_Reference', j.Temper_Reference);
     customGraphCanvases.forEach(canvas=>{
+      if(!graphCanvasIsActive(canvas)) return;
       const key = canvas.dataset.valueName;
       if(!key || typeof j[key] === 'undefined') return;
       canvas.dataset.liveValue = j[key];
@@ -5350,9 +5693,65 @@ function setImg(x){
       logWebHeapStats("after-send-queued"); // Контроль heap после постановки ответа в отправку
     });
 
-        server.on("/popup/auth", HTTP_GET, [](AsyncWebServerRequest *r){
+    // Вход в Web только по паролю. Страница и обработчик не требуют сессии,
+    // иначе пользователь не смог бы открыть форму входа.
+    server.on("/login", HTTP_GET, [](AsyncWebServerRequest *r){
+      if(!isAuthConfigured() || hasValidAuthSession(r)){
+        r->redirect("/");
+        return;
+      }
+      const bool failed = r->hasParam("e");
+      String page = "<!doctype html><html lang='ru'><head><meta charset='utf-8'>"
+                    "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+                    "<title>Вход в ESP-DASH</title><style>"
+                    "*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:20px;"
+                    "background:radial-gradient(circle at top,#24104b,#080b14 62%);color:#eef2ff;font-family:Inter,'Segoe UI',Arial,sans-serif}"
+                    "form{width:min(390px,100%);padding:28px;border:1px solid rgba(255,255,255,.12);border-radius:18px;"
+                    "background:rgba(18,21,31,.96);box-shadow:0 22px 60px rgba(0,0,0,.48)}"
+                    "h1{margin:0 0 7px;font-size:1.35rem}p{margin:0 0 18px;color:#a8b4cc;line-height:1.45}"
+                    "input,button{width:100%;min-height:46px;border-radius:10px;font-size:1rem}"
+                    "input{padding:10px 12px;border:1px solid rgba(255,255,255,.16);background:#0c1019;color:#fff}"
+                    "button{margin-top:14px;border:0;background:linear-gradient(135deg,#7c3aed,#06b6d4);color:#fff;font-weight:800;cursor:pointer}"
+                    ".err{margin:0 0 12px;padding:9px 11px;border-radius:9px;background:rgba(239,68,68,.14);color:#fca5a5}"
+                    "</style></head><body><form method='post' action='/login'>"
+                    "<h1>Вход в панель управления</h1><p>Введите пароль. Логин не требуется.</p>";
+      if(failed) page += "<div class='err'>Неверный пароль.</div>";
+      page += "<input name='pass' type='password' maxlength='128' autocomplete='current-password' placeholder='Пароль' autofocus required>"
+              "<button type='submit'>Войти</button></form></body></html>";
+      AsyncWebServerResponse *response = r->beginResponse(200, "text/html; charset=UTF-8", page);
+      response->addHeader("Cache-Control", "no-store");
+      response->addHeader("X-Content-Type-Options", "nosniff");
+      response->addHeader("X-Frame-Options", "DENY");
+      response->addHeader("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'");
+      r->send(response);
+    });
+
+    server.on("/login", HTTP_POST, [](AsyncWebServerRequest *r){
+      String provided;
+      if(r->hasParam("pass", true)) provided = r->getParam("pass", true)->value();
+      if(provided.length() <= maxWebPasswordBytes && (!isAuthConfigured() || secureStringEquals(provided, authPassword))){
+        AsyncWebServerResponse *response = r->beginResponse(302, "text/plain", "");
+        response->addHeader("Location", "/");
+        response->addHeader("Cache-Control", "no-store");
+        response->addHeader("Set-Cookie", "esp_session=" + authSessionToken + "; Path=/; Max-Age=2592000; HttpOnly; SameSite=Strict");
+        r->send(response);
+        return;
+      }
+      r->redirect("/login?e=1");
+    });
+
+    server.on("/logout", HTTP_GET, [](AsyncWebServerRequest *r){
+      AsyncWebServerResponse *response = r->beginResponse(302, "text/plain", "");
+      response->addHeader("Location", "/login");
+      response->addHeader("Cache-Control", "no-store");
+      response->addHeader("Set-Cookie", "esp_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict");
+      r->send(response);
+    });
+
+    server.on("/popup/auth", HTTP_POST, [](AsyncWebServerRequest *r){
+      if(!ensureAuthorized(r)) return;
       if(!ensureAdminAuthorized(r)) return;
-      r->send(200, "text/plain", "OK");
+      r->send(200, "application/json", "{\"status\":\"ok\"}");
     });
 
 
@@ -5423,6 +5822,7 @@ function setImg(x){
           saveGraphSeries("main", graphPoints);
           saveGraphSettings("main", GraphSettings{updateInterval, maxPoints});
           seriesConfig["main"].maxPoints = maxPoints;
+          invalidateWebUiCache();
         }
         else if(key=="graphMainUpdateInterval") {
           GraphDataGuard guard;
@@ -5433,6 +5833,7 @@ function setImg(x){
           saveGraphSettings("main", GraphSettings{updateInterval, maxPoints});
           seriesConfig["main"].updateInterval = updateInterval;
           seriesLastUpdate["main"] = 0;
+          invalidateWebUiCache();
         }
         else if(key.startsWith("graphUpdateInterval_")) {
           GraphDataGuard guard;
@@ -5453,6 +5854,7 @@ function setImg(x){
           seriesConfig[series].updateInterval = cfg.updateInterval;
           seriesConfig[series].maxPoints = cfg.maxPoints;
           seriesLastUpdate[series] = 0;
+          invalidateWebUiCache();
         }
         else if(key.startsWith("graphMaxPoints_")) {
           GraphDataGuard guard;
@@ -5472,6 +5874,7 @@ function setImg(x){
             trimGraphPoints(it->second, valInt);
             saveGraphSeries(it->first, it->second);
           }
+          invalidateWebUiCache();
         }
         else if(key=="ssid") saveValue<String>(key.c_str(), valStr);
         else if(key=="pass") saveValue<String>(key.c_str(), valStr);
@@ -5618,21 +6021,40 @@ function setImg(x){
 
     server.on("/profile/save", HTTP_POST, [](AsyncWebServerRequest *r){
       if(!ensureAuthorized(r)) return;
-      auto paramOr = [&](const char* name, const String &fallback)->String{
+      auto formValue = [&](const char* name)->String{
         if(r->hasParam(name, true)) return r->getParam(name, true)->value();
         if(r->hasParam(name)) return r->getParam(name)->value();
-        return fallback;
+        return String();
       };
-      authUsername = paramOr("user", authUsername);
-      authPassword = paramOr("pass", authPassword);
-      adminUsername = paramOr("adminUser", adminUsername);
-      adminPassword = paramOr("adminPass", adminPassword);
-      saveValue<String>("authUser", authUsername);
+      const String newPassword = formValue("pass");
+      const String newAdminPassword = formValue("adminPass");
+      if(newPassword.length() > maxWebPasswordBytes || newAdminPassword.length() > maxWebPasswordBytes){
+        r->send(400, "application/json", "{\"error\":\"password_too_long\"}");
+        return;
+      }
+      const bool clearPassword = formValue("clearPass") == "1";
+      const bool clearAdminPassword = formValue("clearAdminPass") == "1";
+      const String previousPassword = authPassword;
+      const String previousAdminPassword = adminPassword;
+      if(clearPassword) authPassword = "";
+      else if(newPassword.length()) authPassword = newPassword;
+      if(clearAdminPassword) adminPassword = "";
+      else if(newAdminPassword.length()) adminPassword = newAdminPassword;
       saveValue<String>("authPass", authPassword);
-      saveValue<String>("adminUser", adminUsername);
       saveValue<String>("adminPass", adminPassword);
-      invalidateWebUiCache();
-      r->send(200, "application/json", "{\\\"status\\\":\\\"saved\\\"}");
+      const bool passwordChanged = !secureStringEquals(previousPassword, authPassword);
+      const bool adminPasswordChanged = !secureStringEquals(previousAdminPassword, adminPassword);
+      if(passwordChanged) regenerateAuthSession();
+      if(passwordChanged || adminPasswordChanged) invalidateWebUiCache();
+      AsyncWebServerResponse *response = r->beginResponse(200, "application/json",
+        String("{\"status\":\"saved\",\"authConfigured\":") + (isAuthConfigured() ? "true" : "false") +
+        ",\"adminConfigured\":" + (isAdminAuthConfigured() ? "true" : "false") + "}");
+      response->addHeader("Cache-Control", "no-store");
+      if(passwordChanged){
+        if(isAuthConfigured()) response->addHeader("Set-Cookie", "esp_session=" + authSessionToken + "; Path=/; Max-Age=2592000; HttpOnly; SameSite=Strict");
+        else response->addHeader("Set-Cookie", "esp_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict");
+      }
+      r->send(response);
     });
 
     server.on("/button", HTTP_GET, [](AsyncWebServerRequest *r){
@@ -5642,6 +6064,21 @@ function setImg(x){
         int state = r->getParam("state")->value().toInt();
         invalidateLiveJsonCache();
        if(applyWaterControlRequest(id, state != 0)){ // Кнопки слива/долива применяем через защитную логику.
+          r->send(200, "text/plain", "OK");
+          return;
+       }
+       if(id == "button_Lamp"){
+          applyLampControlMode(state ? "on" : "off");
+          r->send(200, "text/plain", "OK");
+          return;
+       }
+       if(id == "button_WS2815"){
+          applyRgbControlMode(state ? "on" : "off");
+          r->send(200, "text/plain", "OK");
+          return;
+       }
+       if(id == "Pow_Ul_light"){
+          applyUlLightControlMode(state ? "on" : "off");
           r->send(200, "text/plain", "OK");
           return;
        }
@@ -5780,7 +6217,6 @@ function setImg(x){
       doc["WifiConnectCount"] = wifiInfo.connectCount;
       doc["WifiLastConnectedAgoSec"] = wifiInfo.lastConnectedAgoSec;
       doc["WifiLastDisconnectedAgoSec"] = wifiInfo.lastDisconnectedAgoSec;
-      doc["button_Lamp"] = Lamp ? 1 : 0; // Отображение состояния кнопки лампы, которая не объявлена через UI
       for (const auto &timer : ui.allTimers()) {
         doc[String(timer.id + "_ON")] = formatMinutesToTime(timer.on);
         doc[String(timer.id + "_OFF")] = formatMinutesToTime(timer.off);
@@ -5793,6 +6229,8 @@ function setImg(x){
       doc["Rs485UartMode"] = Rs485UartMode;
       doc["Rs485SlaveId"] = Rs485SlaveId;
       doc["Rs485PollIntervalMs"] = Rs485PollIntervalMs;
+      doc["Rs485RelayDataFresh"] = rs485RelayDataFresh() ? 1 : 0;
+      doc["Rs485InputDataFresh"] = rs485InputDataFresh() ? 1 : 0;
       JsonArray rs485Relays = doc["Rs485Relays"].to<JsonArray>();
       JsonArray rs485RelayActual = doc["Rs485RelayActual"].to<JsonArray>();
       JsonArray rs485Inputs = doc["Rs485Inputs"].to<JsonArray>();
@@ -6152,7 +6590,7 @@ server.on("/getImage", HTTP_GET, [](AsyncWebServerRequest *r){
 
 
     server.serveStatic("/anim1.gif", SPIFFS, "/anim1.gif"); // Отдаёт GIF-анимацию anim1.gif из SPIFFS по HTTP пути /anim1.gif
-    server.serveStatic("/Basin.jpg", SPIFFS, "/Basin.jpg"); // Отдаёт изображение Basin.jpg из SPIFFS по HTTP пути /Basin.jpg
+    server.serveStatic("/Basin.gif", SPIFFS, "/Basin.gif"); // Оптимизированная анимация течения воды для активной промывки.
     server.serveStatic("/Basin_RGB.jpg", SPIFFS, "/Basin_RGB.jpg"); // Отдаёт изображение Basin_RGB.jpg из SPIFFS.
     server.serveStatic("/Basin_Lamp.jpg", SPIFFS, "/Basin_Lamp.jpg"); // Отдаёт изображение Basin_Lamp.jpg из SPIFFS.
     server.serveStatic("/Basin_RGB_LAMP.jpg", SPIFFS, "/Basin_RGB_LAMP.jpg"); // Отдаёт изображение Basin_RGB_LAMP.jpg из SPIFFS.

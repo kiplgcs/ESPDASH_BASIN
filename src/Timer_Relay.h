@@ -565,6 +565,40 @@ inline void updateCleanSequence(){ // Основная логика послед
 
 
 
+inline void updateLightingControlOutputs(bool timeAvailable, int currentHour, int currentMinute) {
+  UITimerEntry &lampTimer = ui.timer("LampTimer");
+  UITimerEntry &rgbTimer = ui.timer("RgbTimer");
+  UITimerEntry &ulLightTimer = ui.timer("UlLightTimer");
+  const auto timerWindow = [&](const UITimerEntry &entry){
+    return timeAvailable && checkTimeInInterval(currentHour, currentMinute, entry.on, entry.off);
+  };
+
+  if (SetLamp == "off") Lamp = false;
+  else if (SetLamp == "on") Lamp = true;
+  else if (SetLamp == "auto") Lamp = applyLightAutoHysteresis(Lamp, LampLightOffThreshold, LampLightOnThreshold);
+  else if (SetLamp == "timer") Lamp = timerWindow(lampTimer);
+  else if (SetLamp == "auto_timer_off") Lamp = applyLightSensorOnTimerOff(Lamp, LampLightOffThreshold, timerWindow(lampTimer));
+  else if (Power_Time1) Lamp = timerWindow(lampTimer);
+  else if (Lamp_autosvet) Lamp = applyLightAutoHysteresis(Lamp, LampLightOffThreshold, LampLightOnThreshold);
+
+  if (SetRGB == "off") Pow_WS2815 = false;
+  else if (SetRGB == "on") Pow_WS2815 = true;
+  else if (SetRGB == "auto") Pow_WS2815 = applyLightAutoHysteresis(Pow_WS2815, RgbLightOffThreshold, RgbLightOnThreshold);
+  else if (SetRGB == "timer") Pow_WS2815 = timerWindow(rgbTimer);
+  else if (SetRGB == "auto_timer_off") Pow_WS2815 = applyLightSensorOnTimerOff(Pow_WS2815, RgbLightOffThreshold, timerWindow(rgbTimer));
+  else if (WS2815_Time1) Pow_WS2815 = timerWindow(rgbTimer);
+  else if (Pow_WS2815_autosvet) Pow_WS2815 = applyLightAutoHysteresis(Pow_WS2815, RgbLightOffThreshold, RgbLightOnThreshold);
+
+  if (SetUlLight == "off") Pow_Ul_light = false;
+  else if (SetUlLight == "on") Pow_Ul_light = true;
+  else if (SetUlLight == "auto") Pow_Ul_light = applyLightAutoHysteresis(Pow_Ul_light, UlLightOffThreshold, UlLightOnThreshold);
+  else if (SetUlLight == "timer") Pow_Ul_light = timerWindow(ulLightTimer);
+  else if (SetUlLight == "auto_timer_off") Pow_Ul_light = applyLightSensorOnTimerOff(Pow_Ul_light, UlLightOffThreshold, timerWindow(ulLightTimer));
+  else if (UlLight_sensorTimerOff) Pow_Ul_light = applyLightSensorOnTimerOff(Pow_Ul_light, UlLightOffThreshold, timerWindow(ulLightTimer));
+  else if (UlLight_autosvet) Pow_Ul_light = applyLightAutoHysteresis(Pow_Ul_light, UlLightOffThreshold, UlLightOnThreshold);
+  else if (Ul_light_Time) Pow_Ul_light = timerWindow(ulLightTimer);
+}
+
 void TimerControlRelay(int interval) {
   static unsigned long timer;
   if (interval + timer > millis()) return; 
@@ -576,6 +610,7 @@ void TimerControlRelay(int interval) {
     currentHour = 0; // Ставим безопасную заглушку для часов.
     currentMinute = 0; // Ставим безопасную заглушку для минут.
   }
+  updateLightingControlOutputs(timeAvailable, currentHour, currentMinute); // Автосвет работает и без часов; только таймерные режимы требуют времени.
   if (timeAvailable) { // Все расписания работают только когда текущее время реально прочитано.
 // //---------------------------------------------------------------------------------
 // //---------------------------------------------------------------------------------
@@ -587,6 +622,7 @@ void TimerControlRelay(int interval) {
                 //     Lamp=true;
                 //   } else if (Power_Time1==true) {Lamp=false; } // Выключаем
             //Проверяем режим освещения и применяем логику включения лампы
+#if 0 // Superseded by updateLightingControlOutputs(); kept only for source-history context.
                 UITimerEntry &lampTimer = ui.timer("LampTimer");
                 UITimerEntry &rgbTimer = ui.timer("RgbTimer");
                 UITimerEntry &filtrTimer1 = ui.timer("FiltrTimer1");
@@ -649,6 +685,11 @@ void TimerControlRelay(int interval) {
                       }
                     }
     
+#endif
+    UITimerEntry &filtrTimer1 = ui.timer("FiltrTimer1");
+    UITimerEntry &filtrTimer2 = ui.timer("FiltrTimer2");
+    UITimerEntry &filtrTimer3 = ui.timer("FiltrTimer3");
+
 //   if (checkTimeInInterval(hours, minutes, Filtr_timeON1, Filtr_timeOFF1)&&Filtr_Time1==true || checkTimeInInterval(hours, minutes, Filtr_timeON2, Filtr_timeOFF2)&&Filtr_Time2==true || checkTimeInInterval(hours, minutes, Filtr_timeON3, Filtr_timeOFF3)&&Filtr_Time3==true) {
 //      if(!Power_Clean){Power_Filtr=true;} //преимущество очистки - отключаем фильтрацию в любом случае (даже если включен по таймерам), если подошло время очистки фильтра
 //     } else if (Filtr_Time1==true || Filtr_Time2==true || Filtr_Time3==true) {

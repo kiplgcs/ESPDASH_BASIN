@@ -33,7 +33,7 @@ inline void interface(){ // Декларатиынве функции интер
   
     // Общая информация по бассейну
     UI_PAGE();
-    UI_IMAGE("Image1", "/Basin.jpg", "width:100%;height:auto;border-radius:0;box-shadow:none;");
+    UI_IMAGE("Image1", "/Basin.gif", "width:100%;height:auto;border-radius:0;box-shadow:none;");
     UI_IMAGE("PoolLevelIcon", "/level_between_levels.png", "width:6.8%;height:auto;left:32%;top:8%;border-radius:8px;box-shadow:0 8px 18px rgba(0,0,0,0.35);pointer-events:none;");
     
     UI_TEXT("OverlayPoolTemp", OverlayPoolTemp, "x:57%;y:35%;fontSize:14;color:#00ff00");
@@ -154,6 +154,7 @@ inline void interface(){ // Декларатиынве функции интер
 
     // Управление лампой
     UI_PAGE();
+    UI_BUTTON_DEFAULT("button_Lamp", Lamp, "gray", "💡 Включить / Отключить: лампу бассейна", 0);
     UI_TEXT("InfoString2", InfoString2, "x:45%;y:1%;fontSize:22;color:#00ff00");
     UI_SELECT_CB("SetLamp", SetLamp, (std::initializer_list<UIOption>{{"off", "Лампа отключена постоянно"},
                                      {"on", "Лампа включена постоянно"},
@@ -388,6 +389,7 @@ UI_COLOR("LEDColor", LEDColor, "🎨 Цвет подсветки");
 
     // Уличное освещение
     UI_PAGE();
+    UI_BUTTON_DEFAULT("Pow_Ul_light", Pow_Ul_light, "gray", "🚏 Включить / Отключить: уличное освещение", 0);
     UI_SELECT_CB("SetUlLight", SetUlLight, (std::initializer_list<UIOption>{{"off", "Уличное освещение отключено постоянно"},
                                           {"on", "Уличное освещение включено постоянно"},
                                           {"auto", "Включение по датчику освещенности (по порогам)"},

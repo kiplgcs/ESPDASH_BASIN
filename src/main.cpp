@@ -171,11 +171,28 @@ void setup() {
   Serial.println("[BOOT] Applying MQTT state...");
   applyMqttState();
 
-  // Загрузка настроек доступа к веб-интерфейсу
-  authUsername = loadValue<String>("authUser", "");
-  authPassword = loadValue<String>("authPass", "");
-  adminUsername = loadValue<String>("adminUser", "");
-  adminPassword = loadValue<String>("adminPass", "");
+  // Одноразовая миграция старой пары логин+пароль на доступ только по паролю.
+  // Пустой старый логин означал отключенную защиту, поэтому такой забытый пароль не должен заблокировать Web после обновления.
+  const int passwordAuthVersion = loadValue<int>("authPwdV2", 0);
+  if(passwordAuthVersion < 1){
+    const String legacyAuthUser = loadValue<String>("authUser", "");
+    const String legacyAdminUser = loadValue<String>("adminUser", "");
+    const String legacyAuthPass = loadValue<String>("authPass", "");
+    const String legacyAdminPass = loadValue<String>("adminPass", "");
+    authPassword = legacyAuthUser.length() ? legacyAuthPass : String();
+    adminPassword = legacyAdminUser.length() ? legacyAdminPass : String();
+    saveValue<String>("authPass", authPassword);
+    saveValue<String>("adminPass", adminPassword);
+    // Маркер пишем до очистки legacy-ключей: при потере питания миграция либо
+    // безопасно повторится, либо загрузит уже сохранённые password-only значения.
+    saveValue<int>("authPwdV2", 1);
+    saveValue<String>("authUser", "");
+    saveValue<String>("adminUser", "");
+  } else {
+    authPassword = loadValue<String>("authPass", "");
+    adminPassword = loadValue<String>("adminPass", "");
+  }
+  regenerateAuthSession();
 
   beginWebUpdate();  // Запуск OTA-обновлений на порту 8080
 

@@ -68,7 +68,7 @@ inline String mqttAvailabilityTopicString(){
   return mqttTopicFromLegacy(String(mqttAvailabilityTopic));
 }
 
-#if 1 // MQTT Discovery отключен (слишком много кода и не нужен)
+#if 1 // MQTT Discovery включен
 inline const char* mqttDiscoveryPrefix = "homeassistant"; // префикс MQTT Discovery
 inline bool mqttDiscoveryPending = false; // публикация после первого успешного MQTT loop
 
@@ -100,7 +100,7 @@ inline IPAddress mqttResolvedIp; // резолвенный IP адрес
 inline String mqttResolvedHostName; // хост для которого выполнен резолв
 
 
-#if 1 // MQTT Discovery отключен (слишком много кода и не нужен)
+#if 1 // MQTT Discovery включен
 enum DiscoveryStage {
   DISCOVERY_NONE,
   DISCOVERY_MAIN_ENTITIES,
@@ -114,6 +114,8 @@ inline size_t mqttDiscoveryIndex = 0; // индекс публикации су�
 #endif
 
 extern float DS1; // температура воды
+extern float DS2; // температура после нагревателя
+extern bool DS2Available; // достоверность температуры после нагревателя
 extern float PH; // pH воды
 extern float ppmCl; // уровень хлора
 extern int corrected_ORP_Eh_mV; // ORP, мВ
@@ -124,6 +126,8 @@ extern String OverlayLevelLower; // нижний уровень (оверлей)
 extern String OverlayPh; // pH (оверлей)
 extern String OverlayChlorine; // хлор (оверлей)
 extern String OverlayFilterState; // состояние фильтрации (строка)
+extern String OverlayDrainPit; // состояние сливной ямы (оверлей)
+extern String OverlayLight; // освещенность (оверлей)
 extern String InfoString2; // строка статуса лампы
 extern String InfoStringDIN; // строка статуса DIN
 extern String ThemeColor; // цвет темы
@@ -207,11 +211,59 @@ extern bool Lamp_autosvet; // авто-режим лампы
 extern bool Power_Time1; // режим таймера лампы
 extern bool Pow_WS2815_autosvet; // авто-режим RGB
 extern String DaysSelect; // выбранные дни промывки
+extern bool ManualPulse_H2O2_Active; // фактический ручной импульс насоса NaOCl
+extern bool ManualPulse_ACO_Active; // фактический ручной импульс насоса ACO
+extern bool ReadRelayArray[16]; // фактические состояния реле Modbus
+extern bool ReadInputArray[16]; // фактические дискретные входы Modbus
+extern bool AktualReadRelay; // признак актуального ответа блока реле
+extern bool AktualReadInput; // признак актуального ответа блока входов
+extern bool Rs485Enabled;
+extern int Rs485BaudRate;
+extern String Rs485UartMode;
+extern int Rs485SlaveId;
+extern int Rs485PollIntervalMs;
+extern bool PoolLowerLevelLowConfirmed; // подтвержденный нижний уровень бассейна
+extern bool PoolUpperLevelReachedConfirmed; // подтвержденный верхний уровень бассейна
+extern bool DrainPitFullConfirmed; // подтвержденное заполнение сливной ямы
+extern int LampLightOffThreshold; // порог включения лампы в темноте
+extern int LampLightOnThreshold; // порог выключения лампы при свете
+extern int RgbLightOffThreshold; // порог включения RGB в темноте
+extern int RgbLightOnThreshold; // порог выключения RGB при свете
+extern int UlLightOffThreshold; // порог включения улицы в темноте
+extern int UlLightOnThreshold; // порог выключения улицы при свете
+extern String LightSensorLiveInfo; // диагностическая строка датчика освещенности
+extern String LampLightAutoState; // состояние автоматики лампы
+extern String RgbLightAutoState; // состояние автоматики RGB
+extern String UlLightAutoState; // состояние автоматики улицы
+extern String PoolWaterLevelStageInfo; // этап автоматики уровня бассейна
+extern String DrainPitStageInfo; // этап автоматики слива
+extern int ToppingWorkMinutes; // время работы долива
+extern int ToppingPauseMinutes; // пауза долива
+extern int DrainWorkMinutes; // время порции слива
+extern int DrainPauseMinutes; // пауза слива
+extern int DrainCyclesTarget; // заданное число порций слива
+extern int DrainCyclesDone; // выполненное число порций слива
+extern bool AirPump; // ручной компрессор промывки
+extern bool AirPumpAuto; // автоматический компрессор промывки
+extern bool SolValveFilBack; // ручной клапан промывки
+extern bool ValveBackwashAuto; // автоматический клапан промывки
+extern bool SolValveFiltration; // ручной клапан фильтрации
+extern bool ValveFiltrationAuto; // автоматический клапан фильтрации
+extern bool SolSandDump; // ручной сброс песка
+extern bool SolSandDumpAuto; // автоматический сброс песка
+extern bool CleanSequenceActive; // активная последовательность промывки
+extern int TimerAirSetting; // время компрессора промывки
+extern int TimerValveSetting; // время переключения клапанов
+extern int TimerBackwashSetting; // время обратной промывки
+extern int TimerSolSandDump; // время сброса песка
+extern String CurrentTime; // текущее локальное время
+extern int gmtOffset_correct; // текущий часовой пояс
 class UIRegistry; // forward declaration
 extern UIRegistry ui; // доступ к UI-реестру таймеров
 void syncCleanDaysFromSelection(); // синхронизация дней промывки
 String uiValueForId(const String &id); // получение значения UI по id
 bool uiApplyValueForId(const String &id, const String &value); // применение значения UI по id
+bool applyRs485ConfigRequest(const String &key, const String &value);
 
 String formatMinutesToTime(uint16_t minutes); // форматирование минут в HH:MM
 bool mqttApplyTimerField(const String &fieldId, const String &value); // применить значение таймера
@@ -306,6 +358,90 @@ inline bool mqttApplyDualRangeFloat(const String &payload, float &minRef, float 
 
 inline void publishMqttStateString(const char* topic, const String &value); // forward declaration
 inline void publishMqttStateBool(const char* topic, bool value); // forward declaration
+inline void publishMqttStateFloat(const char* topic, float value); // forward declaration
+inline void publishMqttStateInt(const char* topic, int value); // forward declaration
+
+inline bool mqttParseBooleanPayload(String payload, bool &value){ // принимает только явные MQTT boolean, не превращая мусор в OFF
+  payload.trim();
+  payload.toLowerCase();
+  if(payload == "1" || payload == "on" || payload == "true"){
+    value = true;
+    return true;
+  }
+  if(payload == "0" || payload == "off" || payload == "false"){
+    value = false;
+    return true;
+  }
+  return false;
+}
+
+inline bool mqttParseFiniteFloat(String payload, float &value){ // строгий парсер числовых настроек
+  payload.trim();
+  if(payload.length() == 0) return false;
+  char *end = nullptr;
+  const float parsed = strtof(payload.c_str(), &end);
+  if(end == payload.c_str() || end == nullptr || *end != '\0' || !isfinite(parsed)) return false;
+  value = parsed;
+  return true;
+}
+
+inline bool mqttParseInteger(String payload, int &value){ // строгий парсер целых настроек
+  payload.trim();
+  if(payload.length() == 0) return false;
+  char *end = nullptr;
+  const long parsed = strtol(payload.c_str(), &end, 10);
+  if(end == payload.c_str() || end == nullptr || *end != '\0') return false;
+  value = static_cast<int>(parsed);
+  return true;
+}
+
+inline bool mqttValidateDualFloatPayload(const String &payload){ // проверка формата min-max до передачи UI-валидатору
+  const int separator = payload.indexOf('-');
+  if(separator <= 0 || separator >= static_cast<int>(payload.length()) - 1) return false;
+  float first = 0.0f;
+  float second = 0.0f;
+  return mqttParseFiniteFloat(payload.substring(0, separator), first) &&
+         mqttParseFiniteFloat(payload.substring(separator + 1), second);
+}
+
+inline void mqttBeginHomeAssistantReplay(bool cleanupLegacy){ // discovery, затем принудительный полный state-снимок
+  (void)cleanupLegacy; // Устаревшие retained config очищаются один раз за boot; reconnect не повторяет лишний burst.
+  mqttForcePublishAllStates = true;
+  mqttLastPublish = 0;
+#if 1 // MQTT Discovery включен
+  mqttDiscoveryStage = DISCOVERY_NONE;
+  mqttDiscoveryIndex = 0;
+  mqttDiscoveryLastAttempt = 0;
+  mqttDiscoveryPending = true;
+  mqttDiscoveryFullDevicePublished = false;
+  mqttDiscoveryLastMaxPayload = 0;
+  mqttDiscoveryRetryIndex = 0;
+  mqttDiscoveryRetryCount = 0;
+#endif
+}
+
+inline void mqttPublishWaterControlStates(){ // публикует итог после применения взаимных блокировок воды
+  publishMqttStateBool("home/esp32/Activation_Water_Level", Activation_Water_Level);
+  publishMqttStateBool("home/esp32/Power_Topping", Power_Topping);
+  publishMqttStateBool("home/esp32/Power_Drain", Power_Drain);
+}
+
+inline void mqttPublishChemistryLimits(){ // один предел может нормализовать соседний, поэтому отправляем весь блок
+  publishMqttStateFloat("home/esp32/PH_Lower", PH_Lower);
+  publishMqttStateFloat("home/esp32/PH_Upper", PH_Upper);
+  publishMqttStateFloat("home/esp32/PH_setting", PH_Upper); // совместимый старый state topic
+  publishMqttStateFloat("home/esp32/CL_Lower", CL_Lower);
+  publishMqttStateFloat("home/esp32/CL_Upper", CL_Upper);
+}
+
+inline void mqttPublishLightThresholds(){ // нормализация одной границы может изменить вторую
+  publishMqttStateInt("home/esp32/LampLightOffThreshold", LampLightOffThreshold);
+  publishMqttStateInt("home/esp32/LampLightOnThreshold", LampLightOnThreshold);
+  publishMqttStateInt("home/esp32/RgbLightOffThreshold", RgbLightOffThreshold);
+  publishMqttStateInt("home/esp32/RgbLightOnThreshold", RgbLightOnThreshold);
+  publishMqttStateInt("home/esp32/UlLightOffThreshold", UlLightOffThreshold);
+  publishMqttStateInt("home/esp32/UlLightOnThreshold", UlLightOnThreshold);
+}
 
 inline bool mqttPayloadIsOn(String payload){ // проверка включения
   payload.trim(); // очистка
@@ -332,100 +468,15 @@ inline String mqttNormalizedMode(String value){
 }
 
 inline void mqttApplyLampMode(const String &rawMode){
-  SetLamp = mqttNormalizedMode(rawMode);
-  if(SetLamp == "on"){
-    Lamp = true;
-    Lamp_autosvet = false;
-    Power_Time1 = false;
-  } else if(SetLamp == "auto"){
-    Lamp = false;
-    Lamp_autosvet = true;
-    Power_Time1 = false;
-  } else if(SetLamp == "auto_timer_off"){
-    Lamp = false;
-    Lamp_autosvet = false;
-    Power_Time1 = false;
-  } else if(SetLamp == "timer"){
-    Lamp = false;
-    Lamp_autosvet = false;
-    Power_Time1 = true;
-  } else {
-    Lamp = false;
-    Lamp_autosvet = false;
-    Power_Time1 = false;
-  }
-
-  saveValue<String>("SetLamp", SetLamp);
-  saveButtonState("button_Lamp", Lamp ? 1 : 0);
-  saveValue<int>("Lamp_autosvet", Lamp_autosvet ? 1 : 0);
-  saveValue<int>("Power_Time1", Power_Time1 ? 1 : 0);
+  applyLampControlMode(rawMode);
 }
 
 inline void mqttApplyRgbMode(const String &rawMode){
-  SetRGB = mqttNormalizedMode(rawMode);
-  if(SetRGB == "on"){
-    Pow_WS2815 = true;
-    Pow_WS2815_autosvet = false;
-    WS2815_Time1 = false;
-  } else if(SetRGB == "auto"){
-    Pow_WS2815 = false;
-    Pow_WS2815_autosvet = true;
-    WS2815_Time1 = false;
-  } else if(SetRGB == "auto_timer_off"){
-    Pow_WS2815 = false;
-    Pow_WS2815_autosvet = false;
-    WS2815_Time1 = false;
-  } else if(SetRGB == "timer"){
-    Pow_WS2815 = false;
-    Pow_WS2815_autosvet = false;
-    WS2815_Time1 = true;
-  } else {
-    Pow_WS2815 = false;
-    Pow_WS2815_autosvet = false;
-    WS2815_Time1 = false;
-  }
-
-  saveValue<String>("SetRGB", SetRGB);
-  saveButtonState("button_WS2815", Pow_WS2815 ? 1 : 0);
-  saveValue<int>("Pow_WS2815", Pow_WS2815 ? 1 : 0);
-  saveValue<int>("Pow_WS2815_autosvet", Pow_WS2815_autosvet ? 1 : 0);
-  saveValue<int>("WS2815_Time1", WS2815_Time1 ? 1 : 0);
+  applyRgbControlMode(rawMode);
 }
 
 inline void mqttApplyUlLightMode(const String &rawMode){
-  SetUlLight = mqttNormalizedMode(rawMode);
-  if(SetUlLight == "on"){
-    Pow_Ul_light = true;
-    Ul_light_Time = false;
-    UlLight_autosvet = false;
-    UlLight_sensorTimerOff = false;
-  } else if(SetUlLight == "auto"){
-    Pow_Ul_light = false;
-    Ul_light_Time = false;
-    UlLight_autosvet = true;
-    UlLight_sensorTimerOff = false;
-  } else if(SetUlLight == "auto_timer_off"){
-    Pow_Ul_light = false;
-    Ul_light_Time = false;
-    UlLight_autosvet = false;
-    UlLight_sensorTimerOff = true;
-  } else if(SetUlLight == "timer"){
-    Pow_Ul_light = false;
-    Ul_light_Time = true;
-    UlLight_autosvet = false;
-    UlLight_sensorTimerOff = false;
-  } else {
-    Pow_Ul_light = false;
-    Ul_light_Time = false;
-    UlLight_autosvet = false;
-    UlLight_sensorTimerOff = false;
-  }
-
-  saveValue<String>("SetUlLight", SetUlLight);
-  saveButtonState("Pow_Ul_light", Pow_Ul_light ? 1 : 0);
-  saveValue<int>("Ul_light_Time", Ul_light_Time ? 1 : 0);
-  saveValue<int>("UlLight_autosvet", UlLight_autosvet ? 1 : 0);
-  saveValue<int>("UlLight_sensorTimerOff", UlLight_sensorTimerOff ? 1 : 0);
+  applyUlLightControlMode(rawMode);
 }
 
 inline String mqttLedAutoplayState(){
@@ -459,51 +510,112 @@ inline void handleMqttCommandMessage(char* topic, byte* payload, unsigned int le
   }
   message.trim(); // очистка
 
+  if(topicStr == "homeassistant/status"){ // HA birth: retained discovery уже есть, но state topics могли потеряться при рестарте HA
+    String status = message;
+    status.toLowerCase();
+    if(status == "online") mqttBeginHomeAssistantReplay(false);
+    return;
+  }
+
   if(topicStr == "home/esp32/Power_Filtr/set"){
-    Power_Filtr = mqttPayloadIsOn(message); // обновление состояния
+    bool requestedState = false;
+    if(!mqttParseBooleanPayload(message, requestedState)) return;
+    Power_Filtr = requestedState; // обновление состояния
     saveValue<int>("Power_Filtr", Power_Filtr ? 1 : 0); // сохранение
-    publishMqttStateBool("home/esp32/Power_Filtr", Power_Filtr); // публикация
+    publishMqttStateBool("home/esp32/Power_Filtr", Power_Filtr || (rs485RelayDataFresh() && ReadRelayArray[8])); // stale readback не маскирует фактическую потерю связи
     return;
   }
 
   if(topicStr == "home/esp32/Filtr_Time1/set"){
-    Filtr_Time1 = mqttPayloadIsOn(message); // обновление состояния
+    bool requestedState = false;
+    if(!mqttParseBooleanPayload(message, requestedState)) return;
+    Filtr_Time1 = requestedState; // обновление состояния
     saveValue<int>("Filtr_Time1", Filtr_Time1 ? 1 : 0); // сохранение
     publishMqttStateBool("home/esp32/Filtr_Time1", Filtr_Time1); // публикация
     return;
   }
 
   if(topicStr == "home/esp32/Filtr_Time2/set"){
-    Filtr_Time2 = mqttPayloadIsOn(message); // обновление состояния
+    bool requestedState = false;
+    if(!mqttParseBooleanPayload(message, requestedState)) return;
+    Filtr_Time2 = requestedState; // обновление состояния
     saveValue<int>("Filtr_Time2", Filtr_Time2 ? 1 : 0); // сохранение
     publishMqttStateBool("home/esp32/Filtr_Time2", Filtr_Time2); // публикация
     return;
   }
 
   if(topicStr == "home/esp32/Filtr_Time3/set"){
-    Filtr_Time3 = mqttPayloadIsOn(message); // обновление состояния
+    bool requestedState = false;
+    if(!mqttParseBooleanPayload(message, requestedState)) return;
+    Filtr_Time3 = requestedState; // обновление состояния
     saveValue<int>("Filtr_Time3", Filtr_Time3 ? 1 : 0); // сохранение
     publishMqttStateBool("home/esp32/Filtr_Time3", Filtr_Time3); // публикация
     return;
   }
 
   if(topicStr == "home/esp32/Power_Clean/set"){
-    Power_Clean = mqttPayloadIsOn(message); // обновление состояния
+    bool requestedState = false;
+    if(!mqttParseBooleanPayload(message, requestedState)) return;
+    Power_Clean = requestedState; // обновление состояния
     saveValue<int>("Power_Clean", Power_Clean ? 1 : 0); // сохранение
-    publishMqttStateBool("home/esp32/Power_Clean", Power_Clean); // публикация
+    publishMqttStateBool("home/esp32/Power_Clean", Power_Clean || CleanSequenceActive); // Реле 4 является свободным каналом, а не статусом промывки.
     return;
   }
 
-    if(topicStr == "home/esp32/Power_Drain/set"){
-    Power_Drain = mqttPayloadIsOn(message); // обновление состояния
-    saveValue<int>("Power_Drain", Power_Drain ? 1 : 0); // сохранение
-    publishMqttStateBool("home/esp32/Power_Drain", Power_Drain); // публикация
+  if(topicStr == "home/esp32/Power_Drain/set" ||
+     topicStr == "home/esp32/Power_Topping/set" ||
+     topicStr == "home/esp32/Activation_Water_Level/set"){
+    bool requestedState = false;
+    if(!mqttParseBooleanPayload(message, requestedState)) return;
+    String controlId;
+    if(topicStr == "home/esp32/Power_Drain/set") controlId = "Power_Drain";
+    else if(topicStr == "home/esp32/Power_Topping/set") controlId = "Power_Topping";
+    else controlId = "Activation_Water_Level";
+    if(applyWaterControlRequest(controlId, requestedState)) mqttPublishWaterControlStates();
+    return;
+  }
+
+  if(topicStr == "home/esp32/Rs485Enabled/set" ||
+     topicStr == "home/esp32/Rs485BaudRate/set" ||
+     topicStr == "home/esp32/Rs485UartMode/set" ||
+     topicStr == "home/esp32/Rs485SlaveId/set" ||
+     topicStr == "home/esp32/Rs485PollIntervalMs/set"){
+    const String prefix = "home/esp32/";
+    const String settingId = topicStr.substring(prefix.length(), topicStr.length() - 4);
+    String normalizedValue = message;
+    if(settingId == "Rs485Enabled"){
+      bool enabled = false;
+      if(!mqttParseBooleanPayload(message, enabled)) return;
+      if(!enabled){ // Нельзя останавливать шину из MQTT: физические реле могли остаться включенными без возможности отправить OFF.
+        publishMqttStateBool("home/esp32/Rs485Enabled", Rs485Enabled);
+        return;
+      }
+      normalizedValue = enabled ? "1" : "0";
+    } else if(settingId == "Rs485BaudRate"){
+      int baud = 0;
+      if(!mqttParseInteger(message, baud) ||
+         !(baud == 1200 || baud == 2400 || baud == 4800 || baud == 9600 ||
+           baud == 19200 || baud == 38400 || baud == 57600 || baud == 115200)) return;
+    } else if(settingId == "Rs485UartMode"){
+      if(!(message == "8N1" || message == "8N2" || message == "8O1" || message == "8E1")) return;
+    } else {
+      int parsed = 0;
+      if(!mqttParseInteger(message, parsed)) return;
+    }
+    if(!applyRs485ConfigRequest(settingId, normalizedValue)) return;
+    if(settingId == "Rs485Enabled") publishMqttStateBool("home/esp32/Rs485Enabled", Rs485Enabled);
+    else if(settingId == "Rs485BaudRate") publishMqttStateInt("home/esp32/Rs485BaudRate", Rs485ActiveBaudRate);
+    else if(settingId == "Rs485UartMode") publishMqttStateString("home/esp32/Rs485UartMode", Rs485ActiveUartMode);
+    else if(settingId == "Rs485SlaveId") publishMqttStateInt("home/esp32/Rs485SlaveId", Rs485ActiveSlaveId);
+    else publishMqttStateInt("home/esp32/Rs485PollIntervalMs", Rs485PollIntervalMs);
     return;
   }
 
 
   if(topicStr == "home/esp32/Clean_Time1/set"){
-    Clean_Time1 = mqttPayloadIsOn(message); // обновление состояния
+    bool requestedState = false;
+    if(!mqttParseBooleanPayload(message, requestedState)) return;
+    Clean_Time1 = requestedState; // обновление состояния
     saveValue<int>("Clean_Time1", Clean_Time1 ? 1 : 0); // сохранение
     publishMqttStateBool("home/esp32/Clean_Time1", Clean_Time1); // публикация
     return;
@@ -523,49 +635,63 @@ inline void handleMqttCommandMessage(char* topic, byte* payload, unsigned int le
   }
 
   if(topicStr == "home/esp32/DaysMonToggle/set"){
-    mqttApplyDaysSelect(mqttPayloadIsOn(message) ? "add:Mon" : "remove:Mon");
+    bool requestedState = false;
+    if(!mqttParseBooleanPayload(message, requestedState)) return;
+    mqttApplyDaysSelect(requestedState ? "add:Mon" : "remove:Mon");
     publishMqttStateBool("home/esp32/DaysMonToggle", mqttDaysSelectContains("Mon"));
     publishMqttStateString("home/esp32/DaysSelect", DaysSelect);
     return;
   }
 
   if(topicStr == "home/esp32/DaysTueToggle/set"){
-    mqttApplyDaysSelect(mqttPayloadIsOn(message) ? "add:Tue" : "remove:Tue");
+    bool requestedState = false;
+    if(!mqttParseBooleanPayload(message, requestedState)) return;
+    mqttApplyDaysSelect(requestedState ? "add:Tue" : "remove:Tue");
     publishMqttStateBool("home/esp32/DaysTueToggle", mqttDaysSelectContains("Tue"));
     publishMqttStateString("home/esp32/DaysSelect", DaysSelect);
     return;
   }
 
   if(topicStr == "home/esp32/DaysWedToggle/set"){
-    mqttApplyDaysSelect(mqttPayloadIsOn(message) ? "add:Wed" : "remove:Wed");
+    bool requestedState = false;
+    if(!mqttParseBooleanPayload(message, requestedState)) return;
+    mqttApplyDaysSelect(requestedState ? "add:Wed" : "remove:Wed");
     publishMqttStateBool("home/esp32/DaysWedToggle", mqttDaysSelectContains("Wed"));
     publishMqttStateString("home/esp32/DaysSelect", DaysSelect);
     return;
   }
 
   if(topicStr == "home/esp32/DaysThuToggle/set"){
-    mqttApplyDaysSelect(mqttPayloadIsOn(message) ? "add:Thu" : "remove:Thu");
+    bool requestedState = false;
+    if(!mqttParseBooleanPayload(message, requestedState)) return;
+    mqttApplyDaysSelect(requestedState ? "add:Thu" : "remove:Thu");
     publishMqttStateBool("home/esp32/DaysThuToggle", mqttDaysSelectContains("Thu"));
     publishMqttStateString("home/esp32/DaysSelect", DaysSelect);
     return;
   }
 
   if(topicStr == "home/esp32/DaysFriToggle/set"){
-    mqttApplyDaysSelect(mqttPayloadIsOn(message) ? "add:Fri" : "remove:Fri");
+    bool requestedState = false;
+    if(!mqttParseBooleanPayload(message, requestedState)) return;
+    mqttApplyDaysSelect(requestedState ? "add:Fri" : "remove:Fri");
     publishMqttStateBool("home/esp32/DaysFriToggle", mqttDaysSelectContains("Fri"));
     publishMqttStateString("home/esp32/DaysSelect", DaysSelect);
     return;
   }
 
   if(topicStr == "home/esp32/DaysSatToggle/set"){
-    mqttApplyDaysSelect(mqttPayloadIsOn(message) ? "add:Sat" : "remove:Sat");
+    bool requestedState = false;
+    if(!mqttParseBooleanPayload(message, requestedState)) return;
+    mqttApplyDaysSelect(requestedState ? "add:Sat" : "remove:Sat");
     publishMqttStateBool("home/esp32/DaysSatToggle", mqttDaysSelectContains("Sat"));
     publishMqttStateString("home/esp32/DaysSelect", DaysSelect);
     return;
   }
 
   if(topicStr == "home/esp32/DaysSunToggle/set"){
-    mqttApplyDaysSelect(mqttPayloadIsOn(message) ? "add:Sun" : "remove:Sun");
+    bool requestedState = false;
+    if(!mqttParseBooleanPayload(message, requestedState)) return;
+    mqttApplyDaysSelect(requestedState ? "add:Sun" : "remove:Sun");
     publishMqttStateBool("home/esp32/DaysSunToggle", mqttDaysSelectContains("Sun"));
     publishMqttStateString("home/esp32/DaysSelect", DaysSelect);
     return;
@@ -573,9 +699,8 @@ inline void handleMqttCommandMessage(char* topic, byte* payload, unsigned int le
 
 
   if(topicStr == "home/esp32/RoomTempRange/set"){
-    if(mqttApplyDualRangeFloat(message, RoomTempOn, RoomTempOff, "RoomTempOn", "RoomTempOff")){
+    if(mqttValidateDualFloatPayload(message) && uiApplyValueForId("RoomTempRange", message))
       publishMqttStateString("home/esp32/RoomTempRange", String(RoomTempOn, 1) + "-" + String(RoomTempOff, 1));
-    }
     return;
   }
 
@@ -592,8 +717,10 @@ inline void handleMqttCommandMessage(char* topic, byte* payload, unsigned int le
     return;
   }
 
-  if(topicStr == "home/esp32/Float_PH_Slider/set") {
-    mqttApplyDualRangeFloat(message, PH1, PH2, "PH1_MIN", "PH2_MAX");
+  if(topicStr == "home/esp32/FiltrTimer1_OFF/set"){
+    if(mqttApplyTimerField("FiltrTimer1_OFF", message)){
+      publishMqttStateString("home/esp32/FiltrTimer1_OFF", formatMinutesToTime(mqttTimerOffMinutes("FiltrTimer1")));
+    }
     return;
   }
 
@@ -682,23 +809,51 @@ inline void handleMqttCommandMessage(char* topic, byte* payload, unsigned int le
   }
 
   if(topicStr == "home/esp32/Pow_Ul_light/set"){
-    Pow_Ul_light = mqttPayloadIsOn(message); // обновление состояния
-    SetUlLight = Pow_Ul_light ? "on" : "off";
-    Ul_light_Time = false;
-    UlLight_autosvet = false;
-    UlLight_sensorTimerOff = false;
-    saveValue<String>("SetUlLight", SetUlLight);
-    saveValue<int>("Ul_light_Time", 0);
-    saveValue<int>("UlLight_autosvet", 0);
-    saveValue<int>("UlLight_sensorTimerOff", 0);
-    saveValue<int>("Pow_Ul_light", Pow_Ul_light ? 1 : 0); // сохранение
-    publishMqttStateBool("home/esp32/Pow_Ul_light", Pow_Ul_light); // публикация
+    bool requestedState = false;
+    if(!mqttParseBooleanPayload(message, requestedState)) return;
+    mqttApplyUlLightMode(requestedState ? "on" : "off");
+    publishMqttStateBool("home/esp32/Pow_Ul_light", Pow_Ul_light || (rs485RelayDataFresh() && ReadRelayArray[15])); // публикация фактического состояния
     publishMqttStateString("home/esp32/SetUlLight", SetUlLight);
+    publishMqttStateBool("home/esp32/Ul_light_Time", Ul_light_Time);
+    return;
+  }
+
+  if(topicStr == "home/esp32/Pow_WS2815/set"){
+    bool requestedState = false;
+    if(!mqttParseBooleanPayload(message, requestedState)) return;
+    mqttApplyRgbMode(requestedState ? "on" : "off"); // совместимый switch меняет весь режим, а не один внутренний флаг
+    publishMqttStateString("home/esp32/SetRGB", SetRGB);
+    publishMqttStateBool("home/esp32/Pow_WS2815", Pow_WS2815 || (rs485RelayDataFresh() && ReadRelayArray[1]));
+    publishMqttStateBool("home/esp32/WS2815_Time1", WS2815_Time1);
+    return;
+  }
+
+  if(topicStr == "home/esp32/WS2815_Time1/set"){
+    bool requestedState = false;
+    if(!mqttParseBooleanPayload(message, requestedState)) return;
+    if(requestedState) mqttApplyRgbMode("timer");
+    else if(SetRGB == "timer") mqttApplyRgbMode("off");
+    publishMqttStateString("home/esp32/SetRGB", SetRGB);
+    publishMqttStateBool("home/esp32/Pow_WS2815", Pow_WS2815 || (rs485RelayDataFresh() && ReadRelayArray[1]));
+    publishMqttStateBool("home/esp32/WS2815_Time1", WS2815_Time1);
+    return;
+  }
+
+  if(topicStr == "home/esp32/Ul_light_Time/set"){
+    bool requestedState = false;
+    if(!mqttParseBooleanPayload(message, requestedState)) return;
+    if(requestedState) mqttApplyUlLightMode("timer");
+    else if(SetUlLight == "timer") mqttApplyUlLightMode("off");
+    publishMqttStateString("home/esp32/SetUlLight", SetUlLight);
+    publishMqttStateBool("home/esp32/Pow_Ul_light", Pow_Ul_light || (rs485RelayDataFresh() && ReadRelayArray[15]));
+    publishMqttStateBool("home/esp32/Ul_light_Time", Ul_light_Time);
     return;
   }
 
   if(topicStr == "home/esp32/Activation_Heat/set"){
-    Activation_Heat = mqttPayloadIsOn(message); // обновление состояния
+    bool requestedState = false;
+    if(!mqttParseBooleanPayload(message, requestedState)) return;
+    Activation_Heat = requestedState; // обновление состояния
     saveValue<int>("Activation_Heat", Activation_Heat ? 1 : 0); // сохранение
     publishMqttStateBool("home/esp32/Activation_Heat", Activation_Heat); // публикация
     return;
@@ -716,7 +871,7 @@ inline void handleMqttCommandMessage(char* topic, byte* payload, unsigned int le
     if(mqttIsAllowedMode(message)){
       mqttApplyRgbMode(message);
       publishMqttStateString("home/esp32/SetRGB", SetRGB); // публикация
-      publishMqttStateBool("home/esp32/Pow_WS2815", Pow_WS2815);
+      publishMqttStateBool("home/esp32/Pow_WS2815", Pow_WS2815 || (rs485RelayDataFresh() && ReadRelayArray[1]));
       publishMqttStateBool("home/esp32/WS2815_Time1", WS2815_Time1);
     }
     return;
@@ -726,9 +881,42 @@ inline void handleMqttCommandMessage(char* topic, byte* payload, unsigned int le
     if(mqttIsAllowedMode(message)){
       mqttApplyUlLightMode(message);
       publishMqttStateString("home/esp32/SetUlLight", SetUlLight);
-      publishMqttStateBool("home/esp32/Pow_Ul_light", Pow_Ul_light);
+      publishMqttStateBool("home/esp32/Pow_Ul_light", Pow_Ul_light || (rs485RelayDataFresh() && ReadRelayArray[15]));
       publishMqttStateBool("home/esp32/Ul_light_Time", Ul_light_Time);
     }
+    return;
+  }
+
+  if(topicStr == "home/esp32/PH_Lower/set" || topicStr == "home/esp32/PH_Upper/set" ||
+     topicStr == "home/esp32/PH_setting/set" || topicStr == "home/esp32/CL_Lower/set" ||
+     topicStr == "home/esp32/CL_Upper/set"){
+    float parsed = 0.0f;
+    if(!mqttParseFiniteFloat(message, parsed)) return;
+    (void)parsed;
+    const String prefix = "home/esp32/";
+    const String settingId = topicStr.substring(prefix.length(), topicStr.length() - 4);
+    if(applyChemistrySettingRequest(settingId, message)) mqttPublishChemistryLimits();
+    return;
+  }
+
+  if(topicStr == "home/esp32/LampLightOffThreshold/set" || topicStr == "home/esp32/LampLightOnThreshold/set" ||
+     topicStr == "home/esp32/RgbLightOffThreshold/set" || topicStr == "home/esp32/RgbLightOnThreshold/set" ||
+     topicStr == "home/esp32/UlLightOffThreshold/set" || topicStr == "home/esp32/UlLightOnThreshold/set"){
+    int parsed = 0;
+    if(!mqttParseInteger(message, parsed)) return;
+    (void)parsed;
+    const String prefix = "home/esp32/";
+    const String settingId = topicStr.substring(prefix.length(), topicStr.length() - 4);
+    if(applyLightThresholdSettingRequest(settingId, message)) mqttPublishLightThresholds();
+    return;
+  }
+
+  if(topicStr == "home/esp32/ClockSelect/set"){
+    int offset = 0;
+    if(!mqttParseInteger(message, offset) || !isValidGmtOffsetValue(offset)) return;
+    applyGmtOffsetFromEsp(offset, true);
+    syncNextionRtcFromEpoch(getCurrentEpoch());
+    publishMqttStateInt("home/esp32/ClockSelect", gmtOffset_correct);
     return;
   }
 
@@ -774,7 +962,7 @@ inline void handleMqttCommandMessage(char* topic, byte* payload, unsigned int le
   }
 }
 
-#if 1 // MQTT Discovery отключен (слишком много кода и не нужен)
+#if 1 // MQTT Discovery включен
 inline String mqttDiscoveryDeviceId(){ // идентификатор устройства для Discovery
   String id = WiFi.macAddress(); // MAC-адрес
   id.replace(":", ""); // удаление двоеточий
@@ -846,21 +1034,25 @@ enum MqttDiscoveryGroup {
   DISCOVERY_GROUP_LAMP,
   DISCOVERY_GROUP_RGB,
   DISCOVERY_GROUP_WATER_LEVEL,
+  DISCOVERY_GROUP_DRAIN,
   DISCOVERY_GROUP_POOL_TEMPERATURE,
-  DISCOVERY_GROUP_PH_NAOCL,
-  DISCOVERY_GROUP_CHLORINE_ACO,
+  DISCOVERY_GROUP_PH_ACO,
+  DISCOVERY_GROUP_CHLORINE_NAOCL,
   DISCOVERY_GROUP_ROOM_TEMPERATURE,
-  DISCOVERY_GROUP_OUTDOOR_LIGHTING
+  DISCOVERY_GROUP_OUTDOOR_LIGHTING,
+  DISCOVERY_GROUP_TIME,
+  DISCOVERY_GROUP_RS485
 };
 
 inline MqttDiscoveryGroup mqttDiscoveryGroupForEntityId(const char* id){
   String entityId = id ? String(id) : String();
   entityId.trim();
 
-if(entityId == "OverlayPoolTemp" || entityId == "OverlayHeaterTemp" ||
+  if(entityId == "OverlayPoolTemp" || entityId == "OverlayHeaterTemp" ||
      entityId == "OverlayLevelUpper" || entityId == "OverlayLevelLower" ||
      entityId == "OverlayPh" || entityId == "OverlayChlorine" ||
-     entityId == "OverlayFilterState") return DISCOVERY_GROUP_OVERVIEW;
+     entityId == "OverlayFilterState" || entityId == "OverlayDrainPit" ||
+     entityId == "OverlayLight") return DISCOVERY_GROUP_OVERVIEW;
 
   if(entityId == "Power_Filtr" || entityId == "Filtr_Time1" ||
      entityId == "Filtr_Time2" || entityId == "Filtr_Time3" ||
@@ -868,51 +1060,71 @@ if(entityId == "OverlayPoolTemp" || entityId == "OverlayHeaterTemp" ||
      entityId == "FiltrTimer2_ON" || entityId == "FiltrTimer2_OFF" ||
      entityId == "FiltrTimer3_ON" || entityId == "FiltrTimer3_OFF") return DISCOVERY_GROUP_FILTRATION;
 
-  if(entityId == "Power_Clean" || entityId == "Clean_Time1" ||
+  if(entityId == "Power_Clean" || entityId == "Clean_Time1" || entityId == "Timer1" ||
      entityId == "CleanTimer1_ON" || entityId == "CleanTimer1_OFF" ||
      entityId == "DaysMonToggle" || entityId == "DaysTueToggle" ||
      entityId == "DaysWedToggle" || entityId == "DaysThuToggle" ||
      entityId == "DaysFriToggle" || entityId == "DaysSatToggle" ||
-     entityId == "DaysSunToggle") return DISCOVERY_GROUP_BACKWASH;
+     entityId == "DaysSunToggle" || entityId == "AirPump" ||
+     entityId == "SolValveFilBack" || entityId == "SolValveFiltration" ||
+     entityId == "SolSandDump" || entityId == "T_air_pump" ||
+     entityId == "T_Valve_Switch" || entityId == "T_backwash" ||
+     entityId == "T_SolSandDump") return DISCOVERY_GROUP_BACKWASH;
 
-  if(entityId == "InfoString2" || entityId == "SetLamp" ||
+  if(entityId == "InfoString2" || entityId == "SetLamp" || entityId == "LampActual" ||
      entityId == "Lumen_Ul" || entityId == "LampTimer_ON" ||
-     entityId == "LampTimer_OFF") return DISCOVERY_GROUP_LAMP;
+     entityId == "LampTimer_OFF" || entityId == "LightSensorLiveInfo" ||
+     entityId == "LampLightAutoState" || entityId == "LampLightOffThreshold" ||
+     entityId == "LampLightOnThreshold") return DISCOVERY_GROUP_LAMP;
 
-  if(entityId == "WS2815_Time1" || entityId == "Pow_WS2815" ||
+  if(entityId == "WS2815_Time1" || entityId == "Pow_WS2815" || entityId == "RgbActual" ||
      entityId == "SetRGB" || entityId == "LEDColor" || entityId == "LedBrightness" ||
     entityId == "LED Brightness" || entityId.equalsIgnoreCase("ledbrightness") ||
      entityId == "LedColorMode" || entityId == "LedPattern" ||
      entityId == "LedAutoplay" || entityId == "LedAutoplayDuration" ||
-     entityId == "LedColorOrder" || entityId == "RgbTimer_ON" ||
-     entityId == "RgbTimer_OFF") return DISCOVERY_GROUP_RGB;
+     entityId == "LedColorOrder" || entityId == "RgbTimer_ON" || entityId == "RgbTimer_OFF" ||
+     entityId == "RgbLightAutoState" || entityId == "RgbLightOffThreshold" ||
+     entityId == "RgbLightOnThreshold") return DISCOVERY_GROUP_RGB;
 
   if(entityId == "Activation_Water_Level" || entityId == "WaterLevelSensorUpper" ||
-     entityId == "WaterLevelSensorLower" || entityId == "WaterLevelSensorDrain" || entityId == "Power_Topping_State" ||
-     entityId == "Power_Topping" || entityId == "Power_Drain_State" || entityId == "Power_Drain" || entityId == "InfoStringDIN") return DISCOVERY_GROUP_WATER_LEVEL;
+     entityId == "WaterLevelSensorLower" || entityId == "Power_Topping_State" ||
+     entityId == "Power_Topping" ||
+     entityId == "PoolWaterLevelStageInfo" || entityId == "ToppingWorkMinutes" ||
+     entityId == "ToppingPauseMinutes") return DISCOVERY_GROUP_WATER_LEVEL;
 
-  if(entityId == "DS1" || entityId == "Sider_heat" ||
+  if(entityId == "WaterLevelSensorDrain" || entityId == "Power_Drain_State" ||
+     entityId == "Power_Drain" || entityId == "DrainPitStageInfo" ||
+     entityId == "DrainWorkMinutes" || entityId == "DrainPauseMinutes" ||
+     entityId == "DrainCyclesTarget" || entityId == "DrainCyclesDone") return DISCOVERY_GROUP_DRAIN;
+
+  if(entityId == "DS1" || entityId == "DS2" || entityId == "DS2Available" || entityId == "Sider_heat" ||
      entityId == "Activation_Heat" || entityId == "Power_Heat") return DISCOVERY_GROUP_POOL_TEMPERATURE;
 
-  if(entityId == "PH" || entityId == "PH_Control_ACO" ||
-     entityId == "PH_setting" || entityId == "analogValuePH" ||
+  if(entityId == "PH" || entityId == "PH_Control_ACO" || entityId == "PH_Lower" ||
+     entityId == "PH_Upper" || entityId == "PH_setting" || entityId == "analogValuePH" ||
      entityId == "Float_PH_Slider" || entityId == "PH2_CAL" ||
      entityId == "Temper_Reference" || entityId == "Temper_PH" ||
-     entityId == "Power_H2O2_Button" || entityId == "Power_ACO" ||
-     entityId == "ACO_Work") return DISCOVERY_GROUP_PH_NAOCL;
+     entityId == "Power_ACO_Button" || entityId == "Power_ACO" ||
+     entityId == "ACO_Work") return DISCOVERY_GROUP_PH_ACO;
 
   if(entityId == "ppmCl" || entityId == "corrected_ORP_Eh_mV" ||
-     entityId == "Power_H2O2" ||
+     entityId == "Power_H2O2" || entityId == "CL_Lower" || entityId == "CL_Upper" ||
      entityId == "NaOCl_H2O2_Control" || entityId == "ORP_setting" ||
      entityId == "CalRastvor256mV" || entityId == "Calibration_ORP_mV" ||
-     entityId == "Power_ACO_Button" ||
-     entityId == "H2O2_Work") return DISCOVERY_GROUP_CHLORINE_ACO;
+     entityId == "Power_H2O2_Button" ||
+     entityId == "H2O2_Work") return DISCOVERY_GROUP_CHLORINE_NAOCL;
 
   if(entityId == "RoomTemp" || entityId == "RoomTempRange" ||
      entityId == "RoomTemper" || entityId == "Power_Warm_floor_heating") return DISCOVERY_GROUP_ROOM_TEMPERATURE;
 
-  if(entityId == "Pow_Ul_light" || entityId == "SetUlLight" || entityId == "Ul_light_Time" ||
-     entityId == "UlLightTimer_ON" || entityId == "UlLightTimer_OFF") return DISCOVERY_GROUP_OUTDOOR_LIGHTING;
+  if(entityId == "Pow_Ul_light" || entityId == "OutdoorLightActual" || entityId == "SetUlLight" ||
+     entityId == "Ul_light_Time" || entityId == "UlLightTimer_ON" || entityId == "UlLightTimer_OFF" ||
+     entityId == "UlLightAutoState" || entityId == "UlLightOffThreshold" ||
+     entityId == "UlLightOnThreshold") return DISCOVERY_GROUP_OUTDOOR_LIGHTING;
+
+  if(entityId == "CurrentTime" || entityId == "ClockSelect") return DISCOVERY_GROUP_TIME;
+
+  if(entityId == "InfoStringDIN" || entityId.startsWith("Rs485")) return DISCOVERY_GROUP_RS485;
 
   return DISCOVERY_GROUP_OVERVIEW;
 }
@@ -925,11 +1137,14 @@ inline const char* mqttDiscoveryGroupSuffix(MqttDiscoveryGroup group){
     case DISCOVERY_GROUP_LAMP: return "lamp";
     case DISCOVERY_GROUP_RGB: return "rgb";
     case DISCOVERY_GROUP_WATER_LEVEL: return "water_level";
+    case DISCOVERY_GROUP_DRAIN: return "drain";
     case DISCOVERY_GROUP_POOL_TEMPERATURE: return "pool_temperature";
-    case DISCOVERY_GROUP_PH_NAOCL: return "ph_naocl";
-    case DISCOVERY_GROUP_CHLORINE_ACO: return "chlorine_aco";
+    case DISCOVERY_GROUP_PH_ACO: return "ph_aco";
+    case DISCOVERY_GROUP_CHLORINE_NAOCL: return "chlorine_naocl";
     case DISCOVERY_GROUP_ROOM_TEMPERATURE: return "room_temperature";
     case DISCOVERY_GROUP_OUTDOOR_LIGHTING: return "outdoor_lighting";
+    case DISCOVERY_GROUP_TIME: return "time";
+    case DISCOVERY_GROUP_RS485: return "rs485";
     case DISCOVERY_GROUP_OVERVIEW:
     default: return "overview";
   }
@@ -943,11 +1158,14 @@ inline const char* mqttDiscoveryGroupName(MqttDiscoveryGroup group){
     case DISCOVERY_GROUP_LAMP: return "Управление лампой";
     case DISCOVERY_GROUP_RGB: return "Управление RGB подсветкой";
     case DISCOVERY_GROUP_WATER_LEVEL: return "Контроль уровня воды";
+    case DISCOVERY_GROUP_DRAIN: return "Слив воды";
     case DISCOVERY_GROUP_POOL_TEMPERATURE: return "Контроль температуры";
-    case DISCOVERY_GROUP_PH_NAOCL: return "Контроль PH (NaOCl)";
-    case DISCOVERY_GROUP_CHLORINE_ACO: return "Контроль хлора CL (ACO)";
+    case DISCOVERY_GROUP_PH_ACO: return "Контроль pH (ACO)";
+    case DISCOVERY_GROUP_CHLORINE_NAOCL: return "Контроль хлора CL (NaOCl)";
     case DISCOVERY_GROUP_ROOM_TEMPERATURE: return "Контроль температуры в помещении";
     case DISCOVERY_GROUP_OUTDOOR_LIGHTING: return "Уличное освещение";
+    case DISCOVERY_GROUP_TIME: return "Дата и время";
+    case DISCOVERY_GROUP_RS485: return "RS485 Modbus I/O";
     case DISCOVERY_GROUP_OVERVIEW:
     default: return "Общая информация по бассейну";
   }
@@ -959,7 +1177,9 @@ inline void publishDiscoveryDeviceBlockGrouped(JsonDocument &doc,
                                                MqttDiscoveryGroup group){
   JsonObject device = doc["device"].to<JsonObject>();
   JsonArray identifiers = device["identifiers"].to<JsonArray>();
-  const String groupDeviceId = rootDeviceId + "_" + mqttDiscoveryGroupSuffix(group);
+  const String groupDeviceId = group == DISCOVERY_GROUP_OVERVIEW
+    ? rootDeviceId
+    : rootDeviceId + "_" + mqttDiscoveryGroupSuffix(group);
   identifiers.add(groupDeviceId);
   String compactRootName = rootDeviceName;
   if(compactRootName.startsWith("ESP32 ") && compactRootName.length() > 5){
@@ -1017,6 +1237,7 @@ inline MqttDiscoveryPublishResult publishMqttDiscoverySelect(const char* id,
                                        bool minimalDevice,
                                        bool includeOptions){ // публикация select
                                           (void)minimalDevice;
+                                          (void)includeOptions;
   JsonDocument doc; // JSON-документ
   const String uniqueId = deviceId + "_" + id; // уникальный id
   const String topic = String(mqttDiscoveryPrefix) + "/select/" + uniqueId + "/config"; // топик config
@@ -1028,11 +1249,9 @@ inline MqttDiscoveryPublishResult publishMqttDiscoverySelect(const char* id,
   doc["payload_not_available"] = "offline"; // payload not available
   doc["state_topic"] = mqttTopicFromLegacy(stateTopic); // state_topic
   doc["command_topic"] = mqttTopicFromLegacy(commandTopic); // command_topic
-  if(includeOptions){
-    JsonArray optionsArray = doc["options"].to<JsonArray>(); // options
-    for(size_t i = 0; i < optionsCount; ++i){
-      optionsArray.add(options[i]);
-    }
+  JsonArray optionsArray = doc["options"].to<JsonArray>(); // MQTT Select без options невалиден для HA
+  for(size_t i = 0; i < optionsCount; ++i){
+    optionsArray.add(options[i]);
   }
 
   publishDiscoveryDeviceBlockGrouped(doc, deviceId, deviceName, mqttDiscoveryGroupForEntityId(id));
@@ -1068,15 +1287,7 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
       {"button", "DaysFriToggle"},
       {"button", "DaysSatToggle"},
       {"button", "DaysSunToggle"},
-      {"switch", "DaysMonToggle"},
-      {"switch", "DaysTueToggle"},
-      {"switch", "DaysWedToggle"},
-      {"switch", "DaysThuToggle"},
-      {"switch", "DaysFriToggle"},
-      {"switch", "DaysSatToggle"},
-      {"switch", "DaysSunToggle"},
       {"sensor", "LedBrightness"},
-      {"number", "LedBrightness"},
       {"switch", "SetRGB"},
       {"switch", "SetLamp"},
       {"switch", "SetUlLight"},
@@ -1102,22 +1313,33 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
 
 
   static const MqttDiscoveryEntity baseEntities[] = {
+    {"sensor", "OverlayPoolTemp", "Overlay Pool Temp", "home/esp32/OverlayPoolTemp", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr}, // первым создаем root device для via_device групп
     {"sensor", "DS1", "Pool Water Temperature", "home/esp32/DS1", nullptr, "temperature", "°C", "measurement", nullptr, nullptr, nullptr},
+    {"sensor", "DS2", "Temperature After Heater", "home/esp32/DS2", nullptr, "temperature", "°C", "measurement", nullptr, nullptr, nullptr},
+    {"binary_sensor", "DS2Available", "Heater Temperature Sensor Available", "home/esp32/DS2Available", nullptr, "connectivity", nullptr, nullptr, nullptr, "1", "0"},
     {"sensor", "RoomTemp", "Room Temperature", "home/esp32/RoomTemp", nullptr, "temperature", "°C", "measurement", nullptr, nullptr, nullptr},
     {"sensor", "PH", "Pool pH", "home/esp32/PH", nullptr, nullptr, "pH", "measurement", nullptr, nullptr, nullptr},
     {"sensor", "corrected_ORP_Eh_mV", "ORP", "home/esp32/corrected_ORP_Eh_mV", nullptr, nullptr, "mV", "measurement", nullptr, nullptr, nullptr},
     {"sensor", "ppmCl", "Free Chlorine", "home/esp32/ppmCl", nullptr, nullptr, "mg/L", "measurement", nullptr, nullptr, nullptr},
-     {"sensor", "OverlayPoolTemp", "Overlay Pool Temp", "home/esp32/OverlayPoolTemp", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"sensor", "OverlayHeaterTemp", "Overlay Heater Temp", "home/esp32/OverlayHeaterTemp", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"sensor", "OverlayLevelUpper", "Overlay Level Upper", "home/esp32/OverlayLevelUpper", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"sensor", "OverlayLevelLower", "Overlay Level Lower", "home/esp32/OverlayLevelLower", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"sensor", "OverlayPh", "Overlay pH", "home/esp32/OverlayPh", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"sensor", "OverlayChlorine", "Overlay Chlorine", "home/esp32/OverlayChlorine", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"sensor", "OverlayFilterState", "Filter State", "home/esp32/OverlayFilterState", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"sensor", "OverlayDrainPit", "Overlay Drain Pit", "home/esp32/OverlayDrainPit", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"sensor", "OverlayLight", "Overlay Outdoor Light", "home/esp32/OverlayLight", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"sensor", "InfoString2", "Lamp Info", "home/esp32/InfoString2", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"sensor", "InfoStringDIN", "DIN State", "home/esp32/InfoStringDIN", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"sensor", "Lumen_Ul", "Outdoor Luminance", "home/esp32/Lumen_Ul", nullptr, nullptr, "%", "measurement", nullptr, nullptr, nullptr},
     {"sensor", "analogValuePH", "PH ADC Value", "home/esp32/analogValuePH", nullptr, nullptr, nullptr, "measurement", nullptr, nullptr, nullptr},
+    {"binary_sensor", "LampActual", "Pool Lamp Actual State", "home/esp32/LampActual", nullptr, "power", nullptr, nullptr, nullptr, "1", "0"},
+    {"binary_sensor", "RgbActual", "RGB Actual State", "home/esp32/RgbActual", nullptr, "power", nullptr, nullptr, nullptr, "1", "0"},
+    {"binary_sensor", "OutdoorLightActual", "Outdoor Light Actual State", "home/esp32/OutdoorLightActual", nullptr, "power", nullptr, nullptr, nullptr, "1", "0"},
+    {"sensor", "LightSensorLiveInfo", "Outdoor Light Sensor Status", "home/esp32/LightSensorLiveInfo", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"sensor", "LampLightAutoState", "Pool Lamp Automation", "home/esp32/LampLightAutoState", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"sensor", "RgbLightAutoState", "RGB Automation", "home/esp32/RgbLightAutoState", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"sensor", "UlLightAutoState", "Outdoor Light Automation", "home/esp32/UlLightAutoState", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"binary_sensor", "Power_H2O2", "NaOCl Pump State", "home/esp32/Power_H2O2", nullptr, "power", nullptr, nullptr, nullptr, "1", "0"},
     {"binary_sensor", "Power_ACO", "ACO Pump State", "home/esp32/Power_ACO", nullptr, "power", nullptr, nullptr, nullptr, "1", "0"},
     {"binary_sensor", "Power_Heat", "Heating State", "home/esp32/Power_Heat", nullptr, "power", nullptr, nullptr, nullptr, "1", "0"},
@@ -1127,6 +1349,14 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
       {"binary_sensor", "WaterLevelSensorDrain", "Drain Pit Level (Input 3)", "home/esp32/WaterLevelSensorDrain", nullptr, "moisture", nullptr, nullptr, nullptr, "1", "0"},
     {"binary_sensor", "Power_Drain_State", "Water Drain Mode State", "home/esp32/Power_Drain_State", nullptr, "power", nullptr, nullptr, nullptr, "1", "0"},
     {"binary_sensor", "Power_Warm_floor_heating", "Floor Heating State", "home/esp32/Power_Warm_floor_heating", nullptr, "heat", nullptr, nullptr, nullptr, "1", "0"},
+    {"sensor", "PoolWaterLevelStageInfo", "Water Level Automation Stage", "home/esp32/PoolWaterLevelStageInfo", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"number", "ToppingWorkMinutes", "Top Up Work Time", "home/esp32/ToppingWorkMinutes", "home/esp32/ToppingWorkMinutes/set", nullptr, "min", nullptr, nullptr, nullptr, nullptr, nullptr, "5", "60", "1"},
+    {"number", "ToppingPauseMinutes", "Top Up Pause Time", "home/esp32/ToppingPauseMinutes", "home/esp32/ToppingPauseMinutes/set", nullptr, "min", nullptr, nullptr, nullptr, nullptr, nullptr, "5", "60", "1"},
+    {"sensor", "DrainPitStageInfo", "Drain Automation Stage", "home/esp32/DrainPitStageInfo", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"number", "DrainWorkMinutes", "Drain Portion Work Time", "home/esp32/DrainWorkMinutes", "home/esp32/DrainWorkMinutes/set", nullptr, "min", nullptr, nullptr, nullptr, nullptr, nullptr, "1", "30", "1"},
+    {"number", "DrainPauseMinutes", "Drain Portion Pause Time", "home/esp32/DrainPauseMinutes", "home/esp32/DrainPauseMinutes/set", nullptr, "min", nullptr, nullptr, nullptr, nullptr, nullptr, "1", "30", "1"},
+    {"number", "DrainCyclesTarget", "Drain Portions Target", "home/esp32/DrainCyclesTarget", "home/esp32/DrainCyclesTarget/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, "1", "30", "1"},
+    {"sensor", "DrainCyclesDone", "Drain Portions Done", "home/esp32/DrainCyclesDone", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"switch", "Power_Filtr", "01 🧽 Фильтрация (вручную)", "home/esp32/Power_Filtr", "home/esp32/Power_Filtr/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"switch", "Filtr_Time1", "02 ⏱️ Таймер включения №1", "home/esp32/Filtr_Time1", "home/esp32/Filtr_Time1/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"text", "FiltrTimer1_ON", "03 🟢 Время вкл. по таймеру №1", "home/esp32/FiltrTimer1_ON", "home/esp32/FiltrTimer1_ON/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
@@ -1149,6 +1379,14 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
     {"text", "Timer1", "⏰ Старт промывки", "home/esp32/Timer1", "home/esp32/Timer1/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"text", "CleanTimer1_ON", "🟢 Промывка ВКЛ", "home/esp32/CleanTimer1_ON", "home/esp32/CleanTimer1_ON/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"text", "CleanTimer1_OFF", "🔴 Промывка ВЫКЛ", "home/esp32/CleanTimer1_OFF", "home/esp32/CleanTimer1_OFF/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"binary_sensor", "AirPump", "Backwash Air Compressor", "home/esp32/AirPump", nullptr, "power", nullptr, nullptr, nullptr, "1", "0"},
+    {"binary_sensor", "SolValveFilBack", "Backwash Valve", "home/esp32/SolValveFilBack", nullptr, "power", nullptr, nullptr, nullptr, "1", "0"},
+    {"binary_sensor", "SolValveFiltration", "Filtration Valve", "home/esp32/SolValveFiltration", nullptr, "power", nullptr, nullptr, nullptr, "1", "0"},
+    {"binary_sensor", "SolSandDump", "Sand Dump Valve", "home/esp32/SolSandDump", nullptr, "power", nullptr, nullptr, nullptr, "1", "0"},
+    {"number", "T_air_pump", "Air Compressor Time", "home/esp32/T_air_pump", "home/esp32/T_air_pump/set", nullptr, "s", nullptr, nullptr, nullptr, nullptr, nullptr, "0", "120", "1"},
+    {"number", "T_Valve_Switch", "Valve Switching Time", "home/esp32/T_Valve_Switch", "home/esp32/T_Valve_Switch/set", nullptr, "s", nullptr, nullptr, nullptr, nullptr, nullptr, "0", "60", "1"},
+    {"number", "T_backwash", "Backwash Time", "home/esp32/T_backwash", "home/esp32/T_backwash/set", nullptr, "s", nullptr, nullptr, nullptr, nullptr, nullptr, "0", "300", "1"},
+    {"number", "T_SolSandDump", "Sand Dump Time", "home/esp32/T_SolSandDump", "home/esp32/T_SolSandDump/set", nullptr, "s", nullptr, nullptr, nullptr, nullptr, nullptr, "0", "60", "1"},
      {"text", "LampTimer_ON", "02 🟢 Время вкл. лампы по таймеру", "home/esp32/LampTimer_ON", "home/esp32/LampTimer_ON/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"text", "LampTimer_OFF", "03 🔴 Время откл. лампы по таймеру", "home/esp32/LampTimer_OFF", "home/esp32/LampTimer_OFF/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"switch", "WS2815_Time1", "01 ⏱️ Активация таймера RGB", "home/esp32/WS2815_Time1", "home/esp32/WS2815_Time1/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
@@ -1167,11 +1405,30 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
     {"switch", "NaOCl_H2O2_Control", "🧪 Контроль хлора (NaOCl)", "home/esp32/NaOCl_H2O2_Control", "home/esp32/NaOCl_H2O2_Control/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"switch", "RoomTemper", "Контроль температуры в помещении", "home/esp32/RoomTemper", "home/esp32/RoomTemper/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
      {"number", "Sider_heat", "🎯 Уставка нагрева", "home/esp32/Sider_heat", "home/esp32/Sider_heat/set", nullptr, "°C", nullptr, nullptr, nullptr, nullptr, nullptr, "5", "30", "1"},
-    {"number", "PH_setting", "pH Upper Limit", "home/esp32/PH_setting", "home/esp32/PH_setting/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"number", "LampLightOffThreshold", "Pool Lamp Dark ON Threshold", "home/esp32/LampLightOffThreshold", "home/esp32/LampLightOffThreshold/set", nullptr, "%", nullptr, nullptr, nullptr, nullptr, nullptr, "0", "100", "1"},
+    {"number", "LampLightOnThreshold", "Pool Lamp Bright OFF Threshold", "home/esp32/LampLightOnThreshold", "home/esp32/LampLightOnThreshold/set", nullptr, "%", nullptr, nullptr, nullptr, nullptr, nullptr, "0", "100", "1"},
+    {"number", "RgbLightOffThreshold", "RGB Dark ON Threshold", "home/esp32/RgbLightOffThreshold", "home/esp32/RgbLightOffThreshold/set", nullptr, "%", nullptr, nullptr, nullptr, nullptr, nullptr, "0", "100", "1"},
+    {"number", "RgbLightOnThreshold", "RGB Bright OFF Threshold", "home/esp32/RgbLightOnThreshold", "home/esp32/RgbLightOnThreshold/set", nullptr, "%", nullptr, nullptr, nullptr, nullptr, nullptr, "0", "100", "1"},
+    {"number", "UlLightOffThreshold", "Outdoor Dark ON Threshold", "home/esp32/UlLightOffThreshold", "home/esp32/UlLightOffThreshold/set", nullptr, "%", nullptr, nullptr, nullptr, nullptr, nullptr, "0", "100", "1"},
+    {"number", "UlLightOnThreshold", "Outdoor Bright OFF Threshold", "home/esp32/UlLightOnThreshold", "home/esp32/UlLightOnThreshold/set", nullptr, "%", nullptr, nullptr, nullptr, nullptr, nullptr, "0", "100", "1"},
+    {"number", "PH_Lower", "pH Lower Limit", "home/esp32/PH_Lower", "home/esp32/PH_Lower/set", nullptr, "pH", nullptr, nullptr, nullptr, nullptr, nullptr, "6", "9", "0.1"},
+    {"number", "PH_Upper", "pH Upper Limit", "home/esp32/PH_Upper", "home/esp32/PH_Upper/set", nullptr, "pH", nullptr, nullptr, nullptr, nullptr, nullptr, "6", "9", "0.1"},
+    {"number", "CL_Lower", "Free Chlorine Lower Limit", "home/esp32/CL_Lower", "home/esp32/CL_Lower/set", nullptr, "mg/L", nullptr, nullptr, nullptr, nullptr, nullptr, "0.2", "2.5", "0.1"},
+    {"number", "CL_Upper", "Free Chlorine Upper Limit", "home/esp32/CL_Upper", "home/esp32/CL_Upper/set", nullptr, "mg/L", nullptr, nullptr, nullptr, nullptr, nullptr, "0.2", "2.5", "0.1"},
+    {"number", "PH_setting", "pH Upper Limit (Legacy)", "home/esp32/PH_setting", "home/esp32/PH_setting/set", nullptr, "pH", nullptr, nullptr, nullptr, nullptr, nullptr, "6", "9", "0.1"},
       {"number", "LedBrightness", "🔆 Яркость", "home/esp32/LedBrightness", "home/esp32/LedBrightness/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, "10", "255", "1"},
     {"number", "LedAutoplayDuration", "⏳ Смена режима (сек)", "home/esp32/LedAutoplayDuration", "home/esp32/LedAutoplayDuration/set", nullptr, "s", nullptr, nullptr, nullptr, nullptr, nullptr, "5", "180", "5"},
     {"text", "LEDColor", "LED Color", "home/esp32/LEDColor", "home/esp32/LEDColor/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
-      {"text", "RoomTempRange", "🎚️ Включение/выключение обогрева, °C", "home/esp32/RoomTempRange", "home/esp32/RoomTempRange/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"text", "RoomTempRange", "🎚️ Включение/выключение обогрева, °C", "home/esp32/RoomTempRange", "home/esp32/RoomTempRange/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"binary_sensor", "Rs485Enabled", "RS485 Communication Enabled", "home/esp32/Rs485Enabled", nullptr, "connectivity", nullptr, nullptr, nullptr, "1", "0"},
+    {"binary_sensor", "Rs485RelayDataValid", "RS485 Relay Data Valid", "home/esp32/Rs485RelayDataValid", nullptr, "connectivity", nullptr, nullptr, nullptr, "1", "0"},
+    {"binary_sensor", "Rs485InputDataValid", "RS485 Input Data Valid", "home/esp32/Rs485InputDataValid", nullptr, "connectivity", nullptr, nullptr, nullptr, "1", "0"},
+    {"sensor", "Rs485BaudRate", "RS485 Active Baud Rate", "home/esp32/Rs485BaudRate", nullptr, nullptr, "baud", nullptr, nullptr, nullptr, nullptr},
+    {"sensor", "Rs485UartMode", "RS485 Active UART Mode", "home/esp32/Rs485UartMode", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"sensor", "Rs485SlaveId", "RS485 Active Modbus Slave ID", "home/esp32/Rs485SlaveId", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"number", "Rs485PollIntervalMs", "RS485 Poll Interval", "home/esp32/Rs485PollIntervalMs", "home/esp32/Rs485PollIntervalMs/set", nullptr, "ms", nullptr, nullptr, nullptr, nullptr, nullptr, "200", "5000", "100"},
+    {"sensor", "CurrentTime", "Device Local Time", "home/esp32/CurrentTime", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"number", "ClockSelect", "GMT Offset", "home/esp32/ClockSelect", "home/esp32/ClockSelect/set", nullptr, "h", nullptr, nullptr, nullptr, nullptr, nullptr, "-12", "14", "1"},
   };
 
   static const char* const selectOptions[] = {"off", "on", "auto", "auto_timer_off", "timer"}; // варианты для select
@@ -1185,7 +1442,9 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
   static const char* const ledColorOrderOptions[] = {"GRB", "RGB", "GBR", "RBG", "BRG", "BGR"};
   static const char* const dosingOptions[] = {"1", "2", "14", "15", "16", "3", "4", "5", "6", "8", "9", "10", "11", "12", "13", "7"};
   const size_t baseCount = sizeof(baseEntities) / sizeof(baseEntities[0]); // количество base сущностей
-  const size_t totalCount = baseCount + 9; // количество select сущностей
+  const size_t selectCount = 9;
+  const size_t rs485EntityCount = 32; // Только безопасное отображение: 16 readback + 16 дискретных входов.
+  const size_t totalCount = baseCount + selectCount + rs485EntityCount;
 
   if(mqttDiscoveryStage == DISCOVERY_NONE){
     mqttDiscoveryStage = DISCOVERY_MAIN_ENTITIES; // старт этапа
@@ -1216,6 +1475,22 @@ if(mqttDiscoveryStage == DISCOVERY_MAIN_ENTITIES){
           result = publishMqttDiscoverySelect("ACO_Work", "⏳ Период дозирования ACO", "home/esp32/ACO_Work", "home/esp32/ACO_Work/set", dosingOptions, 16, deviceId, deviceName, true, true);
       } else if(mqttDiscoveryIndex == baseCount + 8){
          result = publishMqttDiscoverySelect("H2O2_Work", "⏳ Период дозирования NaOCl", "home/esp32/H2O2_Work", "home/esp32/H2O2_Work/set", dosingOptions, 16, deviceId, deviceName, true, true);
+      } else {
+        const size_t dynamicIndex = mqttDiscoveryIndex - baseCount - selectCount;
+        const bool isReadback = dynamicIndex < 16;
+        const uint8_t channel = static_cast<uint8_t>(dynamicIndex % 16);
+        String id = isReadback ? "Rs485RelayReadback" : "Rs485Input";
+        id += String(channel);
+        String name = isReadback ? "Relay Readback " : "Digital Input ";
+        name += String(channel + 1);
+        String stateTopic = "home/esp32/" + id;
+        MqttDiscoveryEntity dynamicEntity = {
+          "binary_sensor",
+          id.c_str(), name.c_str(), stateTopic.c_str(), nullptr,
+          isReadback ? "power" : nullptr, nullptr, nullptr, nullptr,
+          "1", "0"
+        };
+        result = publishMqttDiscoveryEntity(dynamicEntity, deviceId, deviceName, true);
       }
 
  if(!result.published){
@@ -1239,50 +1514,6 @@ if(mqttDiscoveryStage == DISCOVERY_MAIN_ENTITIES){
         }
 
         if(mqttDiscoveryRetryCount <= mqttDiscoveryMaxRetries){
-          if(mqttDiscoveryIndex >= baseCount){
-            const size_t selectIndex = mqttDiscoveryIndex - baseCount;
-            if(selectIndex <= 8){
-              const char* id = nullptr;
-              const char* name = nullptr;
-              const char* stateTopic = nullptr;
-              const char* commandTopic = nullptr;
-              const char* const* options = nullptr;
-              size_t optionsCount = 0;
-              if(selectIndex == 0){
-                id = "SetLamp"; name = "💡 Режим света"; stateTopic = "home/esp32/SetLamp"; commandTopic = "home/esp32/SetLamp/set"; options = selectOptions; optionsCount = 5;
-              } else if(selectIndex == 1){
-                id = "SetRGB"; name = "🎛️ Режим RGB"; stateTopic = "home/esp32/SetRGB"; commandTopic = "home/esp32/SetRGB/set"; options = selectOptions; optionsCount = 5;
-              } else if(selectIndex == 2){
-                id = "SetUlLight"; name = "🚏 Режим уличного освещения"; stateTopic = "home/esp32/SetUlLight"; commandTopic = "home/esp32/SetUlLight/set"; options = selectOptions; optionsCount = 5;
-              } else if(selectIndex == 3){
-                id = "LedColorMode"; name = "🎨 Режим цвета RGB"; stateTopic = "home/esp32/LedColorMode"; commandTopic = "home/esp32/LedColorMode/set"; options = ledColorModeOptions; optionsCount = 2;
-              } else if(selectIndex == 4){
-                id = "LedPattern"; name = "✨ Эффект RGB"; stateTopic = "home/esp32/LedPattern"; commandTopic = "home/esp32/LedPattern/set"; options = ledPatternOptions; optionsCount = 24;
-              } else if(selectIndex == 5){
-                id = "LedAutoplay"; name = "🔁 Автосмена RGB"; stateTopic = "home/esp32/LedAutoplay"; commandTopic = "home/esp32/LedAutoplay/set"; options = ledAutoplayOptions; optionsCount = 2;
-              } else if(selectIndex == 6){
-                 id = "LedColorOrder"; name = "🎚️ Порядок цветов"; stateTopic = "home/esp32/LedColorOrder"; commandTopic = "home/esp32/LedColorOrder/set"; options = ledColorOrderOptions; optionsCount = 6;
-              } else if(selectIndex == 7){
-                id = "ACO_Work"; name = "🧴 Период дозирования ACO"; stateTopic = "home/esp32/ACO_Work"; commandTopic = "home/esp32/ACO_Work/set"; options = dosingOptions; optionsCount = 16;
-              } else if(selectIndex == 8){
-                 id = "H2O2_Work"; name = "🧪 Период дозирования NaOCl"; stateTopic = "home/esp32/H2O2_Work"; commandTopic = "home/esp32/H2O2_Work/set"; options = dosingOptions; optionsCount = 16;
-              }
-              if(id){
-                MqttDiscoveryPublishResult fallbackResult = publishMqttDiscoverySelect(id, name, stateTopic, commandTopic, options, optionsCount, deviceId, deviceName, true, false);
-                if(fallbackResult.published){
-                  Serial.printf("[MQTT] Discovery select fallback (no options) idx=%u topic=%s payload=%u\n",
-                                static_cast<unsigned int>(mqttDiscoveryIndex),
-                                fallbackResult.topic.c_str(),
-                                static_cast<unsigned int>(fallbackResult.payloadLength));
-                  mqttDiscoveryLastMaxPayload = max(mqttDiscoveryLastMaxPayload, fallbackResult.payloadLength);
-                  mqttDiscoveryRetryCount = 0;
-                  mqttDiscoveryIndex++;
-                  publishedCount++;
-                  continue;
-                }
-              }
-            }
-          }
           break; // повторим в следующем loop
         }
         Serial.printf("[MQTT] Discovery skip idx=%u topic=%s payload=%u\n",
@@ -1330,8 +1561,8 @@ inline void publishMqttStateBool(const char* topic, bool value){ // публик
 }
 
 inline void publishMqttStateFloat(const char* topic, float value){ // публикация float состояния
-  if(isnan(value)){
-    publishMqttPayloadIfChanged(topic, String("0")); // защита от NaN
+  if(!isfinite(value)){
+    publishMqttPayloadIfChanged(topic, String("unknown")); // неисправный датчик не маскируем ложным нулем
     return;
   }
   String payload = String(value); // формирование строки
@@ -1403,6 +1634,8 @@ inline void loadMqttSettings(){ // загрузка настроек MQTT
     }
   }
   if(!mqttHost.length()) mqttEnabled = false;
+  if(mqttPublishInterval < 1000UL) mqttPublishInterval = 1000UL; // поврежденная настройка не должна раскрутить MQTT в tight loop
+  if(mqttPublishInterval > 3600000UL) mqttPublishInterval = 3600000UL;
   mqttApplyBaseTopic(mqttBaseTopic);
   persistMqttSettings(); // После чтения синхронизируем оба хранилища.
 }
@@ -1467,6 +1700,13 @@ inline bool mqttSubscribeTopic(const char* topic, uint8_t qos = 0){
   return mqttClient.subscribe(resolvedTopic.c_str(), qos);
 }
 
+inline void mqttSubscribeRequired(const char* topic, uint8_t qos = 0){ // подписки discovery-команд не должны молча теряться
+  if(!mqttSubscribeTopic(topic, qos)){
+    const String resolvedTopic = mqttTopicFromLegacy(String(topic));
+    Serial.printf("[MQTT] Subscribe failed: %s\n", resolvedTopic.c_str());
+  }
+}
+
 inline void connectMqtt(){ // подключение к MQTT
   if(!mqttEnabled) return; // выход если MQTT выключен
   if(mqttHost.length() == 0) return; // выход если host пустой
@@ -1502,52 +1742,15 @@ if(!resolveMqttHost()) return; // хост не резолвится
       mqttConsecutiveFailures = 0; // Успешное подключение сбрасывает счетчик ошибок.
       mqttReconnectBlockedUntil = 0; // Снимаем MQTT backoff после успешного подключения.
       mqttLastConnectState = MQTT_CONNECTED; // Фиксируем успешное состояние клиента.
-      mqttForcePublishAllStates = true; // После подключения один периодический проход должен отправить полный снимок.
-      mqttLastPublish = 0; // Не ждем старый интервал перед полным снимком.
-       publishMqttAvailability("online", true); // публикация доступности
- #if 1 // MQTT Discovery отключен
-      mqttDiscoveryStage = DISCOVERY_NONE; // сброс этапа discovery
-      mqttDiscoveryIndex = 0; // сброс индекса
-      mqttDiscoveryLastAttempt = 0; // сброс таймера
-      mqttDiscoveryPending = true; // публикация MQTT Discovery после первого loop
-      mqttDiscoveryFullDevicePublished = false;
-      mqttDiscoveryLastMaxPayload = 0;
-      mqttDiscoveryRetryIndex = 0;
-      mqttDiscoveryRetryCount = 0;
-      mqttDiscoveryLegacyCleanupDone = false;
+      publishMqttAvailability("online", true); // публикация доступности
+      mqttBeginHomeAssistantReplay(true); // при reconnect сначала обновляем discovery, затем полный state snapshot
+#if 1
       publishHomeAssistantDiscovery(); // попытка публикации сразу после подключения
-      #endif
+#endif
 
-      mqttSubscribeTopic("home/esp32/tempSet", 0); // подписка на топик
-      mqttSubscribeTopic("home/esp32/Power_Filtr/set", 0); // команда фильтра
-      mqttSubscribeTopic("home/esp32/Filtr_Time1/set", 0); // таймер фильтрации №1
-      mqttSubscribeTopic("home/esp32/Filtr_Time2/set", 0); // таймер фильтрации №2
-      mqttSubscribeTopic("home/esp32/Filtr_Time3/set", 0); // таймер фильтрации №3
-      mqttSubscribeTopic("home/esp32/Power_Clean/set", 0); // промывка фильтра
-            mqttSubscribeTopic("home/esp32/Power_Drain/set", 0); // слив воды из бассейна
-      mqttSubscribeTopic("home/esp32/Clean_Time1/set", 0); // таймер промывки
-      mqttSubscribeTopic("home/esp32/DaysSelect/set", 0); // дни промывки
-      mqttSubscribeTopic("home/esp32/DaysMonToggle/set", 0); // понедельник промывки
-      mqttSubscribeTopic("home/esp32/DaysTueToggle/set", 0); // вторник промывки
-      mqttSubscribeTopic("home/esp32/DaysWedToggle/set", 0); // среда промывки
-      mqttSubscribeTopic("home/esp32/DaysThuToggle/set", 0); // четверг промывки
-      mqttSubscribeTopic("home/esp32/DaysFriToggle/set", 0); // пятница промывки
-      mqttSubscribeTopic("home/esp32/DaysSatToggle/set", 0); // суббота промывки
-      mqttSubscribeTopic("home/esp32/DaysSunToggle/set", 0); // воскресенье промывки
-      mqttSubscribeTopic("home/esp32/FiltrTimer1_ON/set", 0); // время фильтрации №1 ON
-      mqttSubscribeTopic("home/esp32/FiltrTimer1_OFF/set", 0); // время фильтрации №1 OFF
-      mqttSubscribeTopic("home/esp32/FiltrTimer2_ON/set", 0); // время фильтрации №2 ON
-      mqttSubscribeTopic("home/esp32/FiltrTimer2_OFF/set", 0); // время фильтрации №2 OFF
-      mqttSubscribeTopic("home/esp32/FiltrTimer3_ON/set", 0); // время фильтрации №3 ON
-      mqttSubscribeTopic("home/esp32/FiltrTimer3_OFF/set", 0); // время фильтрации №3 OFF
-      mqttSubscribeTopic("home/esp32/CleanTimer1_ON/set", 0); // время промывки ON
-      mqttSubscribeTopic("home/esp32/CleanTimer1_OFF/set", 0); // время промывки OFF
-      mqttSubscribeTopic("home/esp32/Pow_Ul_light/set", 0); // команда освещения
-      mqttSubscribeTopic("home/esp32/Activation_Heat/set", 0); // команда нагрева
-      mqttSubscribeTopic("home/esp32/SetLamp/set", 0); // команда режима лампы
-      mqttSubscribeTopic("home/esp32/SetRGB/set", 0); // команда режима RGB
-      mqttSubscribeTopic("home/esp32/SetUlLight/set", 0); // команда режима уличного освещения
-      mqttSubscribeTopic("home/esp32/+/set", 0); // универсальная подписка на команды
+      mqttSubscribeRequired("homeassistant/status", 0); // HA birth/restart replay
+      mqttSubscribeRequired("home/esp32/+/set", 0); // все одноуровневые discovery command topics без дублей
+      mqttSubscribeRequired("home/esp32/button/restart/set", 0); // двухуровневая служебная команда
     
     } else { // если не удалось подключиться
       mqttIsConnected = false; // сброс флага
@@ -1582,11 +1785,11 @@ inline void stopMqttService(){ // остановка MQTT
   mqttLastConnectState = MQTT_DISCONNECTED; // Сбрасываем диагностический код MQTT.
   mqttLastResolveAttempt = 0; // сброс таймера резолва
 
-  #if 1 // MQTT Discovery отключен
+  #if 1 // MQTT Discovery включен
   mqttDiscoveryPending = false; // сброс discovery
   mqttDiscoveryStage = DISCOVERY_NONE; // сброс этапа
   mqttDiscoveryIndex = 0; // сброс индекса
-  mqttDiscoveryLegacyCleanupDone = false;
+  // mqttDiscoveryLegacyCleanupDone намеренно не сбрасываем: очистка legacy-конфигов нужна один раз за boot.
   #endif
 }
 
@@ -1610,16 +1813,17 @@ inline void handleMqttLoop(){ // основной цикл MQTT
 
   mqttClient.loop(); // обработка MQTT
 
-  #if 1 // MQTT Discovery отключен
+  #if 1 // MQTT Discovery включен
     if(mqttDiscoveryPending) publishHomeAssistantDiscovery(); // публикация после первого loop
-#endif
+  #endif
 
   unsigned long now = millis(); // текущее время
-  if(now - mqttLastPublish >= mqttPublishInterval){ // проверка интервала
+  if(!mqttDiscoveryPending && (mqttForcePublishAllStates || now - mqttLastPublish >= mqttPublishInterval)){ // state replay идет только после discovery
     mqttLastPublish = now; // обновление времени
     if(mqttClient.connected()){ // если подключены
-      publishMqttStateString("home/esp32/test", "123");
       publishMqttStateFloat("home/esp32/DS1", DS1);
+      publishMqttStateString("home/esp32/DS2", DS2Available ? String(DS2) : String("unknown"));
+      publishMqttStateBool("home/esp32/DS2Available", DS2Available);
       publishMqttStateFloat("home/esp32/RoomTemp", DS1); // RoomTemp использует DS1 в UI
       publishMqttStateFloat("home/esp32/PH", PH);
       publishMqttStateInt("home/esp32/corrected_ORP_Eh_mV", corrected_ORP_Eh_mV);
@@ -1631,32 +1835,77 @@ inline void handleMqttLoop(){ // основной цикл MQTT
       publishMqttStateString("home/esp32/OverlayPh", OverlayPh);
       publishMqttStateString("home/esp32/OverlayChlorine", OverlayChlorine);
       publishMqttStateString("home/esp32/OverlayFilterState", OverlayFilterState);
+      publishMqttStateString("home/esp32/OverlayDrainPit", OverlayDrainPit);
+      publishMqttStateString("home/esp32/OverlayLight", OverlayLight);
       publishMqttStateString("home/esp32/InfoString2", InfoString2);
       publishMqttStateString("home/esp32/InfoStringDIN", InfoStringDIN);
       publishMqttStateInt("home/esp32/Lumen_Ul", Lumen_Ul);
       publishMqttStateInt("home/esp32/analogValuePH", analogValuePH_Comp);
 
-      publishMqttStateBool("home/esp32/Power_H2O2", Power_H2O2);
-      publishMqttStateBool("home/esp32/Power_ACO", Power_ACO);
-      publishMqttStateBool("home/esp32/Power_Heat", Power_Heat);
-      publishMqttStateBool("home/esp32/Power_Topping_State", Power_Topping_State);
-      publishMqttStateBool("home/esp32/WaterLevelSensorUpper", WaterLevelSensorUpper);
-      publishMqttStateBool("home/esp32/WaterLevelSensorLower", WaterLevelSensorLower);
-            publishMqttStateBool("home/esp32/WaterLevelSensorDrain", WaterLevelSensorDrain);
-      publishMqttStateBool("home/esp32/Power_Drain_State", Power_Drain_State);
-      publishMqttStateBool("home/esp32/Power_Warm_floor_heating", Power_Warm_floor_heating);
+      const bool rs485RelayFresh = rs485RelayDataFresh();
+      const bool rs485InputFresh = rs485InputDataFresh();
+      publishMqttStateBool("home/esp32/LampActual", Lamp || (rs485RelayFresh && ReadRelayArray[0]));
+      publishMqttStateBool("home/esp32/RgbActual", Pow_WS2815 || (rs485RelayFresh && ReadRelayArray[1]));
+      publishMqttStateBool("home/esp32/OutdoorLightActual", Pow_Ul_light || (rs485RelayFresh && ReadRelayArray[15]));
+      publishMqttStateString("home/esp32/LightSensorLiveInfo", uiValueForId("LightSensorLiveInfo"));
+      publishMqttStateString("home/esp32/LampLightAutoState", uiValueForId("LampLightAutoState"));
+      publishMqttStateString("home/esp32/RgbLightAutoState", uiValueForId("RgbLightAutoState"));
+      publishMqttStateString("home/esp32/UlLightAutoState", uiValueForId("UlLightAutoState"));
 
-      publishMqttStateBool("home/esp32/Power_Filtr", Power_Filtr);
+      publishMqttStateBool("home/esp32/Rs485Enabled", Rs485Enabled);
+      publishMqttStateInt("home/esp32/Rs485BaudRate", Rs485ActiveBaudRate);
+      publishMqttStateString("home/esp32/Rs485UartMode", Rs485ActiveUartMode);
+      publishMqttStateInt("home/esp32/Rs485SlaveId", Rs485ActiveSlaveId);
+      publishMqttStateInt("home/esp32/Rs485PollIntervalMs", Rs485PollIntervalMs);
+      publishMqttStateBool("home/esp32/Rs485RelayDataValid", rs485RelayFresh);
+      publishMqttStateBool("home/esp32/Rs485InputDataValid", rs485InputFresh);
+      for(uint8_t channel = 0; channel < 16; ++channel){
+        const String readbackTopic = "home/esp32/Rs485RelayReadback" + String(channel);
+        const String inputTopic = "home/esp32/Rs485Input" + String(channel);
+        if(rs485RelayFresh) publishMqttStateBool(readbackTopic.c_str(), ReadRelayArray[channel]);
+        else publishMqttStateString(readbackTopic.c_str(), "unknown");
+        if(rs485InputFresh) publishMqttStateBool(inputTopic.c_str(), ReadInputArray[channel]);
+        else publishMqttStateString(inputTopic.c_str(), "unknown");
+      }
+
+      publishMqttStateBool("home/esp32/Power_H2O2", Power_H2O2 || ManualPulse_H2O2_Active || (rs485RelayFresh && ReadRelayArray[5]));
+      publishMqttStateBool("home/esp32/Power_ACO", Power_ACO || ManualPulse_ACO_Active || (rs485RelayFresh && ReadRelayArray[6]));
+      publishMqttStateBool("home/esp32/Power_Heat", Power_Heat || (rs485RelayFresh && ReadRelayArray[4]));
+      publishMqttStateBool("home/esp32/Power_Topping_State", Power_Topping_State || (rs485RelayFresh && ReadRelayArray[13]));
+      publishMqttStateBool("home/esp32/WaterLevelSensorUpper", PoolUpperLevelReachedConfirmed);
+      publishMqttStateBool("home/esp32/WaterLevelSensorLower", PoolLowerLevelLowConfirmed);
+      publishMqttStateBool("home/esp32/WaterLevelSensorDrain", DrainPitFullConfirmed);
+      publishMqttStateBool("home/esp32/Power_Drain_State", Power_Drain_State);
+      publishMqttStateBool("home/esp32/Power_Warm_floor_heating", Power_Warm_floor_heating || (rs485RelayFresh && ReadRelayArray[14]));
+
+      publishMqttStateString("home/esp32/PoolWaterLevelStageInfo", buildPoolWaterLevelStageInfo());
+      publishMqttStateInt("home/esp32/ToppingWorkMinutes", ToppingWorkMinutes);
+      publishMqttStateInt("home/esp32/ToppingPauseMinutes", ToppingPauseMinutes);
+      publishMqttStateString("home/esp32/DrainPitStageInfo", buildDrainPitStageInfo());
+      publishMqttStateInt("home/esp32/DrainWorkMinutes", DrainWorkMinutes);
+      publishMqttStateInt("home/esp32/DrainPauseMinutes", DrainPauseMinutes);
+      publishMqttStateInt("home/esp32/DrainCyclesTarget", DrainCyclesTarget);
+      publishMqttStateInt("home/esp32/DrainCyclesDone", DrainCyclesDone);
+
+      publishMqttStateBool("home/esp32/Power_Filtr", Power_Filtr || (rs485RelayFresh && ReadRelayArray[8]));
       publishMqttStateBool("home/esp32/Filtr_Time1", Filtr_Time1);
       publishMqttStateBool("home/esp32/Filtr_Time2", Filtr_Time2);
       publishMqttStateBool("home/esp32/Filtr_Time3", Filtr_Time3);
-      publishMqttStateBool("home/esp32/Power_Clean", Power_Clean);
+      publishMqttStateBool("home/esp32/Power_Clean", Power_Clean || CleanSequenceActive);
       publishMqttStateBool("home/esp32/Clean_Time1", Clean_Time1);
-       publishMqttStateBool("home/esp32/Pow_WS2815", Pow_WS2815);
+      publishMqttStateBool("home/esp32/AirPump", AirPump || AirPumpAuto || (rs485RelayFresh && ReadRelayArray[9]));
+      publishMqttStateBool("home/esp32/SolValveFilBack", SolValveFilBack || ValveBackwashAuto || (rs485RelayFresh && ReadRelayArray[11]));
+      publishMqttStateBool("home/esp32/SolValveFiltration", SolValveFiltration || ValveFiltrationAuto || (rs485RelayFresh && ReadRelayArray[10]));
+      publishMqttStateBool("home/esp32/SolSandDump", SolSandDump || SolSandDumpAuto || (rs485RelayFresh && ReadRelayArray[12]));
+      publishMqttStateInt("home/esp32/T_air_pump", TimerAirSetting);
+      publishMqttStateInt("home/esp32/T_Valve_Switch", TimerValveSetting);
+      publishMqttStateInt("home/esp32/T_backwash", TimerBackwashSetting);
+      publishMqttStateInt("home/esp32/T_SolSandDump", TimerSolSandDump);
+      publishMqttStateBool("home/esp32/Pow_WS2815", Pow_WS2815 || (rs485RelayFresh && ReadRelayArray[1]));
       publishMqttStateBool("home/esp32/WS2815_Time1", WS2815_Time1);
       publishMqttStateBool("home/esp32/Activation_Water_Level", Activation_Water_Level);
       publishMqttStateBool("home/esp32/Power_Topping", Power_Topping);
-           publishMqttStateBool("home/esp32/Power_Drain", Power_Drain);
+      publishMqttStateBool("home/esp32/Power_Drain", Power_Drain);
       publishMqttStateBool("home/esp32/PH_Control_ACO", PH_Control_ACO);
       publishMqttStateBool("home/esp32/NaOCl_H2O2_Control", NaOCl_H2O2_Control);
       publishMqttStateBool("home/esp32/RoomTemper", RoomTemper);
@@ -1671,7 +1920,8 @@ inline void handleMqttLoop(){ // основной цикл MQTT
       publishMqttStateString("home/esp32/LedAutoplay", mqttLedAutoplayState());
       publishMqttStateString("home/esp32/LedColorOrder", LedColorOrder);
       publishMqttStateInt("home/esp32/Sider_heat", Sider_heat);
-      publishMqttStateFloat("home/esp32/PH_setting", PH_setting);
+      mqttPublishChemistryLimits();
+      mqttPublishLightThresholds();
       publishMqttStateInt("home/esp32/ACO_Work", ACO_Work);
       publishMqttStateInt("home/esp32/H2O2_Work", H2O2_Work);
       publishMqttStateString("home/esp32/DaysSelect", DaysSelect);
@@ -1696,12 +1946,14 @@ inline void handleMqttLoop(){ // основной цикл MQTT
       publishMqttStateString("home/esp32/RgbTimer_OFF", formatMinutesToTime(mqttTimerOffMinutes("RgbTimer")));
       publishMqttStateString("home/esp32/UlLightTimer_ON", formatMinutesToTime(mqttTimerOnMinutes("UlLightTimer")));
       publishMqttStateString("home/esp32/UlLightTimer_OFF", formatMinutesToTime(mqttTimerOffMinutes("UlLightTimer")));
-      publishMqttStateBool("home/esp32/Pow_Ul_light", Pow_Ul_light);
+      publishMqttStateBool("home/esp32/Pow_Ul_light", Pow_Ul_light || (rs485RelayFresh && ReadRelayArray[15]));
       publishMqttStateBool("home/esp32/Activation_Heat", Activation_Heat);
 
       publishMqttStateString("home/esp32/SetLamp", SetLamp);
       publishMqttStateString("home/esp32/SetRGB", SetRGB);
       publishMqttStateString("home/esp32/SetUlLight", SetUlLight);
+      publishMqttStateString("home/esp32/CurrentTime", CurrentTime);
+      publishMqttStateInt("home/esp32/ClockSelect", gmtOffset_correct);
       mqttForcePublishAllStates = false; // Полный снимок отправлен, дальше state-публикации идут только при изменении.
     
     }
