@@ -33,7 +33,7 @@ inline void interface(){ // Декларатиынве функции интер
   
     // Общая информация по бассейну
     UI_PAGE();
-    UI_IMAGE("Image1", "/Basin.gif", "width:100%;height:auto;border-radius:0;box-shadow:none;");
+    UI_IMAGE("Image1", "/Stop.png", "width:100%;height:auto;border-radius:0;box-shadow:none;");
     UI_IMAGE("PoolLevelIcon", "/level_between_levels.png", "width:6.8%;height:auto;left:32%;top:8%;border-radius:8px;box-shadow:0 8px 18px rgba(0,0,0,0.35);pointer-events:none;");
     
     UI_TEXT("OverlayPoolTemp", OverlayPoolTemp, "x:57%;y:35%;fontSize:14;color:#00ff00");

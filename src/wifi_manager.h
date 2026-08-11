@@ -4,6 +4,7 @@
 #include <ESPmDNS.h>
 #include <Preferences.h>
 #include <DNSServer.h>
+#include <esp_wifi.h>
 #include <type_traits>
 
 struct WifiStatusInfo {
@@ -122,7 +123,8 @@ inline const unsigned long connectedCheckInterval = 1000; // Быстро обн
 inline const unsigned long primaryRecoveryScanInterval = 30000; // На резервной сети регулярно ищем восстановившуюся основную.
 inline const unsigned long degradedPrimaryScanInterval = 30000; // При слабой основной сравниваем ее с резервной.
 inline const unsigned long normalPrimaryScanInterval = 120000; // При хорошем сигнале сравнение редкое и не нагружает радио.
-inline const unsigned long fallbackRecoveryScanInterval = 15000; // Из аварийной AP возвращаемся в STA без долгого ожидания.
+inline const unsigned long fallbackRecoveryScanInterval = 30000; // В свободной AP периодически ищем уже сохраненные STA-сети.
+inline const unsigned long fallbackClientQuietInterval = 10000; // После ухода клиента даем Web-сессии завершиться перед сканированием.
 inline const unsigned long primaryRetryCooldown = 60000; // После неудачи не пытаемся вернуться на основную каждую секунду.
 inline const int primaryDegradedRssiDbm = -75; // Ниже этого уровня основная сеть считается деградировавшей.
 inline const int usablePrimaryRssiDbm = -78; // Минимальный пригодный сигнал при близком уровне резервной сети.
@@ -146,12 +148,17 @@ inline int degradedPrimaryScanCount = 0; // Подтверждения дегр�
 inline bool autoSwitchRequested = false; // Результат асинхронного сканирования требует сменить STA.
 inline bool autoSwitchToBackup = false; // Целевая сеть для отложенного переключения.
 inline bool wifiScanActive = false; // Асинхронное сканирование не блокирует прикладной loop.
+inline bool wifiScanForFallbackRecovery = false; // Отличаем фоновое восстановление STA от ручного сканирования Web.
 inline unsigned long wifiScanStartedAt = 0;
 inline unsigned long lastScanPollAt = 0;
 inline bool manualScanQueued = false;
 inline bool manualScanReady = false;
 inline String manualScanNetworksJson = "[]";
 inline SemaphoreHandle_t wifiScanMutex = nullptr;
+inline bool savedStaApplyPending = false; // Новые STA-настройки применяем после отправки HTTP-ответа браузеру.
+inline unsigned long savedStaApplyAt = 0;
+inline const unsigned long savedStaApplyDelay = 2000;
+inline unsigned long lastApClientSeenAt = 0;
 
 inline void beginMdns() {
   if (mdnsStarted)
@@ -254,31 +261,37 @@ inline void evaluateScanForAutomaticSwitch(int primaryRssi, int backupRssi) {
     return;
   }
 
-  if (fallbackApActive) {
-    if (primaryRssi > -1000 && now >= primaryRetryNotBefore) {
-      autoSwitchRequested = true;
-      autoSwitchToBackup = false;
-    } else if (backupRssi > -1000 && staBackupSsid.length()) {
-      autoSwitchRequested = true;
-      autoSwitchToBackup = true;
-    }
-  }
 }
 
-inline bool startAsyncWifiScan() {
+inline bool startAsyncWifiScan(bool fallbackRecovery = false) {
   if (wifiScanActive) return true;
   wifi_mode_t mode = WiFi.getMode();
   if (mode == WIFI_MODE_NULL) WiFi.mode(WIFI_MODE_STA);
   else if (mode == WIFI_MODE_AP) WiFi.mode(WIFI_MODE_APSTA); // Видимая аварийная AP при сканировании не останавливается.
   WiFi.scanDelete();
-  const int16_t state = WiFi.scanNetworks(true, true, false, 300); // Async по всем каналам; 300 мс/канал надежнее на занятом Wi-Fi.
+  const int16_t state = WiFi.scanNetworks(true, true, false, 120); // Короткое активное сканирование уменьшает паузу общего AP/STA-радиоканала.
   if (state == WIFI_SCAN_RUNNING) {
     wifiScanActive = true;
+    wifiScanForFallbackRecovery = fallbackRecovery;
     wifiScanStartedAt = millis();
     lastAutoScanAt = wifiScanStartedAt;
     return true;
   }
+  wifiScanForFallbackRecovery = false;
   return false;
+}
+
+inline void restoreStableFallbackApMode() {
+  if (!fallbackApActive) return;
+  if (WiFi.getMode() != WIFI_MODE_AP) {
+    WiFi.setAutoReconnect(false); // В сервисном AP драйвер STA не должен запускать фоновые переподключения.
+    WiFi.disconnect(false, false);
+    WiFi.mode(WIFI_MODE_AP);
+    WiFi.softAPsetHostname(hostName.c_str());
+    WiFi.softAP(apSsid.c_str(), apPass.c_str()); // После сканирования возвращаем постоянную AP с теми же параметрами.
+  }
+  if (!captiveDnsActive) startCaptiveDns();
+  beginMdns(); // esp32.local должен работать и на интерфейсе точки доступа.
 }
 
 inline void finishManualScan(const String &networksJson) {
@@ -304,10 +317,13 @@ inline void pollAsyncWifiScan() {
     count = WIFI_SCAN_FAILED;
   }
 
+  const bool fallbackRecovery = wifiScanForFallbackRecovery;
   wifiScanActive = false;
+  wifiScanForFallbackRecovery = false;
   if (count < 0) {
     WiFi.scanDelete();
     finishManualScan(connectedNetworkFallbackJson());
+    restoreStableFallbackApMode();
     return;
   }
 
@@ -332,9 +348,20 @@ inline void pollAsyncWifiScan() {
   networksJson += ']';
   lastPrimaryRssi = primaryRssi;
   lastBackupRssi = backupRssi;
-  evaluateScanForAutomaticSwitch(primaryRssi, backupRssi);
+  if (fallbackApActive && fallbackRecovery && WiFi.softAPgetStationNum() == 0) {
+    if (primaryRssi > -1000 && now >= primaryRetryNotBefore) {
+      autoSwitchRequested = true;
+      autoSwitchToBackup = false;
+    } else if (backupRssi > -1000 && staBackupSsid.length()) {
+      autoSwitchRequested = true;
+      autoSwitchToBackup = true;
+    }
+  } else if (!fallbackApActive) {
+    evaluateScanForAutomaticSwitch(primaryRssi, backupRssi);
+  }
   finishManualScan(networksJson);
   WiFi.scanDelete();
+  restoreStableFallbackApMode();
 }
 
 inline void startStaAttempt() {
@@ -345,8 +372,8 @@ inline void startStaAttempt() {
     activateFallbackAp();
     return;
   }
-  const wifi_mode_t targetMode = fallbackApActive ? WIFI_MODE_APSTA : WIFI_MODE_STA;
-  if (WiFi.getMode() != targetMode) WiFi.mode(targetMode); // Видимую AP сохраняем только во время аварийного восстановления.
+  WiFi.setAutoReconnect(true);
+  if (WiFi.getMode() != WIFI_MODE_STA) WiFi.mode(WIFI_MODE_STA);
   WiFi.setHostname(hostName.c_str());         // Применяем имя хоста перед подключением
   WiFi.setSleep(false);                       // Убираем power-save задержки и потери быстрых Web-запросов.
   WiFi.begin(connectSsid.c_str(), connectPass.c_str());
@@ -359,17 +386,22 @@ inline void startStaAttempt() {
 }
 
 inline void activateFallbackAp() {
-  const bool alreadyActive = fallbackApActive;
+  const wifi_mode_t previousMode = WiFi.getMode();
+  const bool alreadyActive = fallbackApActive && (previousMode == WIFI_MODE_AP || previousMode == WIFI_MODE_APSTA);
+  WiFi.setAutoReconnect(false); // Неверные старые STA-реквизиты не должны мешать работе страницы настройки.
   WiFi.disconnect(false, false); // Останавливаем только STA; сохраненную конфигурацию и радио не стираем.
-  if (WiFi.getMode() != WIFI_MODE_APSTA) WiFi.mode(WIFI_MODE_APSTA);
-  if (!alreadyActive) WiFi.softAP(apSsid.c_str(), apPass.c_str()); // Видимая сервисная AP остается доступной во время STA-поиска.
-  if (!alreadyActive) startCaptiveDns(); // В AP режиме все DNS-запросы ведем на ESP32 для автоперехода браузеров.
-  stopMdns();
+  if (WiFi.getMode() != WIFI_MODE_AP) WiFi.mode(WIFI_MODE_AP);
+  WiFi.softAPsetHostname(hostName.c_str());
+  if (!alreadyActive) WiFi.softAP(apSsid.c_str(), apPass.c_str()); // Чистый AP не прыгает по каналам из-за фонового STA-сканирования.
+  if (!captiveDnsActive) startCaptiveDns(); // В AP режиме все DNS-запросы ведем на ESP32 для автоперехода браузеров.
   fallbackApActive = true;                     // Запоминаем, что мы в аварийном режиме
   staAttemptInProgress = false;
   attemptCount = 0;
   checkInterval = 1000;
   lastAutoScanAt = millis();
+  lastApClientSeenAt = lastAutoScanAt;
+  stopMdns();
+  beginMdns(); // Публикуем http://esp32.local и в автономной AP.
   if (!alreadyActive) {
     Serial.printf("[WiFi] Fallback AP active: SSID \"%s\" | IP: %s\n",
                   apSsid.c_str(), WiFi.softAPIP().toString().c_str());
@@ -481,6 +513,10 @@ inline void requestStaSwitch(bool toBackup, const char *reason) {
   if (toBackup && !staBackupSsid.length()) return;
   if (!toBackup && !staSsid.length()) toBackup = true;
   Serial.printf("[WiFi] Switching to %s network: %s\n", toBackup ? "backup" : "primary", reason);
+  if (fallbackApActive) {
+    fallbackApActive = false;
+    stopCaptiveDns();
+  }
   WiFi.disconnect(false, false);
   stopMdns();
   wasStaConnected = false;
@@ -493,9 +529,46 @@ inline void requestStaSwitch(bool toBackup, const char *reason) {
 
 inline void ensureConnection() {
   const unsigned long now = millis();
+  if (fallbackApActive && wifiScanActive && wifiScanForFallbackRecovery && WiFi.softAPgetStationNum() > 0) {
+    esp_wifi_scan_stop(); // Клиент AP важнее фонового поиска: немедленно возвращаем радиоканал Web-интерфейсу.
+    WiFi.scanDelete();
+    wifiScanActive = false;
+    wifiScanForFallbackRecovery = false;
+    autoSwitchRequested = false;
+    lastApClientSeenAt = now;
+    finishManualScan(connectedNetworkFallbackJson());
+    restoreStableFallbackApMode();
+  }
   pollAsyncWifiScan();
 
+  if (savedStaApplyPending && static_cast<long>(now - savedStaApplyAt) >= 0) {
+    savedStaApplyPending = false;
+    WiFi.scanDelete();
+    wifiScanActive = false;
+    WiFi.disconnect(false, false);
+    stopCaptiveDns();
+    stopMdns();
+    fallbackApActive = false;
+    wasStaConnected = false;
+    staAttemptInProgress = false;
+    usingBackupSta = !staSsid.length() && staBackupSsid.length();
+    attemptCount = 0;
+    checkInterval = 1000;
+    primaryHealthyScanCount = 0;
+    degradedPrimaryScanCount = 0;
+    primaryRetryNotBefore = 0;
+    lastAutoScanAt = now;
+    startStaAttempt(); // HTTP-ответ уже успел уйти; теперь безопасно выключить AP и проверить новые реквизиты.
+    return;
+  }
+
   if (autoSwitchRequested) {
+    if (fallbackApActive && WiFi.softAPgetStationNum() > 0) {
+      autoSwitchRequested = false; // Пользователь успел вернуться в AP — не обрываем его ради автоматического STA.
+      lastApClientSeenAt = now;
+      restoreStableFallbackApMode();
+      return;
+    }
     const bool targetBackup = autoSwitchToBackup;
     autoSwitchRequested = false;
     requestStaSwitch(targetBackup, fallbackApActive ? "saved SSID is available" : "confirmed signal policy");
@@ -540,7 +613,13 @@ inline void ensureConnection() {
   }
 
   if (fallbackApActive && !staAttemptInProgress) {
-    if (!wifiScanActive && now - lastAutoScanAt >= fallbackRecoveryScanInterval) startAsyncWifiScan();
+    const uint8_t apClients = WiFi.softAPgetStationNum();
+    if (apClients > 0) {
+      lastApClientSeenAt = now;
+      return; // Пока пользователь на сайте, никакого фонового сканирования и переключения радиоканала.
+    }
+    if (now - lastApClientSeenAt < fallbackClientQuietInterval) return;
+    if (!wifiScanActive && now - lastAutoScanAt >= fallbackRecoveryScanInterval) startAsyncWifiScan(true);
     return;
   }
 
@@ -638,6 +717,7 @@ inline bool requestWifiNetworkScan() {
   if (wifiScanActive) return true;
   if (startAsyncWifiScan()) return true;
   finishManualScan(connectedNetworkFallbackJson());
+  restoreStableFallbackApMode();
   return false;
 }
 
@@ -674,19 +754,8 @@ inline bool saveWifiConfig(const String &ssid, const String &pass, const String 
   saveValue<String>("apPASS", apPass);
   saveValue<String>("hostname", hostName);
 
-  WiFi.disconnect(false, false);
-  stopMdns();
-  fallbackApActive = false;
-  staAttemptInProgress = false;
-  usingBackupSta = false;
-  attemptCount = 0;                            // Сбрасываем счетчик — новые попытки возможны после изменения настроек
-  checkInterval = 1000;                        // Проверяем статус чаще, пока нет подключения
-  primaryHealthyScanCount = 0;
-  degradedPrimaryScanCount = 0;
-  primaryRetryNotBefore = 0;
-  lastAutoScanAt = millis();
-  usingBackupSta = !staSsid.length() && staBackupSsid.length(); // Новая конфигурация снова начинает с основной сети.
-  startStaAttempt();
+  savedStaApplyPending = true;
+  savedStaApplyAt = millis() + savedStaApplyDelay; // Не обрываем AP раньше, чем браузер получит подтверждение сохранения.
   return true;
 }
 

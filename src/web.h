@@ -24,7 +24,7 @@
 
 using std::vector;              // Используем vector без указания std:: каждый раз
 
-constexpr bool kWebVerboseSerial = false; // Подробный WEB-лог выключен, чтобы Serial не тормозил загрузку сайта.
+constexpr bool kWebVerboseSerial = false; // Подробные этапы GET / доступны для диагностики, но не тормозят обычную работу.
 
 inline const char* webResetReasonToText(esp_reset_reason_t reason){ // Переводим код причины ресета в понятный текст для Serial-диагностики
   switch(reason){ // Нормализуем все важные типы перезапуска, чтобы быстро видеть источник проблемы
@@ -78,6 +78,133 @@ inline String liveJsonCache; // Короткий общий кеш /live: нес
 inline unsigned long liveJsonCacheAt = 0;
 inline bool liveJsonBuildInProgress = false;
 inline uint32_t liveJsonSeq = 0;
+
+class FlashHtmlBuilder { // Последовательно пишет большую страницу во Flash, не создавая опасный String на сотни КБ.
+ public:
+  explicit FlashHtmlBuilder(const char *path) : path_(path) { openFresh(); }
+
+  ~FlashHtmlBuilder() {
+    if(file_) file_.close();
+    if(buffer_) heap_caps_free(buffer_);
+    if(!finished_ && path_ && spiffsMounted && SPIFFS.exists(path_)) SPIFFS.remove(path_);
+  }
+
+  template <size_t N>
+  FlashHtmlBuilder &operator=(const char (&literal)[N]) {
+    reset();
+    append(literal, N - 1);
+    return *this;
+  }
+
+  template <size_t N>
+  FlashHtmlBuilder &operator+=(const char (&literal)[N]) {
+    append(literal, N - 1);
+    return *this;
+  }
+
+  FlashHtmlBuilder &operator+=(const char *text) {
+    if(text) append(text, strlen(text));
+    return *this;
+  }
+
+  FlashHtmlBuilder &operator+=(const String &text) {
+    append(text.c_str(), text.length());
+    return *this;
+  }
+
+  FlashHtmlBuilder &operator+=(String &&text) {
+    append(text.c_str(), text.length());
+    return *this;
+  }
+
+  FlashHtmlBuilder &operator+=(StringSumHelper &text) {
+    const String &value = static_cast<const String &>(text);
+    append(value.c_str(), value.length());
+    return *this;
+  }
+
+  bool reserve(size_t) const { return valid_; } // Совместимость со старым кодом: большой RAM reserve больше не нужен.
+  bool valid() const { return valid_; }
+  size_t length() const { return totalLength_ + bufferLength_; }
+
+  bool finish() {
+    if(finished_) return valid_;
+    flushBuffer();
+    if(file_) file_.close();
+    finished_ = true;
+    return valid_ && totalLength_ > 0;
+  }
+
+ private:
+  void openFresh() {
+    valid_ = spiffsMounted && path_;
+    finished_ = false;
+    bufferLength_ = 0;
+    totalLength_ = 0;
+    fragmentCount_ = 0;
+    nextProgressLog_ = 65536;
+    if(!valid_) return;
+    if(!buffer_) buffer_ = static_cast<uint8_t *>(heap_caps_malloc(kBufferSize, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+    if(!buffer_) { valid_ = false; return; }
+    if(SPIFFS.exists(path_)) SPIFFS.remove(path_);
+    file_ = SPIFFS.open(path_, FILE_WRITE);
+    if(!file_) valid_ = false;
+  }
+
+  void reset() {
+    if(file_) file_.close();
+    openFresh();
+  }
+
+  void append(const char *data, size_t dataLength) {
+    if(!valid_ || !data || dataLength == 0) return;
+    size_t offset = 0;
+    while(offset < dataLength && valid_) {
+      const size_t freeSpace = kBufferSize - bufferLength_;
+      if(freeSpace == 0) { flushBuffer(); continue; }
+      const size_t chunk = min(dataLength - offset, freeSpace);
+      memcpy(buffer_ + bufferLength_, data + offset, chunk);
+      bufferLength_ += chunk;
+      offset += chunk;
+      if(bufferLength_ == kBufferSize) flushBuffer();
+    }
+    fragmentCount_++;
+    if((fragmentCount_ & 0x1F) == 0) {
+      vTaskDelay(1);
+    }
+  }
+
+  void flushBuffer() {
+    if(!valid_ || bufferLength_ == 0) return;
+    const size_t written = file_.write(buffer_, bufferLength_); // Источник строго во внутренней RAM: безопасно при отключении Flash-кэша.
+    if(written != bufferLength_) {
+      Serial.printf("[WEB:/] SPIFFS short write | wanted=%u | written=%u | used=%u/%u\n",
+                    static_cast<unsigned>(bufferLength_), static_cast<unsigned>(written),
+                    static_cast<unsigned>(SPIFFS.usedBytes()), static_cast<unsigned>(SPIFFS.totalBytes()));
+      valid_ = false;
+      return;
+    }
+    totalLength_ += written;
+    bufferLength_ = 0;
+    if(totalLength_ >= nextProgressLog_) {
+      Serial.printf("[WEB:/] cache write progress | bytes=%u | ms=%u\n",
+                    static_cast<unsigned>(totalLength_), static_cast<unsigned>(millis()));
+      nextProgressLog_ += 65536;
+    }
+    vTaskDelay(1); // Flash и сетевой стек получают процессор между блоками по 4 КБ.
+  }
+
+  static constexpr size_t kBufferSize = 4096;
+  const char *path_ = nullptr;
+  File file_;
+  uint8_t *buffer_ = nullptr;
+  size_t bufferLength_ = 0;
+  size_t totalLength_ = 0;
+  uint32_t fragmentCount_ = 0;
+  size_t nextProgressLog_ = 65536;
+  bool valid_ = false;
+  bool finished_ = false;
+};
 
 inline void invalidateLiveJsonCache(){
   liveJsonCacheAt = 0;
@@ -1149,12 +1276,21 @@ bool Pow_WS2815, Pow_WS28151;		// Включение в ручную
 bool Pow_WS2815_autosvet, Saved_Pow_WS2815_autosvet; 
 bool WS2815_Time1, Saved_WS2815_Time1;
 
-inline const char* currentBasinImagePath() { // Выбирает изображение бассейна по фактическому состоянию подсветки.
-  if (CleanSequenceActive) return "/Basin.gif"; // Во время промывки показываем живое течение воды; в простое GIF не загружается.
-  if (Pow_WS2815 && Lamp) return "/Basin_RGB_LAMP.jpg";
-  if (Pow_WS2815) return "/Basin_RGB.jpg";
-  if (Lamp) return "/Basin_Lamp.jpg";
-  return "/Basin.gif"; // Базовая схема теперь тоже живая; статические варианты остаются для режимов подсветки.
+inline const char* currentBasinImagePath() { // Выбирает изображение бассейна по фактическому состоянию оборудования.
+  const bool relayDataFresh = rs485RelayDataFresh(); // Один раз проверяем свежесть Modbus, чтобы вся комбинация строилась по одному снимку.
+  const bool filtrationActive = CleanSequenceActive || Power_Filtr || (relayDataFresh && ReadRelayArray[8]); // Ручная, таймерная, промывочная или подтвержденная реле фильтрация.
+  const bool lampActive = Lamp || (relayDataFresh && ReadRelayArray[0]); // Режим света: команда или свежий факт реле 1.
+  const bool rgbActive = Pow_WS2815 || (relayDataFresh && ReadRelayArray[1]); // RGB WS2815: команда или свежий факт реле 2.
+  if (filtrationActive) {
+    if (lampActive && rgbActive) return "/Basin_RGB_LAMP_filtr.gif";
+    if (lampActive) return "/Basin_Lamp_filtr.gif";
+    if (rgbActive) return "/Basin_RGB_filtr.gif";
+    return "/Basin.gif";
+  }
+  if (lampActive && rgbActive) return "/Basin_RGB_LAMP.gif";
+  if (lampActive) return "/Basin_Lamp.gif";
+  if (rgbActive) return "/Basin_RGB.gif";
+  return "/Stop.png"; // Полный простой: фильтрация, промывка и подсветка выключены.
 }
 
 inline const char* currentPoolLevelIconPath() { // Выбирает маленькую PNG-пиктограмму уровня для общей страницы бассейна.
@@ -1828,24 +1964,11 @@ private:
       server.on("/", HTTP_GET, [self](AsyncWebServerRequest *r){
       if(!ensureAuthorized(r)) return;
 
-      if(spiffsMounted && SPIFFS.exists(webUiCachePath)){
-        AsyncWebServerResponse *cachedResponse = r->beginResponse(SPIFFS, webUiCachePath, "text/html; charset=UTF-8");
-        cachedResponse->addHeader("Cache-Control", "no-store");
-        r->send(cachedResponse);
-        return;
-      }
-
-      if(spiffsMounted && webUiCacheBuildInProgress){
-        AsyncWebServerResponse *busyResponse = r->beginResponse(200, "text/html; charset=UTF-8",
-          "<!doctype html><html><head><meta charset='utf-8'><meta http-equiv='refresh' content='1'></head><body style='background:#040639;color:#dbeafe;font-family:Arial,sans-serif'>Загрузка интерфейса ESP32...</body></html>");
-        busyResponse->addHeader("Cache-Control", "no-store");
-        busyResponse->addHeader("Retry-After", "1");
-        r->send(busyResponse);
-        return;
-      }
-      if(spiffsMounted) webUiCacheBuildInProgress = true;
+      webUiCacheBuildInProgress = true;
 
       const uint32_t requestStartMs = millis(); // Общее время GET /: потом сравниваем с таймингами этапов
+      if(kWebVerboseSerial) Serial.printf("[WEB:/] PSRAM page build started | core=%d | heap=%u | psram=%u\n",
+                                         xPortGetCoreID(), static_cast<unsigned>(ESP.getFreeHeap()), static_cast<unsigned>(ESP.getFreePsram()));
       uint32_t stageStartMs = requestStartMs; // Точка отсчёта длительности текущего этапа рендера
       uint32_t stageBuildHeaderMs = 0; // Время этапа сборки head/CSS для поиска узкого места
       uint32_t stageRenderTabsMs = 0; // Время рендера вкладок (контейнеры страниц)
@@ -1857,18 +1980,17 @@ private:
       logWebHeapStats("before-html-build"); // Снимок кучи до генерации HTML для контроля фрагментации
 
        // Формируем HTML-страницу
-      String html; // Единый буфер HTML, который далее отдаётся в chunked-режиме
-      logWebHeapStats("before-reserve"); // Проверяем heap перед крупным reserve
-      const size_t htmlReserveBytes = 260000; // Увеличенный reserve снижает realloc и риск обрыва при росте UI
+      String html; // Большая страница временно живет в PSRAM и никогда не записывается в заполненный SPIFFS.
+      logWebHeapStats("before-builder-check");
+      const size_t htmlReserveBytes = 400000; // На N16R8 большой malloc уходит в PSRAM; внутреннюю RAM оставляем сетевому стеку.
       if(!html.reserve(htmlReserveBytes)){
-        if(kWebVerboseSerial) Serial.printf("[WEB:/] html.reserve(%u) failed\n", static_cast<unsigned>(htmlReserveBytes)); // Явно фиксируем OOM/фрагментацию только в debug-режиме.
-        logWebHeapStats("reserve-failed"); // Фиксируем состояние памяти в точке отказа reserve
+        if(kWebVerboseSerial) Serial.println("[WEB:/] PSRAM HTML reserve failed");
+        logWebHeapStats("builder-init-failed");
         webUiCacheBuildInProgress = false;
-        r->send(500, "text/plain", "Insufficient heap for HTML page"); // Явный ответ вместо краша при нехватке памяти
-        return; // Прерываем обработку, чтобы не усугублять ситуацию с памятью
+        r->send(500, "text/plain", "Unable to allocate HTML page");
+        return;
       }
-      if(kWebVerboseSerial) Serial.printf("[WEB:/] html.reserve ok | reserved=%u\n", static_cast<unsigned>(htmlReserveBytes)); // Подтверждаем reserve только в debug-режиме.
-      logWebHeapStats("after-reserve"); // Контроль, сколько heap осталось после резерва буфера
+      logWebHeapStats("after-builder-init");
 
       html = "<!DOCTYPE html><html><head><meta charset='UTF-8'><meta http-equiv='Content-Type' content='text/html; charset=UTF-8'><title>";
       html += dashAppTitle;
@@ -2439,7 +2561,7 @@ private:
 
               String imgSrc = e.label; // Источник изображения
               if(!imgSrc.startsWith("http") && !imgSrc.startsWith("/")) imgSrc = "/" + imgSrc; // Приведение к относительному пути
-              if(e.id == "Image1") imgSrc = currentBasinImagePath(); // Главная картинка бассейна зависит от RGB и лампы.
+              if(e.id == "Image1") imgSrc = currentBasinImagePath(); // Главная картинка зависит от фильтрации, промывки и подсветки.
               if(e.id == "PoolLevelIcon") imgSrc = currentPoolLevelIconPath(); // Маленькая пиктограмма уровня зависит от подтвержденных уровнемеров.
               if(imgSrc == "/getImage") imgSrc = "/getImage"; // Специальный endpoint изображения
 
@@ -5626,63 +5748,31 @@ function setImg(x){
 </script></body></html>
 )rawliteral";
 
- const uint32_t htmlBuildMs = millis() - requestStartMs; // Полное время сборки HTML до начала отправки
+      const uint32_t htmlBuildMs = millis() - requestStartMs; // Полное время сборки HTML до начала отправки
+      if(kWebVerboseSerial) Serial.printf("[WEB:/] HTML generated | bytes=%u | buildMs=%u\n",
+                                         static_cast<unsigned>(html.length()), static_cast<unsigned>(htmlBuildMs));
       if(kWebVerboseSerial) Serial.printf("[WEB:/] html-built | bytes=%u reserve=%u buildMs=%u\n", static_cast<unsigned>(html.length()), static_cast<unsigned>(htmlReserveBytes), static_cast<unsigned>(htmlBuildMs)); // Контроль итогового размера только в debug-режиме.
       logWebHeapStats("after-html-build-before-send"); // Проверяем heap после сборки и до сетевой отправки
 
-      if(spiffsMounted){
-        if(SPIFFS.exists(webUiCacheTempPath)) SPIFFS.remove(webUiCacheTempPath);
-        File cacheFile = SPIFFS.open(webUiCacheTempPath, FILE_WRITE);
-        bool cacheReady = false;
-        if(cacheFile){
-          const size_t expectedBytes = html.length();
-          const size_t writtenBytes = cacheFile.write(reinterpret_cast<const uint8_t*>(html.c_str()), expectedBytes);
-          cacheFile.close();
-          if(writtenBytes == expectedBytes){
-            if(SPIFFS.exists(webUiCachePath)) SPIFFS.remove(webUiCachePath);
-            cacheReady = SPIFFS.rename(webUiCacheTempPath, webUiCachePath);
-          }
-        }
-        if(cacheReady){
-          html = String(); // Освобождаем крупный heap-буфер до начала сетевой передачи.
-          AsyncWebServerResponse *cachedResponse = r->beginResponse(SPIFFS, webUiCachePath, "text/html; charset=UTF-8");
-          cachedResponse->addHeader("Cache-Control", "no-store");
-          webUiCacheBuildInProgress = false;
-          r->send(cachedResponse);
-          return;
-        }
-        if(SPIFFS.exists(webUiCacheTempPath)) SPIFFS.remove(webUiCacheTempPath);
-      }
-
-      if(kWebVerboseSerial) Serial.println("[WEB:/] chunked-send begin"); // Лог chunked-send выключен в обычной работе.
-      const uint32_t sendStartMs = millis(); // Отсчёт длительности этапа постановки chunked-отправки
-      auto htmlPtr = std::make_shared<String>(std::move(html)); // Буфер живёт до конца chunk-отправки и не освобождается преждевременно
+      const uint32_t sendStartMs = millis();
+      auto htmlPtr = std::make_shared<String>(std::move(html)); // Буфер остается жив до конца асинхронной передачи.
+      const size_t htmlTotalLen = htmlPtr->length();
+      AsyncWebServerResponse *response = r->beginChunkedResponse(
+        "text/html; charset=UTF-8",
+        [htmlPtr, htmlTotalLen](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
+          if(index >= htmlTotalLen) return 0;
+          if(maxLen == 0) return RESPONSE_TRY_AGAIN;
+          const size_t remaining = htmlTotalLen - index;
+          const size_t toCopy = remaining < maxLen ? remaining : maxLen;
+          memcpy(buffer, htmlPtr->c_str() + index, toCopy); // Только PSRAM -> внутренняя RAM сети; Flash-кэш не отключается.
+          return toCopy;
+        });
+      response->addHeader("Cache-Control", "no-store");
       webUiCacheBuildInProgress = false;
-      const size_t htmlTotalLen = htmlPtr->length(); // Полная длина ответа для корректной нарезки чанков
-      AsyncWebServerResponse *response = r->beginChunkedResponse("text/html; charset=UTF-8", // Chunked режим устраняет единичную тяжёлую отправку 120KB+
-        [htmlPtr, htmlTotalLen, sendStartMs](uint8_t *buffer, size_t maxLen, size_t index) -> size_t {
-          if(index == 0){ // Первый вызов: логируем параметры чанков, чтобы видеть реальный maxLen
-            if(kWebVerboseSerial) Serial.printf("[WEB:/][chunk] start total=%u maxChunk=%u\n", // Диагностика реального размера порции только в debug-режиме.
-                          static_cast<unsigned>(htmlTotalLen),
-                          static_cast<unsigned>(maxLen));
-          }
-          if(index >= htmlTotalLen){ // Достигнут конец буфера: штатно завершаем передачу
-            if(kWebVerboseSerial) Serial.printf("[WEB:/][chunk] done total=%u sendMs=%u\n", // Финальный маркер только в debug-режиме.
-                          static_cast<unsigned>(htmlTotalLen),
-                          static_cast<unsigned>(millis() - sendStartMs));
-            return 0; // Нормальное завершение chunked-ответа после передачи всего буфера
-          }
-          if(maxLen == 0){ // Важный фикс: 0 здесь не конец, просим стек повторить вызов позже
-            return RESPONSE_TRY_AGAIN; // Предотвращает обрыв страницы, который был виден на скриншоте
-          }
-          const size_t remaining = htmlTotalLen - index; // Сколько байт ещё осталось отправить клиенту
-          const size_t toCopy = remaining < maxLen ? remaining : maxLen; // Отдаём только доступный кусок без выхода за границы буфера
-          memcpy(buffer, htmlPtr->c_str() + index, toCopy); // Копируем текущий кусок в буфер сети без доп.алокаций
-          return toCopy; // Сообщаем стеку размер готового чанка
-        }
-      );
-      r->send(response); // Запускаем асинхронную отправку chunked-ответа клиенту
-      stageSendMs = millis() - sendStartMs; // Время очереди/старта отправки chunked-ответа
+      r->send(response);
+      Serial.printf("[WEB:/] PSRAM page queued | bytes=%u | buildMs=%u\n",
+                    static_cast<unsigned>(htmlTotalLen), static_cast<unsigned>(htmlBuildMs));
+      stageSendMs = millis() - sendStartMs;
       if(kWebVerboseSerial) Serial.printf("[WEB:/][timing] sendQueued=%u ms\n", static_cast<unsigned>(stageSendMs)); // Лог сетевого этапа только в debug-режиме.
       const uint32_t slowestMs = max(max(stageBuildHeaderMs, stageRenderTabsMs), max(stageRenderPopupsMs, stageSendMs)); // Вычисляем узкое место текущего запроса
       const char *slowestStage = (slowestMs == stageBuildHeaderMs) ? "buildHeader" : // Имя самого долгого этапа для быстрого анализа
@@ -6147,6 +6237,13 @@ function setImg(x){
       r->send(response);
     });
 
+    server.on("/ping", HTTP_GET, [](AsyncWebServerRequest *r){ // Легкая проверка IP/mDNS без генерации большой страницы и авторизации.
+      AsyncWebServerResponse *response = r->beginResponse(200, "text/plain; charset=UTF-8", "ESP32 OK");
+      response->addHeader("Cache-Control", "no-store");
+      response->addHeader("Connection", "close");
+      r->send(response);
+    });
+
     server.on("/health", HTTP_GET, [](AsyncWebServerRequest *r){
       if(!ensureAuthorized(r)) return;
       WifiStatusInfo wifiInfo = getWifiStatus();
@@ -6195,7 +6292,7 @@ function setImg(x){
       doc["gmtOffset"] = gmtOffset_correct; // Часовой пояс (GMT offset)
       doc["Nx_dim_id"] = Nx_dim_id; // Текущая локальная яркость Nextion для выбора частоты live-опроса Web.
       doc["FilterImageState"] = jpg; // Выбор картинки бассейна (анимация/статик)
-      doc["BasinImage"] = currentBasinImagePath(); // Картинка бассейна по состоянию RGB и лампы
+      doc["BasinImage"] = currentBasinImagePath(); // Картинка бассейна по состоянию фильтрации, промывки и подсветки
       doc["PoolLevelIcon"] = currentPoolLevelIconPath(); // Маленькая PNG-пиктограмма уровня на общей странице бассейна.
       doc["LiveSeq"] = ++liveJsonSeq; // Счетчик live-ответов для диагностики пропусков.
       doc["UptimeSec"] = millis() / 1000UL; // Если uptime сбросился, ESP32 реально перезагружался.
@@ -6430,9 +6527,9 @@ function setImg(x){
       invalidateWebUiCache();
       WifiStatusInfo wifiInfo = getWifiStatus();
 
-      String response = "{\\\"saved\\\":1,\\\"connected\\\":" + String(wifiIsConnected() ? 1 : 0) + ",";
-      response += "\\\"status\\\":\\\"" + wifiInfo.statusText + "\\\",";
-      response += "\\\"ip\\\":\\\"" + (wifiIsConnected() ? WiFi.localIP().toString() : String("")) + "\\\"}";
+      String response = "{\"saved\":1,\"connected\":" + String(wifiIsConnected() ? 1 : 0) + ",";
+      response += "\"status\":\"" + jsonEscape(wifiInfo.statusText) + "\",";
+      response += "\"ip\":\"" + jsonEscape(wifiIsConnected() ? WiFi.localIP().toString() : String("")) + "\"}";
 
       r->send(200, "application/json", response);
 
@@ -6590,10 +6687,14 @@ server.on("/getImage", HTTP_GET, [](AsyncWebServerRequest *r){
 
 
     server.serveStatic("/anim1.gif", SPIFFS, "/anim1.gif"); // Отдаёт GIF-анимацию anim1.gif из SPIFFS по HTTP пути /anim1.gif
-    server.serveStatic("/Basin.gif", SPIFFS, "/Basin.gif"); // Оптимизированная анимация течения воды для активной промывки.
-    server.serveStatic("/Basin_RGB.jpg", SPIFFS, "/Basin_RGB.jpg"); // Отдаёт изображение Basin_RGB.jpg из SPIFFS.
-    server.serveStatic("/Basin_Lamp.jpg", SPIFFS, "/Basin_Lamp.jpg"); // Отдаёт изображение Basin_Lamp.jpg из SPIFFS.
-    server.serveStatic("/Basin_RGB_LAMP.jpg", SPIFFS, "/Basin_RGB_LAMP.jpg"); // Отдаёт изображение Basin_RGB_LAMP.jpg из SPIFFS.
+    server.serveStatic("/Basin.gif", SPIFFS, "/Basin.gif"); // Фильтрация без подсветки.
+    server.serveStatic("/Stop.png", SPIFFS, "/Stop.png"); // Статичное изображение полностью остановленного бассейна.
+    server.serveStatic("/Basin_Lamp.gif", SPIFFS, "/Basin_Lamp.gif");
+    server.serveStatic("/Basin_RGB.gif", SPIFFS, "/Basin_RGB.gif");
+    server.serveStatic("/Basin_RGB_LAMP.gif", SPIFFS, "/Basin_RGB_LAMP.gif");
+    server.serveStatic("/Basin_Lamp_filtr.gif", SPIFFS, "/Basin_Lamp_filtr.gif");
+    server.serveStatic("/Basin_RGB_filtr.gif", SPIFFS, "/Basin_RGB_filtr.gif");
+    server.serveStatic("/Basin_RGB_LAMP_filtr.gif", SPIFFS, "/Basin_RGB_LAMP_filtr.gif");
     server.serveStatic("/level_below_lower.png", SPIFFS, "/level_below_lower.png"); // Пиктограмма: уровень ниже нижнего датчика.
     server.serveStatic("/level_between_levels.png", SPIFFS, "/level_between_levels.png"); // Пиктограмма: уровень между нижним и верхним датчиками.
     server.serveStatic("/level_above_upper.png", SPIFFS, "/level_above_upper.png"); // Пиктограмма: уровень достиг верхнего датчика или выше.
