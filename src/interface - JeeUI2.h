@@ -34,18 +34,21 @@ inline void interface(){ // Декларатиынве функции интер
     // Общая информация по бассейну
     UI_PAGE();
     UI_IMAGE("Image1", "/Stop.png", "width:100%;height:auto;border-radius:0;box-shadow:none;");
-    UI_IMAGE("PoolLevelIcon", "/level_between_levels.png", "width:6.8%;height:auto;left:32%;top:8%;border-radius:8px;box-shadow:0 8px 18px rgba(0,0,0,0.35);pointer-events:none;");
+    UI_IMAGE("PoolLevelIcon", "/level_between_levels.png", "width:6.8%;height:auto;left:31.5%;top:3.5%;border-radius:8px;box-shadow:0 8px 18px rgba(0,0,0,0.35);pointer-events:none;");
     
     UI_TEXT("OverlayPoolTemp", OverlayPoolTemp, "x:57%;y:35%;fontSize:14;color:#00ff00");
     UI_TEXT("OverlayHeaterTemp", OverlayHeaterTemp, "x:75%;y:43%;fontSize:14;color:#00ff00");
-    UI_TEXT("OverlayLevelUpper", OverlayLevelUpper, "x:37%;y:12%;fontSize:13;color:#00ff00");
+    UI_TEXT("OverlayLevelUpper", OverlayLevelUpper, "x:38%;y:10%;fontSize:13;color:#00ff00");
     UI_TEXT("OverlayLevelLower", OverlayLevelLower, "x:37%;y:27%;fontSize:13;color:#00ff00");
    
-    UI_TEXT("OverlayPh", OverlayPh, "x:48%;y:27%;fontSize:13;color:#00ff00");
-    UI_TEXT("OverlayChlorine", OverlayChlorine, "x:58%;y:27%;fontSize:13;color:#00ff00");
-    UI_TEXT("OverlayFilterState", OverlayFilterState, "x:28%;y:56%;fontSize:12;color:#00ff00");
-    UI_TEXT("OverlayDrainPit", OverlayDrainPit, "x:82%;y:75%;fontSize:12;color:#00ff00");
-    UI_TEXT("OverlayLight", OverlayLight, "x:82%;y:10%;fontSize:12;color:#00ff00");
+    UI_TEXT("OverlayPh", OverlayPh, "x:51.5%;y:27%;fontSize:13;color:#00ff00");
+    UI_TEXT("OverlayChlorine", OverlayChlorine, "x:61%;y:27%;fontSize:13;color:#00ff00");
+    UI_TEXT("OverlayToppingState", OverlayToppingState, "x:6%;y:9%;fontSize:12;color:#d7d7d7");
+    UI_TEXT("OverlayFilterState", OverlayFilterState, "x:28%;y:56%;fontSize:12;color:#d7d7d7");
+    UI_TEXT("OverlayHeatingState", OverlayHeatingState, "x:80%;y:54%;fontSize:12;color:#d7d7d7");
+    UI_TEXT("OverlayDrainPit", OverlayDrainPit, "x:82%;y:76%;fontSize:12;color:#00ff00");
+    UI_TEXT("OverlayDrainState", OverlayDrainState, "x:78%;y:87%;fontSize:12;color:#d7d7d7");
+    UI_TEXT("OverlayLight", OverlayLight, "x:82%;y:8%;fontSize:12;color:#00ff00");
 
     
                             // // Controls tab

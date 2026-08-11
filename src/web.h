@@ -255,6 +255,9 @@ inline String OverlayLevelLower; // Нижний датчик уровня (ов
 inline String OverlayPh;         // pH воды (оверлей)
 inline String OverlayChlorine;   // Хлор (оверлей)
 inline String OverlayFilterState; // Состояние фильтра (оверлей)
+inline String OverlayHeatingState; // Фактическая работа нагревателя (оверлей)
+inline String OverlayToppingState; // Фактический долив воды в бассейн (оверлей)
+inline String OverlayDrainState;   // Фактический слив воды в яму (оверлей)
 inline String OverlayDrainPit;   // Состояние сливной ямы (оверлей)
 inline String OverlayLight;      // Освещенность на улице (оверлей)
 inline String ModeSelect = "Normal"; // Режим работы (например, Auto/Manual)
@@ -1276,9 +1279,44 @@ bool Pow_WS2815, Pow_WS28151;		// Включение в ручную
 bool Pow_WS2815_autosvet, Saved_Pow_WS2815_autosvet; 
 bool WS2815_Time1, Saved_WS2815_Time1;
 
+inline bool basinFiltrationActive() { // Команда автоматики плюс свежий факт реле насоса.
+  if (Power_Drain) return false; // При сливе тот же насос не должен подписываться как фильтрация.
+  return CleanSequenceActive || Power_Filtr || (rs485RelayDataFresh() && ReadRelayArray[8]);
+}
+
+inline bool basinHeatingActive() { // Реле 5 нагревателя, с быстрым fallback на команду.
+  return Power_Heat || (rs485RelayDataFresh() && ReadRelayArray[4]);
+}
+
+inline bool basinToppingActive() { // Реле 14 открывает соленоид долива.
+  const bool relayDataFresh = rs485RelayDataFresh();
+  return ToppingCycleRunning || Power_Topping_State || (Power_Topping && (!relayDataFresh || ReadRelayArray[13]));
+}
+
+inline bool basinDrainActive() { // Насос фильтра используется для фактической активной порции слива.
+  const bool relayDataFresh = rs485RelayDataFresh();
+  return Power_Drain_State || (Power_Drain && DrainCycleRunning && (!relayDataFresh || ReadRelayArray[8]));
+}
+
+inline uint8_t basinHeatingVisualState() { // 0 выключено, 1 реально греет, 2 автоматика ждет.
+  if (basinHeatingActive()) return 1;
+  return Activation_Heat ? 2 : 0;
+}
+
+inline uint8_t basinToppingVisualState() { // Ожидание/пауза не должны мигать как открытый клапан.
+  if (basinToppingActive()) return 1;
+  if (Power_Topping || ToppingPauseRunning || ToppingFillToUpperActive) return 2;
+  return 0;
+}
+
+inline uint8_t basinDrainVisualState() { // Пауза и заполненная яма видны, но не выглядят как работающий слив.
+  if (basinDrainActive()) return 1;
+  return Power_Drain ? 2 : 0;
+}
+
 inline const char* currentBasinImagePath() { // Выбирает изображение бассейна по фактическому состоянию оборудования.
   const bool relayDataFresh = rs485RelayDataFresh(); // Один раз проверяем свежесть Modbus, чтобы вся комбинация строилась по одному снимку.
-  const bool filtrationActive = CleanSequenceActive || Power_Filtr || (relayDataFresh && ReadRelayArray[8]); // Ручная, таймерная, промывочная или подтвержденная реле фильтрация.
+  const bool filtrationActive = basinFiltrationActive(); // Ручная, таймерная, промывочная или подтвержденная реле фильтрация.
   const bool lampActive = Lamp || (relayDataFresh && ReadRelayArray[0]); // Режим света: команда или свежий факт реле 1.
   const bool rgbActive = Pow_WS2815 || (relayDataFresh && ReadRelayArray[1]); // RGB WS2815: команда или свежий факт реле 2.
   if (filtrationActive) {
@@ -2059,9 +2097,21 @@ private:
       ".dash-btn:hover{transform:translateY(-1px);box-shadow:0 6px 14px rgba(0,0,0,0.45);} " // Эффект наведения на кнопку
                 ".page{display:none;position:relative;grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap:15px;} " // Страница интерфейса
       ".page.active{display:block;} " // Отображение активной страницы
-      ".basin-overview-card{position:relative;width:100%;max-width:1400px;aspect-ratio:800/477;margin:0 auto 14px auto;padding:0;background:transparent;border:none;box-shadow:none;overflow:hidden;border-radius:0;} " // Общая страница бассейна: картинка и подписи живут в одном контейнере.
+      ".basin-overview-card{position:relative;width:100%;max-width:1400px;aspect-ratio:16/9;margin:0 auto 14px auto;padding:0;background:transparent;border:none;box-shadow:none;overflow:hidden;border-radius:0;} " // Исходные Stop.png/GIF имеют 1024x576, поэтому координаты не искажаются.
       ".basin-overview-image{display:block;width:100%;height:100%;object-fit:contain;border-radius:0;box-shadow:none;} " // Стабильное масштабирование схемы бассейна.
-      ".basin-overlay{pointer-events:none;} " // Оверлеи не мешают кликам и скроллу.
+      ".basin-overlay{pointer-events:none;font-size:clamp(8px,1.05vw,14px)!important;padding:clamp(2px,.42vw,6px) clamp(4px,.78vw,12px)!important;line-height:1.2;} " // Подписи остаются пропорциональными схеме на ПК и телефоне.
+      ".basin-process{border:1px solid rgba(255,255,255,.18);transition:background .25s,color .25s,box-shadow .25s;} "
+      ".basin-process.basin-idle{background:rgba(25,29,32,.78)!important;color:#cdd3d8!important;box-shadow:0 5px 12px rgba(0,0,0,.32)!important;} "
+      ".basin-process.basin-waiting{background:rgba(126,83,0,.88)!important;color:#fff2b2!important;border-color:#ffc84a;box-shadow:0 0 12px rgba(255,184,45,.45)!important;} "
+      ".basin-process.basin-active{--basin-glow:78,255,158;background:rgba(0,137,73,.94)!important;color:#fff!important;border-color:#69ffb3;font-weight:800;animation:basinProcessPulse 1.15s ease-in-out infinite;} "
+      "#OverlayHeatingState.basin-active{--basin-glow:255,139,49;background:rgba(205,63,0,.94)!important;border-color:#ffd074;} "
+      "#OverlayToppingState.basin-active{--basin-glow:74,199,255;background:rgba(0,104,190,.94)!important;border-color:#7cddff;} "
+      "#OverlayDrainState.basin-active{--basin-glow:177,132,255;background:rgba(94,49,190,.94)!important;border-color:#d2b8ff;} "
+      ".basin-alert{background:rgba(170,22,32,.94)!important;color:#fff!important;border:1px solid #ff8d96;animation:basinAlertPulse 1.2s ease-in-out infinite;} "
+      ".basin-ok{color:#57ff9a!important;} "
+      "@keyframes basinProcessPulse{0%,100%{box-shadow:0 0 8px rgba(var(--basin-glow),.45)}50%{box-shadow:0 0 24px rgba(var(--basin-glow),1)}} "
+      "@keyframes basinAlertPulse{0%,100%{box-shadow:0 0 7px rgba(255,74,86,.4)}50%{box-shadow:0 0 22px rgba(255,74,86,1)}} "
+      "@media (prefers-reduced-motion:reduce){.basin-process.basin-active,.basin-alert{animation:none;}} "
       ".rs485-panel{display:flex;flex-direction:column;gap:12px;width:100%;} "
       ".rs485-card{background:#1d1d1f;border:1px solid rgba(255,255,255,0.08);border-radius:8px;box-shadow:0 10px 24px rgba(0,0,0,0.45);padding:14px;box-sizing:border-box;} "
       ".rs485-hero{display:flex;align-items:center;justify-content:space-between;gap:16px;} "
@@ -2550,7 +2600,26 @@ private:
                                 "border-radius:"+borderRadius+"; display:inline-flex; align-items:center; justify-content:center; "
                                 "text-align:center; box-sizing:border-box; white-space:"+whiteSpace+"; max-width:90%; "
                                 "box-shadow:0 10px 20px rgba(0,0,0,0.45); z-index:" + String(insideOverview ? 4 : 2) + ";";
-            String classAttr = insideOverview ? " class='basin-overlay'" : "";
+            String classAttr;
+            if(insideOverview){
+                String classNames = "basin-overlay";
+                uint8_t visualState = 0;
+                bool processOverlay = true;
+                if(overlay.id == "OverlayFilterState") visualState = basinFiltrationActive() ? 1 : 0;
+                else if(overlay.id == "OverlayHeatingState") visualState = basinHeatingVisualState();
+                else if(overlay.id == "OverlayToppingState") visualState = basinToppingVisualState();
+                else if(overlay.id == "OverlayDrainState") visualState = basinDrainVisualState();
+                else processOverlay = false;
+                if(processOverlay){
+                    classNames += " basin-process ";
+                    classNames += visualState == 1 ? "basin-active" : (visualState == 2 ? "basin-waiting" : "basin-idle");
+                } else if(overlay.id == "OverlayDrainPit") {
+                    classNames += DrainPitFullConfirmed ? " basin-alert" : " basin-ok";
+                } else if(overlay.id == "OverlayLevelLower" && PoolLowerLevelLowConfirmed) {
+                    classNames += " basin-alert";
+                }
+                classAttr = " class='" + classNames + "'";
+            }
             html += "<div id='"+overlay.id+"'"+classAttr+" style='"+panelStyle+"'>"+overlay.label+"</div>";
             renderedCount++;
         };
@@ -2625,7 +2694,7 @@ private:
                   containerStyle += " margin:0;"; // Убираем авто-отступы
               }
               if(e.id == "Image1"){
-                  containerStyle = "position:relative;width:100%;max-width:1400px;aspect-ratio:800/477;margin:0 auto 14px auto;"
+                  containerStyle = "position:relative;width:100%;max-width:1400px;aspect-ratio:16/9;margin:0 auto 14px auto;"
                                    "padding:0;background:transparent;border:none;box-shadow:none;overflow:hidden;border-radius:0;";
                   imageStyle = "display:block;width:100%;height:100%;border-radius:0;box-shadow:none;object-fit:contain;z-index:1;";
               }
@@ -4662,7 +4731,7 @@ function pollWifiScanResult(startedAt){
         finishWifiScanButton();
         return;
       }
-      if(Date.now() - startedAt > 12000) throw new Error('scan timeout');
+      if(Date.now() - startedAt > 22000) throw new Error('scan timeout'); // Хватает на полный проход и один автоматический повтор.
       wifiScanPollTimer = setTimeout(()=>pollWifiScanResult(startedAt), 350);
     })
     .catch(()=>{
@@ -5577,6 +5646,23 @@ window.addEventListener('resize', ()=>{
       livePollTimer = setTimeout(fetchLive, typeof delayMs === 'number' ? delayMs : livePollDelayMs);
     }
 
+    function updateBasinProcess(id, text, state){
+      const el = document.getElementById(id);
+      if(!el) return;
+      if(typeof text !== 'undefined') el.innerText = text;
+      el.classList.add('basin-process');
+      el.classList.remove('basin-idle','basin-waiting','basin-active');
+      const stateNumber = Number(state);
+      el.classList.add(stateNumber === 1 ? 'basin-active' : (stateNumber === 2 ? 'basin-waiting' : 'basin-idle'));
+    }
+
+    function updateBasinAlert(id, active){
+      const el = document.getElementById(id);
+      if(!el) return;
+      el.classList.toggle('basin-alert', !!Number(active));
+      el.classList.toggle('basin-ok', !Number(active));
+    }
+
     function fetchLive(){
     if(liveInFlight){ scheduleLivePoll(500); return; }
     liveInFlight = true;
@@ -5601,9 +5687,14 @@ window.addEventListener('resize', ()=>{
     if(document.getElementById('OverlayLevelLower')) document.getElementById('OverlayLevelLower').innerText=j.OverlayLevelLower;
     if(document.getElementById('OverlayPh')) document.getElementById('OverlayPh').innerText=j.OverlayPh;
     if(document.getElementById('OverlayChlorine')) document.getElementById('OverlayChlorine').innerText=j.OverlayChlorine;
-    if(document.getElementById('OverlayFilterState')) document.getElementById('OverlayFilterState').innerText=j.OverlayFilterState;
+    updateBasinProcess('OverlayFilterState', j.OverlayFilterState, j.BasinFilterVisualState);
+    updateBasinProcess('OverlayHeatingState', j.OverlayHeatingState, j.BasinHeatingVisualState);
+    updateBasinProcess('OverlayToppingState', j.OverlayToppingState, j.BasinToppingVisualState);
+    updateBasinProcess('OverlayDrainState', j.OverlayDrainState, j.BasinDrainVisualState);
     if(document.getElementById('OverlayDrainPit')) document.getElementById('OverlayDrainPit').innerText=j.OverlayDrainPit;
     if(document.getElementById('OverlayLight')) document.getElementById('OverlayLight').innerText=j.OverlayLight;
+    updateBasinAlert('OverlayDrainPit', j.BasinDrainPitAlert);
+    updateBasinAlert('OverlayLevelLower', j.BasinLowerLevelAlert);
     if(typeof j.BasinImage !== 'undefined' && j.BasinImage !== lastBasinImage){
       lastBasinImage = j.BasinImage;
       const basinImage = document.getElementById('Image1');
@@ -6294,6 +6385,12 @@ function setImg(x){
       doc["FilterImageState"] = jpg; // Выбор картинки бассейна (анимация/статик)
       doc["BasinImage"] = currentBasinImagePath(); // Картинка бассейна по состоянию фильтрации, промывки и подсветки
       doc["PoolLevelIcon"] = currentPoolLevelIconPath(); // Маленькая PNG-пиктограмма уровня на общей странице бассейна.
+      doc["BasinFilterVisualState"] = basinFiltrationActive() ? 1 : 0;
+      doc["BasinHeatingVisualState"] = basinHeatingVisualState();
+      doc["BasinToppingVisualState"] = basinToppingVisualState();
+      doc["BasinDrainVisualState"] = basinDrainVisualState();
+      doc["BasinDrainPitAlert"] = DrainPitFullConfirmed ? 1 : 0;
+      doc["BasinLowerLevelAlert"] = PoolLowerLevelLowConfirmed ? 1 : 0;
       doc["LiveSeq"] = ++liveJsonSeq; // Счетчик live-ответов для диагностики пропусков.
       doc["UptimeSec"] = millis() / 1000UL; // Если uptime сбросился, ESP32 реально перезагружался.
       doc["FreeHeap"] = ESP.getFreeHeap();

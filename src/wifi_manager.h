@@ -149,6 +149,8 @@ inline bool autoSwitchRequested = false; // Результат асинхрон�
 inline bool autoSwitchToBackup = false; // Целевая сеть для отложенного переключения.
 inline bool wifiScanActive = false; // Асинхронное сканирование не блокирует прикладной loop.
 inline bool wifiScanForFallbackRecovery = false; // Отличаем фоновое восстановление STA от ручного сканирования Web.
+inline bool wifiScanForManualRequest = false; // Ручной Scan WiFi не должен завершаться результатом отмененного фонового поиска.
+inline uint8_t manualScanRetryCount = 0; // При пустом первом проходе выполняем один повтор с нормальным временем на канал.
 inline unsigned long wifiScanStartedAt = 0;
 inline unsigned long lastScanPollAt = 0;
 inline bool manualScanQueued = false;
@@ -160,12 +162,32 @@ inline unsigned long savedStaApplyAt = 0;
 inline const unsigned long savedStaApplyDelay = 2000;
 inline unsigned long lastApClientSeenAt = 0;
 
+inline String normalizedMdnsHostName() { // ESPmDNS 2.0.14 хранит lowercase-копию, но передает в IDF исходную строку.
+  String normalized = hostName;
+  normalized.trim();
+  normalized.toLowerCase();
+  String safe;
+  safe.reserve(normalized.length());
+  for (size_t i = 0; i < normalized.length() && safe.length() < 63; i++) {
+    const char c = normalized[i];
+    const bool valid = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-';
+    safe += valid ? c : '-';
+  }
+  while (safe.startsWith("-")) safe.remove(0, 1);
+  while (safe.endsWith("-")) safe.remove(safe.length() - 1);
+  return safe.length() ? safe : String("esp32");
+}
+
 inline void beginMdns() {
   if (mdnsStarted)
     return;
-  if (MDNS.begin(hostName.c_str())) {
+  const String mdnsHost = normalizedMdnsHostName();
+  if (MDNS.begin(mdnsHost.c_str())) {
     MDNS.addService("http", "tcp", 80); // Регистрируем веб-сервис
     mdnsStarted = true;                  // Больше не пытаемся запускать повторно
+    Serial.printf("[WiFi] mDNS ready: http://%s.local/\n", mdnsHost.c_str());
+  } else {
+    Serial.printf("[WiFi] mDNS start failed for hostname \"%s\"\n", mdnsHost.c_str());
   }
 }
 
@@ -263,26 +285,38 @@ inline void evaluateScanForAutomaticSwitch(int primaryRssi, int backupRssi) {
 
 }
 
-inline bool startAsyncWifiScan(bool fallbackRecovery = false) {
+inline bool startAsyncWifiScan(bool fallbackRecovery = false, bool manualRequest = false) {
   if (wifiScanActive) return true;
   wifi_mode_t mode = WiFi.getMode();
   if (mode == WIFI_MODE_NULL) WiFi.mode(WIFI_MODE_STA);
   else if (mode == WIFI_MODE_AP) WiFi.mode(WIFI_MODE_APSTA); // Видимая аварийная AP при сканировании не останавливается.
+  WiFi.setSleep(false); // Off-channel scan и Web AP устойчивее без энергосбережения радиомодуля.
   WiFi.scanDelete();
-  const int16_t state = WiFi.scanNetworks(true, true, false, 120); // Короткое активное сканирование уменьшает паузу общего AP/STA-радиоканала.
+  const uint32_t channelTimeMs = manualRequest ? 220U : 160U; // Полный ручной поиск видит сильные сети, но не уводит AP с ее канала надолго.
+  const int16_t state = WiFi.scanNetworks(true, true, false, channelTimeMs); // Асинхронный активный поиск не блокирует управление бассейном.
   if (state == WIFI_SCAN_RUNNING) {
     wifiScanActive = true;
     wifiScanForFallbackRecovery = fallbackRecovery;
+    wifiScanForManualRequest = manualRequest;
     wifiScanStartedAt = millis();
     lastAutoScanAt = wifiScanStartedAt;
+    Serial.printf("[WiFi] %s scan started (%lu ms/channel)\n",
+                  manualRequest ? "Manual" : (fallbackRecovery ? "Fallback recovery" : "Background"),
+                  static_cast<unsigned long>(channelTimeMs));
     return true;
   }
   wifiScanForFallbackRecovery = false;
+  wifiScanForManualRequest = false;
   return false;
 }
 
 inline void restoreStableFallbackApMode() {
   if (!fallbackApActive) return;
+  if (WiFi.softAPgetStationNum() > 0) { // Не меняем режим радио под подключенным пользователем: AP остается доступной.
+    if (!captiveDnsActive) startCaptiveDns();
+    beginMdns();
+    return;
+  }
   if (WiFi.getMode() != WIFI_MODE_AP) {
     WiFi.setAutoReconnect(false); // В сервисном AP драйвер STA не должен запускать фоновые переподключения.
     WiFi.disconnect(false, false);
@@ -318,13 +352,25 @@ inline void pollAsyncWifiScan() {
   }
 
   const bool fallbackRecovery = wifiScanForFallbackRecovery;
+  const bool manualRequest = wifiScanForManualRequest;
   wifiScanActive = false;
   wifiScanForFallbackRecovery = false;
+  wifiScanForManualRequest = false;
   if (count < 0) {
     WiFi.scanDelete();
-    finishManualScan(connectedNetworkFallbackJson());
+    if (manualRequest && manualScanRetryCount == 0) {
+      manualScanRetryCount++;
+      if (startAsyncWifiScan(false, true)) return; // Разовый повтор вместо ложного "сети не найдены".
+    }
+    if (manualRequest) finishManualScan(connectedNetworkFallbackJson());
     restoreStableFallbackApMode();
     return;
+  }
+
+  if (count == 0 && manualRequest && manualScanRetryCount == 0) {
+    WiFi.scanDelete();
+    manualScanRetryCount++;
+    if (startAsyncWifiScan(false, true)) return; // На занятом AP-канале первый проход иногда возвращает пустой список.
   }
 
   int primaryRssi = -1000;
@@ -360,6 +406,7 @@ inline void pollAsyncWifiScan() {
     evaluateScanForAutomaticSwitch(primaryRssi, backupRssi);
   }
   finishManualScan(networksJson);
+  if (manualRequest) Serial.printf("[WiFi] Manual scan completed: %d network(s)\n", count);
   WiFi.scanDelete();
   restoreStableFallbackApMode();
 }
@@ -529,14 +576,37 @@ inline void requestStaSwitch(bool toBackup, const char *reason) {
 
 inline void ensureConnection() {
   const unsigned long now = millis();
+
+  bool manualScanRequested = false;
+  ensureWifiScanMutex();
+  if (wifiScanMutex) xSemaphoreTake(wifiScanMutex, portMAX_DELAY);
+  manualScanRequested = manualScanQueued;
+  if (wifiScanMutex) xSemaphoreGive(wifiScanMutex);
+
+  if (manualScanRequested && wifiScanActive && !wifiScanForManualRequest) {
+    // Кнопка Scan WiFi имеет собственный полный проход. Отмененный фоновый поиск не публикуем как пустой результат.
+    esp_wifi_scan_stop();
+    WiFi.scanDelete();
+    wifiScanActive = false;
+    wifiScanForFallbackRecovery = false;
+    wifiScanForManualRequest = false;
+    autoSwitchRequested = false;
+  }
+  if (manualScanRequested && !wifiScanActive) {
+    if (!startAsyncWifiScan(false, true)) {
+      finishManualScan(connectedNetworkFallbackJson());
+      restoreStableFallbackApMode();
+    }
+  }
+
   if (fallbackApActive && wifiScanActive && wifiScanForFallbackRecovery && WiFi.softAPgetStationNum() > 0) {
     esp_wifi_scan_stop(); // Клиент AP важнее фонового поиска: немедленно возвращаем радиоканал Web-интерфейсу.
     WiFi.scanDelete();
     wifiScanActive = false;
     wifiScanForFallbackRecovery = false;
+    wifiScanForManualRequest = false;
     autoSwitchRequested = false;
     lastApClientSeenAt = now;
-    finishManualScan(connectedNetworkFallbackJson());
     restoreStableFallbackApMode();
   }
   pollAsyncWifiScan();
@@ -713,12 +783,9 @@ inline bool requestWifiNetworkScan() {
   if (wifiScanMutex) xSemaphoreTake(wifiScanMutex, portMAX_DELAY);
   manualScanQueued = true;
   manualScanReady = false;
+  manualScanRetryCount = 0;
   if (wifiScanMutex) xSemaphoreGive(wifiScanMutex);
-  if (wifiScanActive) return true;
-  if (startAsyncWifiScan()) return true;
-  finishManualScan(connectedNetworkFallbackJson());
-  restoreStableFallbackApMode();
-  return false;
+  return true; // Радио запускается из основного loop, а не из AsyncWebServer task.
 }
 
 inline String wifiNetworkScanStateJson() {

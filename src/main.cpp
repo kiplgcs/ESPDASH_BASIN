@@ -432,22 +432,30 @@ loop_CL2(calibrationFast ? 300 : 2100); // Обработка логики хл�
   OverlayChlorine = "🧴 Cl: " + String(ppmCl, 3) + " ppm";
   OverlayDrainPit = String("🧯 Яма: ") + (DrainPitFullConfirmed ? "заполнена" : "свободна");
   OverlayLight = "🔆 Свет: " + String(Lumen_Ul) + "%";
+  const uint8_t heatingVisualState = basinHeatingVisualState();
+  OverlayHeatingState = heatingVisualState == 1
+    ? String("🔥 Нагрев: идет")
+    : (heatingVisualState == 2 ? String("♨️ Нагрев: ожидание") : String("♨️ Нагрев: выключен"));
+  const uint8_t toppingVisualState = basinToppingVisualState();
+  OverlayToppingState = toppingVisualState == 1
+    ? String("🚰 Долив: идет")
+    : (toppingVisualState == 2 ? String("🚰 Долив: пауза/ожидание") : String("🚰 Долив: выключен"));
+  const uint8_t drainVisualState = basinDrainVisualState();
+  OverlayDrainState = drainVisualState == 1
+    ? String("⬇️ Слив в яму: идет")
+    : (drainVisualState == 2 ? String("⏸️ Слив: пауза/ожидание") : String("⬇️ Слив в яму: выключен"));
   PoolWaterLevelStageInfo = buildPoolWaterLevelStageInfo(); // Обновляем строку этапа уровня для Web и MQTT-совместимых UI-значений.
   DrainPitStageInfo = buildDrainPitStageInfo(); // Обновляем строку этапа слива для Web и MQTT-совместимых UI-значений.
   // OverlayFilterState = String("🧽 Фильтр: ") + (Power_Clean ? "Промывка" : (Power_Filtr ? "Фильтрация" : "Остановлен"));
   String filterStateDetails;
   if (Power_Clean || CleanSequenceActive) {
-    String cleanStage = CommentClean;
-    if (cleanStage.length() == 0) {
-      cleanStage = "Промывка активна";
-    }
-    filterStateDetails = "Промывка / " + cleanStage;
-  } else if (Power_Filtr) {
-    filterStateDetails = FiltrationTimerActive ? "Фильтрация (по таймеру)" : "Фильтрация (ручной режим)";
+    filterStateDetails = "Промывка: идет"; // Подробный этап уже есть на странице промывки; схему не перегружаем.
+  } else if (basinFiltrationActive()) {
+    filterStateDetails = "Фильтрация: работает";
   } else {
-    filterStateDetails = "Остановлен";
+    filterStateDetails = "Фильтрация: выключена";
   }
-  OverlayFilterState = String("🧽 Фильтр: ") + filterStateDetails;
+  OverlayFilterState = String("🧽 ") + filterStateDetails;
 
 
 
