@@ -6,6 +6,7 @@
 #include <algorithm> // lower_bound для сохранения хронологического порядка точек
 #include <functional> // std::function для callback'ов источников данных
 #include <map> // ассоциативные контейнеры для хранения серий и настроек
+#include <memory> // immutable shared_ptr-снимки history для Web
 #include <utility> // std::move для передачи большого буфера истории без копии
 #include <vector> // динамические массивы точек графика
 
@@ -128,17 +129,24 @@ enum class GraphSettingsSaveState : uint8_t { Unknown, Pending, Saving, Saved, F
 struct GraphSettingsSaveJob {
   uint32_t id = 0;
   String series;
+  String requestToken;
+  uint32_t clientRevision = 0;
   GraphSettings settings{defaultGraphUpdateInterval, defaultGraphPoints};
   GraphSettingsSaveState state = GraphSettingsSaveState::Unknown;
+  bool uiSnapshotNotified = false;
   String error;
   unsigned long completedAt = 0;
 };
+
+inline bool publishGraphSeriesSettings(const String &series, GraphSettings settings,
+                                       GraphSettings *previous, bool requireExisting);
 
 inline SemaphoreHandle_t graphSettingsQueueMutex = nullptr;
 inline TaskHandle_t graphSettingsWorkerHandle = nullptr;
 inline std::vector<GraphSettingsSaveJob> graphSettingsSaveJobs;
 inline uint32_t graphSettingsNextJobId = 1;
-inline constexpr size_t graphSettingsMaxJobs = 16;
+inline constexpr size_t graphSettingsMaxActiveJobs = 8; // Только Pending/Saving ограничивают прием новых сохранений.
+inline constexpr size_t graphSettingsMaxHistoryJobs = 64; // Завершенные job остаются доступны status polling отдельно.
 inline constexpr unsigned long graphSettingsJobRetentionMs = 120000;
 
 inline void ensureGraphSettingsQueueMutex(){
@@ -245,7 +253,27 @@ inline void pruneGraphSettingsJobsLocked(unsigned long now){
     graphSettingsSaveJobs.end());
 }
 
-inline uint32_t queueGraphSettingsSave(const String &series, const GraphSettings &settings){
+inline bool graphSettingsJobIsActive(const GraphSettingsSaveJob &job){
+  return job.state == GraphSettingsSaveState::Pending || job.state == GraphSettingsSaveState::Saving;
+}
+
+inline bool graphSettingsJobIsCompleted(const GraphSettingsSaveJob &job){
+  return job.state == GraphSettingsSaveState::Saved || job.state == GraphSettingsSaveState::Failed;
+}
+
+inline bool makeRoomInGraphSettingsHistoryLocked(){
+  // vector сохраняет FIFO-порядок, поэтому первый completed — самый старый.
+  while(graphSettingsSaveJobs.size() >= graphSettingsMaxHistoryJobs){
+    const auto completed = std::find_if(graphSettingsSaveJobs.begin(), graphSettingsSaveJobs.end(),
+      [](const GraphSettingsSaveJob &job){ return graphSettingsJobIsCompleted(job); });
+    if(completed == graphSettingsSaveJobs.end()) return false;
+    graphSettingsSaveJobs.erase(completed);
+  }
+  return true;
+}
+
+inline uint32_t queueGraphSettingsSave(const String &series, const GraphSettings &settings,
+                                       const String &requestToken, uint32_t clientRevision){
   // Без живого worker Pending-job никто не обработает, а Web будет опрашивать
   // его бесконечно. Нулевой id позволяет HTTP handler сразу вернуть 503.
   if(graphSettingsWorkerHandle == nullptr){
@@ -255,7 +283,21 @@ inline uint32_t queueGraphSettingsSave(const String &series, const GraphSettings
   ensureGraphSettingsQueueMutex();
   if(graphSettingsQueueMutex == nullptr || xSemaphoreTake(graphSettingsQueueMutex, pdMS_TO_TICKS(20)) != pdTRUE) return 0;
   pruneGraphSettingsJobsLocked(millis());
-  if(graphSettingsSaveJobs.size() >= graphSettingsMaxJobs){
+  if(requestToken.length()){
+    for(const auto &existing : graphSettingsSaveJobs){
+      if(existing.series != series || existing.requestToken != requestToken ||
+         existing.clientRevision != clientRevision) continue;
+      const bool sameSettings = existing.settings.updateInterval == settings.updateInterval &&
+                                existing.settings.maxPoints == settings.maxPoints;
+      const uint32_t existingId = sameSettings ? existing.id : 0;
+      xSemaphoreGive(graphSettingsQueueMutex);
+      return existingId; // Идемпотентный повтор потерянного HTTP ACK не создаёт новую Flash-job.
+    }
+  }
+  const size_t activeJobs = static_cast<size_t>(std::count_if(
+    graphSettingsSaveJobs.begin(), graphSettingsSaveJobs.end(),
+    [](const GraphSettingsSaveJob &job){ return graphSettingsJobIsActive(job); }));
+  if(activeJobs >= graphSettingsMaxActiveJobs || !makeRoomInGraphSettingsHistoryLocked()){
     xSemaphoreGive(graphSettingsQueueMutex);
     return 0;
   }
@@ -264,6 +306,8 @@ inline uint32_t queueGraphSettingsSave(const String &series, const GraphSettings
   GraphSettingsSaveJob job;
   job.id = id;
   job.series = series;
+  job.requestToken = requestToken;
+  job.clientRevision = clientRevision;
   job.settings = settings;
   job.state = GraphSettingsSaveState::Pending;
   graphSettingsSaveJobs.push_back(std::move(job));
@@ -283,6 +327,21 @@ inline bool getGraphSettingsSaveJob(uint32_t id, GraphSettingsSaveJob &snapshot)
   }
   xSemaphoreGive(graphSettingsQueueMutex);
   return found;
+}
+
+inline bool consumeGraphSettingsUiSnapshotNotification(uint32_t id){
+  ensureGraphSettingsQueueMutex();
+  if(id == 0 || graphSettingsQueueMutex == nullptr ||
+     xSemaphoreTake(graphSettingsQueueMutex, pdMS_TO_TICKS(20)) != pdTRUE) return false;
+  bool shouldInvalidate = false;
+  for(auto &job : graphSettingsSaveJobs){
+    if(job.id != id || job.state != GraphSettingsSaveState::Saved || job.uiSnapshotNotified) continue;
+    job.uiSnapshotNotified = true;
+    shouldInvalidate = true;
+    break;
+  }
+  xSemaphoreGive(graphSettingsQueueMutex);
+  return shouldInvalidate;
 }
 
 inline void graphSettingsWorkerTask(void *){
@@ -308,8 +367,11 @@ inline void graphSettingsWorkerTask(void *){
       continue;
     }
 
-    const bool saved = saveGraphSettings(series, settings, pdMS_TO_TICKS(1000));
-    if(graphSettingsQueueMutex != nullptr && xSemaphoreTake(graphSettingsQueueMutex, pdMS_TO_TICKS(100)) == pdTRUE){
+    const bool fileSaved = saveGraphSettings(series, settings, pdMS_TO_TICKS(1000));
+    const bool saved = fileSaved && publishGraphSeriesSettings(series, settings, nullptr, false);
+    // Выбранная job обязана перейти из Saving в конечное состояние. Worker —
+    // единственный consumer, а producers держат queue-lock микросекунды.
+    if(graphSettingsQueueMutex != nullptr && xSemaphoreTake(graphSettingsQueueMutex, portMAX_DELAY) == pdTRUE){
       for(auto &job : graphSettingsSaveJobs){
         if(job.id != jobId) continue;
         job.state = saved ? GraphSettingsSaveState::Saved : GraphSettingsSaveState::Failed;
@@ -331,6 +393,7 @@ inline bool startGraphSettingsWorker(){
     return false;
   }
   if(graphSettingsWorkerHandle != nullptr) return true;
+  graphSettingsSaveJobs.reserve(graphSettingsMaxHistoryJobs); // Ни одного realloc из async_tcp при enqueue.
   TaskHandle_t createdWorker = nullptr;
   const BaseType_t result = xTaskCreatePinnedToCore(graphSettingsWorkerTask, "GraphSettingsIO", 4096, nullptr, 1,
                                                     &createdWorker, 0);
@@ -513,11 +576,152 @@ inline unsigned long updateInterval; // интервал обновления г
 // Пользовательские серии графиков
 inline std::map<String, vector<GraphPoint>> customGraphSeries; // набор графиков по имени серии и их точек
 
+// Web читает immutable history без graphDataMutex. Writer под graphDataMutex
+// создает новую ограниченную tail-копию, затем за короткую критсекцию заменяет
+// shared_ptr. Уже начатый HTTP-ответ продолжает владеть старым vector, поэтому
+// ни realloc, ни trim основной истории не инвалидируют его память.
+struct GraphHistorySnapshot {
+  std::shared_ptr<const vector<GraphPoint>> points;
+  uint32_t revision = 0;
+};
+
+inline SemaphoreHandle_t graphHistorySnapshotMutex = nullptr;
+inline std::map<String, GraphHistorySnapshot> graphHistorySnapshots;
+inline uint32_t graphHistoryNextRevision = 1;
+
+inline void ensureGraphHistorySnapshotMutex(){
+  if(graphHistorySnapshotMutex == nullptr) graphHistorySnapshotMutex = xSemaphoreCreateMutex();
+}
+
+inline void publishGraphHistorySnapshotLocked(const String &series,
+                                              const vector<GraphPoint> &source,
+                                              size_t limit){
+  // Вызывать только при уже удерживаемом graphDataMutex: source меняет writer.
+  if(limit == 0 || limit > source.size()) limit = source.size();
+  const size_t first = source.size() - limit;
+  auto mutableSnapshot = std::make_shared<vector<GraphPoint>>();
+  mutableSnapshot->reserve(limit);
+  mutableSnapshot->insert(mutableSnapshot->end(), source.begin() + first, source.end());
+
+  ensureGraphHistorySnapshotMutex();
+  if(graphHistorySnapshotMutex == nullptr ||
+     xSemaphoreTake(graphHistorySnapshotMutex, portMAX_DELAY) != pdTRUE) return;
+  uint32_t revision = graphHistoryNextRevision++;
+  if(revision == 0) revision = graphHistoryNextRevision++;
+  graphHistorySnapshots[series] = {
+    std::shared_ptr<const vector<GraphPoint>>(std::move(mutableSnapshot)), revision
+  };
+  xSemaphoreGive(graphHistorySnapshotMutex);
+}
+
+inline GraphHistorySnapshot getGraphHistorySnapshot(const String &series){
+  ensureGraphHistorySnapshotMutex();
+  if(graphHistorySnapshotMutex == nullptr ||
+     xSemaphoreTake(graphHistorySnapshotMutex, portMAX_DELAY) != pdTRUE) return {};
+  const auto it = graphHistorySnapshots.find(series);
+  GraphHistorySnapshot snapshot = it != graphHistorySnapshots.end() ? it->second : GraphHistorySnapshot{};
+  xSemaphoreGive(graphHistorySnapshotMutex);
+  return snapshot;
+}
+
 // Источники данных (функции получения значений)
 inline std::map<String, std::function<float()>> graphValueProviders; // функции, возвращающие текущее значение для каждой серии
 
 // Конфигурации серий
 inline std::map<String, GraphSettings> seriesConfig; // настройки (интервал, точки) для каждой серии графика
+
+// Конфигурация графиков — это маленький RAM-объект, который нужен HTTP при
+// построении страницы и сохранении настроек. Он намеренно НЕ защищается
+// graphDataMutex: тот mutex может удерживаться во время записи большой history
+// во SPIFFS. Под graphConfigMutex запрещены файловые операции и работа с
+// массивами точек, поэтому снимок настроек всегда получается быстро и без 503.
+inline SemaphoreHandle_t graphConfigMutex = nullptr;
+
+inline void ensureGraphConfigMutex(){
+  if(graphConfigMutex == nullptr) graphConfigMutex = xSemaphoreCreateMutex();
+}
+
+class GraphConfigGuard {
+ public:
+  GraphConfigGuard(){
+    ensureGraphConfigMutex();
+    locked_ = graphConfigMutex != nullptr && xSemaphoreTake(graphConfigMutex, portMAX_DELAY) == pdTRUE;
+  }
+  ~GraphConfigGuard(){ if(locked_) xSemaphoreGive(graphConfigMutex); }
+  GraphConfigGuard(const GraphConfigGuard&) = delete;
+  GraphConfigGuard& operator=(const GraphConfigGuard&) = delete;
+  bool locked() const { return locked_; }
+
+ private:
+  bool locked_ = false;
+};
+
+inline GraphSettings normalizeGraphSettings(GraphSettings settings){
+  if(settings.updateInterval < minGraphUpdateInterval) settings.updateInterval = minGraphUpdateInterval;
+  if(settings.updateInterval > maxGraphUpdateInterval) settings.updateInterval = maxGraphUpdateInterval;
+  if(settings.maxPoints < minGraphPoints) settings.maxPoints = minGraphPoints;
+  if(settings.maxPoints > maxGraphPoints) settings.maxPoints = maxGraphPoints;
+  return settings;
+}
+
+// Полный неизменяемый снимок для построения GET /. Копирование выполняется под
+// отдельным коротким lock; после возврата HTTP больше не обращается к общей map.
+inline std::map<String, GraphSettings> snapshotGraphSeriesConfig(){
+  GraphConfigGuard guard;
+  if(!guard.locked()) return {};
+  return seriesConfig;
+}
+
+inline bool getGraphSeriesSettings(const String &series, GraphSettings &settings){
+  GraphConfigGuard guard;
+  if(!guard.locked()) return false;
+  const auto it = seriesConfig.find(series);
+  if(it == seriesConfig.end()) return false;
+  settings = it->second;
+  return true;
+}
+
+// Публикует только RAM-конфигурацию. Файл и history здесь принципиально не
+// трогаются. requireExisting=true удобен HTTP: неизвестная серия не создаётся.
+inline bool publishGraphSeriesSettings(const String &series, GraphSettings settings,
+                                       GraphSettings *previous = nullptr,
+                                       bool requireExisting = false){
+  settings = normalizeGraphSettings(settings);
+  GraphConfigGuard guard;
+  if(!guard.locked()) return false;
+  auto it = seriesConfig.find(series);
+  if(requireExisting && it == seriesConfig.end()) return false;
+  if(previous) *previous = it != seriesConfig.end()
+                               ? it->second
+                               : GraphSettings{defaultGraphUpdateInterval, defaultGraphPoints};
+  seriesConfig[series] = settings;
+  if(series == "main"){
+    updateInterval = settings.updateInterval;
+    maxPoints = settings.maxPoints;
+  }
+  return true;
+}
+
+enum class GraphSettingsUpdateResult : uint8_t { Accepted, UnknownSeries, QueueBusy, InternalError };
+
+// Для HTTP порядок RAM-публикации обязан совпадать с FIFO-порядком Flash-job.
+// Один короткий config-lock сериализует эти две операции, иначе два почти
+// одновременных POST могли оставить в RAM более старое значение, а во Flash —
+// более новое. Worker не берет graphConfigMutex, поэтому Flash здесь не ждём.
+inline GraphSettingsUpdateResult queueGraphSeriesSettingsUpdate(
+  const String &series, GraphSettings settings, uint32_t &jobId,
+  const String &requestToken, uint32_t clientRevision
+){
+  jobId = 0;
+  settings = normalizeGraphSettings(settings);
+  GraphConfigGuard guard;
+  if(!guard.locked()) return GraphSettingsUpdateResult::InternalError;
+  auto it = seriesConfig.find(series);
+  if(it == seriesConfig.end()) return GraphSettingsUpdateResult::UnknownSeries;
+  jobId = queueGraphSettingsSave(series, settings, requestToken, clientRevision);
+  if(jobId == 0) return GraphSettingsUpdateResult::QueueBusy;
+  return GraphSettingsUpdateResult::Accepted;
+}
 
 // Время последнего обновления каждой серии
 inline std::map<String, unsigned long> seriesLastUpdate; // таймстемп последнего добавления точки в серию
@@ -527,35 +731,31 @@ inline bool storeGraphPoint(const String &series, vector<GraphPoint> &points,
 
 // Загружает основной график и его настройки
 inline void loadGraph(){ // инициализация основной серии графика
-  GraphDataGuard guard; // защищаем общие контейнеры от сетевой задачи
   GraphSettings mainCfg{defaultGraphUpdateInterval, defaultGraphPoints}; // Служебная серия main по умолчанию не занимает память под все 5000 точек.
   loadGraphSettings("main", mainCfg); // попытка загрузить сохранённые настройки из SPIFFS
+  mainCfg = normalizeGraphSettings(mainCfg);
 
-  if(mainCfg.updateInterval < minGraphUpdateInterval) mainCfg.updateInterval = minGraphUpdateInterval; // защита от слишком частых обновлений
-  if(mainCfg.updateInterval > maxGraphUpdateInterval) mainCfg.updateInterval = maxGraphUpdateInterval; // защита от слишком редких обновлений
-  if(mainCfg.maxPoints < minGraphPoints) mainCfg.maxPoints = minGraphPoints; // защита от нулевого/отрицательного размера
-  if(mainCfg.maxPoints > maxGraphPoints) mainCfg.maxPoints = maxGraphPoints; // ограничение максимального размера графика
-
-  updateInterval = mainCfg.updateInterval; // сохраняем интервал обновления как глобальный
-  maxPoints = mainCfg.maxPoints; // сохраняем лимит точек как глобальный
-
-  loadGraphSeries("main", graphPoints, static_cast<size_t>(mainCfg.maxPoints)); // загружаем только выбранный хвост основной серии
-  if(graphPoints.size() > static_cast<size_t>(mainCfg.maxPoints)){
-    trimGraphPoints(graphPoints, static_cast<size_t>(mainCfg.maxPoints));
-    saveGraphSeries("main", graphPoints);
+  {
+    GraphDataGuard guard; // история защищена отдельно от маленькой конфигурации
+    loadGraphSeries("main", graphPoints, static_cast<size_t>(mainCfg.maxPoints)); // загружаем только выбранный хвост основной серии
+    if(graphPoints.size() > static_cast<size_t>(mainCfg.maxPoints)){
+      trimGraphPoints(graphPoints, static_cast<size_t>(mainCfg.maxPoints));
+      saveGraphSeries("main", graphPoints);
+    }
+    seriesLastUpdate["main"] = 0; // сбрасываем время последнего обновления
+    publishGraphHistorySnapshotLocked("main", graphPoints, static_cast<size_t>(mainCfg.maxPoints));
   }
-
-  seriesConfig["main"] = mainCfg; // сохраняем конфигурацию основной серии
-  seriesLastUpdate["main"] = 0; // сбрасываем время последнего обновления
+  publishGraphSeriesSettings("main", mainCfg); // отдельный быстрый RAM-снимок для Web
 }
 
 // Добавляет точку в основной график с учетом интервала
 inline void addGraphPoint(uint32_t epoch, float v){ // добавление новой точки в основную серию
   if(epoch == 0 || !isfinite(v)) return; // без достоверного времени/значения точка бессмысленна
+  GraphSettings cfg{defaultGraphUpdateInterval, defaultGraphPoints};
+  getGraphSeriesSettings("main", cfg); // config-lock никогда не ожидает SPIFFS/history
+  cfg = normalizeGraphSettings(cfg);
+
   GraphDataGuard guard; // web может одновременно запрашивать снимок истории
-  GraphSettings cfg = seriesConfig.count("main") ? seriesConfig["main"] : GraphSettings{updateInterval, maxPoints}; // берём настройки серии или используем глобальные
-  if(cfg.updateInterval < minGraphUpdateInterval) cfg.updateInterval = minGraphUpdateInterval; // Подстраховка от старых настроек 100 мс/1 сек.
-  if(cfg.updateInterval > maxGraphUpdateInterval) cfg.updateInterval = maxGraphUpdateInterval; // Ограничиваем редкие интервалы 24 часами.
 
   unsigned long now = millis(); // текущее время работы устройства
   unsigned long last = seriesLastUpdate["main"]; // время последнего добавления точки
@@ -563,8 +763,9 @@ inline void addGraphPoint(uint32_t epoch, float v){ // добавление но
 
   seriesLastUpdate["main"] = now; // обновляем время последнего добавления
 
-  const size_t limit = static_cast<size_t>(cfg.maxPoints < maxPoints ? cfg.maxPoints : maxPoints); // строгий из двух лимитов
-  storeGraphPoint("main", graphPoints, {epoch, v, 0}, limit); // сохраняем точку пакетно
+  if(storeGraphPoint("main", graphPoints, {epoch, v, 0}, static_cast<size_t>(cfg.maxPoints))){
+    publishGraphHistorySnapshotLocked("main", graphPoints, static_cast<size_t>(cfg.maxPoints));
+  }
 }
 
 // Регистрирует источник данных для графика
@@ -575,9 +776,6 @@ inline void registerGraphSource( // регистрация новой серии
   unsigned long defaultInterval=updateInterval, // интервал обновления по умолчанию
   int defaultMaxPoints=maxPoints // количество точек по умолчанию
 ){
-  GraphDataGuard guard; // регистрация затрагивает общие карты и массивы
-  graphValueProviders[name] = getter; // сохраняем функцию-источник значений
-
   unsigned long safeDefaultInterval = defaultInterval < minGraphUpdateInterval
                                      ? minGraphUpdateInterval
                                      : defaultInterval; // защита от слишком малого интервала
@@ -587,10 +785,7 @@ inline void registerGraphSource( // регистрация новой серии
   bool loaded = loadGraphSettings(name, cfg); // пробуем загрузить сохранённые настройки
   if(!loaded && fallback.length()) loadGraphSettings(fallback, cfg); // fallback-настройки при необходимости
 
-  if(cfg.updateInterval < minGraphUpdateInterval) cfg.updateInterval = minGraphUpdateInterval; // нормализация интервала
-  if(cfg.updateInterval > maxGraphUpdateInterval) cfg.updateInterval = maxGraphUpdateInterval; // нормализация верхнего предела
-  if(cfg.maxPoints < minGraphPoints) cfg.maxPoints = minGraphPoints; // минимальное количество точек
-  if(cfg.maxPoints > maxGraphPoints) cfg.maxPoints = maxGraphPoints; // максимальное количество точек
+  cfg = normalizeGraphSettings(cfg);
 
   // Сначала известен сохраненный лимит, и только потом читается history. Это
   // исключает временную загрузку всего старого файла при maxPoints=100.
@@ -601,12 +796,22 @@ inline void registerGraphSource( // регистрация новой серии
     loadGraphSeries(fallback, stored, static_cast<size_t>(cfg.maxPoints)); // если пусто — пробуем fallback
   }
 
-  seriesConfig[name] = cfg; // сохраняем настройки серии
-  seriesLastUpdate[name] = 0; // инициализируем таймер обновления
-
-  if(!stored.empty()){ // если данные серии были загружены
-    customGraphSeries[name] = std::move(stored); // Передаем PSRAM-буфер без второй большой копии.
+  {
+    GraphDataGuard guard; // публикуем history/provider отдельно от config-lock
+    graphValueProviders[name] = getter; // сохраняем функцию-источник значений
+    seriesLastUpdate[name] = 0; // инициализируем таймер обновления
+    if(!stored.empty()){ // если данные серии были загружены
+      customGraphSeries[name] = std::move(stored); // Передаем PSRAM-буфер без второй большой копии.
+    }
+    const auto historyIt = customGraphSeries.find(name);
+    if(historyIt != customGraphSeries.end()){
+      publishGraphHistorySnapshotLocked(name, historyIt->second, static_cast<size_t>(cfg.maxPoints));
+    } else {
+      static const vector<GraphPoint> emptyHistory;
+      publishGraphHistorySnapshotLocked(name, emptyHistory, 0);
+    }
   }
+  publishGraphSeriesSettings(name, cfg); // после регистрации серия видна Web в готовом состоянии
 }
 
 // Добавляет точку в серию, сохраняя порядок даже после ручной коррекции часов.
@@ -664,15 +869,11 @@ inline bool storeGraphPoint(const String &series, vector<GraphPoint> &points,
 // Добавляет точку в пользовательскую серию
 inline bool addSeriesPoint(const String &series, uint32_t epoch, float value, uint16_t events = 0){ // добавление точки в указанную серию
   if(epoch == 0 || !isfinite(value)) return false; // недостоверные показания не портят масштаб графика
-  GraphDataGuard guard; // web может одновременно копировать эту серию в ответ
-  GraphSettings cfg = seriesConfig.count(series)
-                        ? seriesConfig[series]
-                        : GraphSettings{updateInterval, maxPoints}; // получаем настройки серии или используем дефолт
+  GraphSettings cfg{defaultGraphUpdateInterval, defaultGraphPoints};
+  getGraphSeriesSettings(series, cfg); // короткий config snapshot до history-lock
+  cfg = normalizeGraphSettings(cfg);
 
-  if(cfg.updateInterval < minGraphUpdateInterval) cfg.updateInterval = minGraphUpdateInterval; // защита интервала
-  if(cfg.updateInterval > maxGraphUpdateInterval) cfg.updateInterval = maxGraphUpdateInterval; // защита верхнего предела интервала
-  if(cfg.maxPoints < minGraphPoints) cfg.maxPoints = minGraphPoints; // защита размера
-  if(cfg.maxPoints > maxGraphPoints) cfg.maxPoints = maxGraphPoints; // ограничение размера
+  GraphDataGuard guard; // web может одновременно копировать эту серию в ответ
 
   unsigned long now = millis(); // текущее время
   unsigned long last = seriesLastUpdate[series]; // последнее обновление серии
@@ -681,5 +882,7 @@ inline bool addSeriesPoint(const String &series, uint32_t epoch, float value, ui
   seriesLastUpdate[series] = now; // фиксируем время обновления
 
   auto &points = customGraphSeries[series]; // получаем массив точек серии
-  return storeGraphPoint(series, points, {epoch, value, events}, static_cast<size_t>(cfg.maxPoints)); // пакетное сохранение с лимитом
+  const bool stored = storeGraphPoint(series, points, {epoch, value, events}, static_cast<size_t>(cfg.maxPoints)); // пакетное сохранение с лимитом
+  if(stored) publishGraphHistorySnapshotLocked(series, points, static_cast<size_t>(cfg.maxPoints));
+  return stored;
 }

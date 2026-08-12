@@ -106,7 +106,12 @@ inline void sendQueuedPersistenceResponse(AsyncWebServerRequest *request, bool a
 
 inline constexpr const char *webUiCachePath = "/web_ui_cache.html"; // Готовая страница отдается из SPIFFS без отдельного 260 КБ RAM-буфера на клиента.
 inline constexpr const char *webUiCacheTempPath = "/web_ui_cache.tmp";
-inline bool webUiCacheBuildInProgress = false; // Не даем двум клиентам одновременно строить большую HTML-страницу.
+inline SemaphoreHandle_t webUiSnapshotMutex = nullptr;
+inline TaskHandle_t webUiSnapshotWorkerHandle = nullptr;
+inline std::shared_ptr<const String> webUiSnapshot;
+inline std::function<std::shared_ptr<const String>()> webUiSnapshotRenderer;
+inline volatile uint32_t webUiSnapshotRequestedRevision = 1;
+inline volatile uint32_t webUiSnapshotPublishedRevision = 0;
 inline String liveJsonCache; // Короткий общий кеш /live: несколько браузеров получают один готовый снимок без повторной тяжелой сборки.
 inline unsigned long liveJsonCacheAt = 0;
 inline bool liveJsonBuildInProgress = false;
@@ -243,9 +248,62 @@ inline void invalidateLiveJsonCache(){
   liveJsonCacheAt = 0;
 }
 
+inline void ensureWebUiSnapshotMutex(){
+  if(webUiSnapshotMutex == nullptr) webUiSnapshotMutex = xSemaphoreCreateMutex();
+}
+
+inline std::shared_ptr<const String> getWebUiSnapshot(){
+  ensureWebUiSnapshotMutex();
+  if(webUiSnapshotMutex == nullptr || xSemaphoreTake(webUiSnapshotMutex, portMAX_DELAY) != pdTRUE) return nullptr;
+  auto snapshot = webUiSnapshot;
+  xSemaphoreGive(webUiSnapshotMutex);
+  return snapshot;
+}
+
+inline void publishWebUiSnapshot(std::shared_ptr<const String> snapshot, uint32_t revision){
+  if(!snapshot || snapshot->isEmpty()) return;
+  ensureWebUiSnapshotMutex();
+  if(webUiSnapshotMutex == nullptr || xSemaphoreTake(webUiSnapshotMutex, portMAX_DELAY) != pdTRUE) return;
+  webUiSnapshot = std::move(snapshot);
+  webUiSnapshotPublishedRevision = revision;
+  xSemaphoreGive(webUiSnapshotMutex);
+}
+
 inline void invalidateWebUiCache(){
-  webUiCacheBuildInProgress = false;
   invalidateLiveJsonCache();
+  webUiSnapshotRequestedRevision++;
+  if(webUiSnapshotRequestedRevision == 0) webUiSnapshotRequestedRevision = 1;
+  if(webUiSnapshotWorkerHandle != nullptr) xTaskNotifyGive(webUiSnapshotWorkerHandle);
+}
+
+inline void webUiSnapshotWorkerTask(void *){
+  for(;;){
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    vTaskDelay(pdMS_TO_TICKS(30)); // Склеиваем серию связанных изменений в одну сборку.
+    while(webUiSnapshotRenderer && webUiSnapshotPublishedRevision != webUiSnapshotRequestedRevision){
+      const uint32_t revision = webUiSnapshotRequestedRevision;
+      auto candidate = webUiSnapshotRenderer(); // Сборка вне cache-lock; старый снимок всё это время доступен.
+      if(!candidate){
+        Serial.println("[WEB] UI snapshot rebuild failed; keeping last good page");
+        vTaskDelay(pdMS_TO_TICKS(250));
+        break;
+      }
+      if(revision != webUiSnapshotRequestedRevision) continue; // Пока строили, пришла более новая конфигурация.
+      publishWebUiSnapshot(std::move(candidate), revision);
+    }
+  }
+}
+
+inline bool startWebUiSnapshotWorker(){
+  ensureWebUiSnapshotMutex();
+  if(webUiSnapshotMutex == nullptr) return false;
+  if(webUiSnapshotWorkerHandle != nullptr) return true;
+  TaskHandle_t worker = nullptr;
+  const BaseType_t result = xTaskCreatePinnedToCore(webUiSnapshotWorkerTask, "WebUiSnapshot", 8192,
+                                                    nullptr, 1, &worker, 0);
+  if(result != pdPASS || worker == nullptr) return false;
+  webUiSnapshotWorkerHandle = worker;
+  return true;
 }
 
 // ---------- Глобальные переменные для UI ----------
@@ -2102,32 +2160,10 @@ private:
     }); // промывка: логический цикл + факт реле
 
 
-      server.on("/", HTTP_GET, [self](AsyncWebServerRequest *r){
-      if(!ensureAuthorized(r)) return;
-
-      if(webUiCacheBuildInProgress){
-        AsyncWebServerResponse *busy = r->beginResponse(503, "text/plain; charset=UTF-8", "Страница формируется, повторите через секунду");
-        busy->addHeader("Retry-After", "1");
-        busy->addHeader("Cache-Control", "no-store");
-        r->send(busy);
-        return;
-      }
-      webUiCacheBuildInProgress = true;
-
-      // Один согласованный RAM-снимок конфигурации на всю страницу. Если график
-      // занят короткой записью history, лучше вернуть retryable 503, чем показать
-      // дефолты и дать пользователю случайно затереть реальные настройки.
-      ensureGraphDataMutex();
-      if(graphDataMutex == nullptr || xSemaphoreTake(graphDataMutex, pdMS_TO_TICKS(50)) != pdTRUE){
-        webUiCacheBuildInProgress = false;
-        AsyncWebServerResponse *busy = r->beginResponse(503, "text/plain; charset=UTF-8", "Данные графиков обновляются, повторите через секунду");
-        busy->addHeader("Retry-After", "1");
-        busy->addHeader("Cache-Control", "no-store");
-        r->send(busy);
-        return;
-      }
-      const std::map<String, GraphSettings> graphSettingsSnapshot = seriesConfig;
-      xSemaphoreGive(graphDataMutex);
+      auto renderWebUiSnapshot = [self]() -> std::shared_ptr<const String> {
+      // Конфигурация графиков живет в отдельном коротком RAM-lock. GET / никогда
+      // не ждет запись истории/SPIFFS и не подменяет страницу временной ошибкой.
+      const std::map<String, GraphSettings> graphSettingsSnapshot = snapshotGraphSeriesConfig();
 
       const uint32_t requestStartMs = millis(); // Общее время GET /: потом сравниваем с таймингами этапов
       if(kWebVerboseSerial) Serial.printf("[WEB:/] PSRAM page build started | core=%d | heap=%u | psram=%u\n",
@@ -2137,7 +2173,6 @@ private:
       uint32_t stageRenderTabsMs = 0; // Время рендера вкладок (контейнеры страниц)
       uint32_t stageRenderElementsMs = 0; // Суммарное время рендера элементов интерфейса
       uint32_t stageRenderPopupsMs = 0; // Время рендера popup-блоков
-      uint32_t stageSendMs = 0; // Время постановки/старта отправки ответа клиенту
       if(kWebVerboseSerial) Serial.printf("[WEB:/] begin | resetReason=%s\n", webResetReasonToText(esp_reset_reason())); // Печатаем старт GET / только в debug-режиме.
       if(kWebVerboseSerial) Serial.printf("[WEB:/][timing] start=%u ms\n", static_cast<unsigned>(0)); // Базовый маркер начала GET / только для диагностики.
       logWebHeapStats("before-html-build"); // Снимок кучи до генерации HTML для контроля фрагментации
@@ -2149,9 +2184,7 @@ private:
       if(!html.reserve(htmlReserveBytes)){
         if(kWebVerboseSerial) Serial.println("[WEB:/] PSRAM HTML reserve failed");
         logWebHeapStats("builder-init-failed");
-        webUiCacheBuildInProgress = false;
-        r->send(500, "text/plain", "Unable to allocate HTML page");
-        return;
+        return nullptr;
       }
       logWebHeapStats("after-builder-init");
 
@@ -5614,6 +5647,16 @@ document.addEventListener('visibilitychange', refreshCustomGraphActivity);
 
 
 const graphSettingsStates = new Map(); // Один последовательный запрос на серию; новые изменения заменяют ожидающие старые.
+const graphSettingsSessionToken = (()=>{
+  try {
+    if(window.crypto && typeof window.crypto.getRandomValues === 'function'){
+      const words = new Uint32Array(2);
+      window.crypto.getRandomValues(words);
+      return words[0].toString(16)+words[1].toString(16);
+    }
+  } catch(_){}
+  return Date.now().toString(36)+Math.random().toString(36).slice(2);
+})();
 
 function graphSettingsControls(canvas){
   const graphId = canvas ? (canvas.dataset.graphId || '') : '';
@@ -5637,11 +5680,10 @@ function getGraphSettingsState(canvas){
     graphSettingsStates.set(canvas, {
       timer:null,
       inFlight:false,
+      dirty:false,
       revision:0,
-      retryCount:0,
-      retryRequested:false,
+      editRevision:0,
       jobId:0,
-      pollTimer:null,
       ackInterval:Number(canvas.dataset.updateInterval || 5000),
       ackMaxPoints:Number(canvas.dataset.maxPoints || 100)
     });
@@ -5678,116 +5720,132 @@ function refreshGraphAfterSettingsAck(canvas, previousMaxPoints){
   fetchCustomGraph(canvas);
 }
 
+function graphDelay(ms){
+  return new Promise(resolve=>setTimeout(resolve, ms));
+}
+
+function graphFetchJson(url, options={}, timeoutMs=5000){
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timeoutId = controller ? setTimeout(()=>controller.abort(), timeoutMs) : null;
+  const requestOptions = Object.assign({cache:'no-store'}, options || {});
+  if(controller) requestOptions.signal = controller.signal;
+  return fetch(url, requestOptions).then(async response=>{
+    const data = await response.json().catch(()=>({}));
+    if(!response.ok){
+      const error = new Error(data.error || 'Ошибка обмена с ESP32');
+      error.httpStatus = response.status;
+      throw error;
+    }
+    return data;
+  }).finally(()=>{ if(timeoutId) clearTimeout(timeoutId); });
+}
+
+function waitForGraphSettingsJob(jobId, timeoutMs=30000){
+  const deadline = Date.now() + timeoutMs;
+  const poll = ()=>graphFetchJson('/graph/settings/status?id='+encodeURIComponent(jobId), {}, 3500)
+    .then(status=>{
+      if(status.state === 'saved') return status;
+      if(status.state === 'failed'){
+        const error = new Error(status.error || 'Ошибка записи настроек');
+        error.explicitFailure = true;
+        throw error;
+      }
+      if(status.state !== 'pending' && status.state !== 'saving'){
+        const error = new Error('Некорректный статус сохранения');
+        error.explicitFailure = true;
+        throw error;
+      }
+      if(Date.now() >= deadline) throw new Error('ESP32 не подтвердила запись настроек');
+      return graphDelay(100).then(poll);
+    })
+    .catch(error=>{
+      if(error && error.explicitFailure) throw error;
+      if(Date.now() >= deadline) throw error;
+      return graphDelay(200).then(poll); // Краткий сбой чтения статуса не отменяет уже принятую Flash-job.
+    });
+  return poll();
+}
+
+function submitGraphSettings(payload, attempt=0){
+  return graphFetchJson('/graph/settings', {method:'POST', body:payload}, 6000)
+    .catch(error=>{
+      // HTTP 503/429 означает, что сервер задание не принял: такой POST можно
+      // безопасно повторить. При потере ответа повтор не делаем, чтобы не дублировать запись.
+      const safeToRetry = !error || !Number.isFinite(Number(error.httpStatus)) ||
+                          error.httpStatus === 503 || error.httpStatus === 429;
+      if(safeToRetry && attempt < 6){
+        return graphDelay(80 + attempt * 80).then(()=>submitGraphSettings(payload, attempt + 1));
+      }
+      throw error;
+    });
+}
+
 function flushGraphSettings(canvas){
-  if(!canvas) return;
+  if(!canvas) return Promise.resolve();
   const state = getGraphSettingsState(canvas);
-  if(state.inFlight) return; // finally отправит только последнюю накопленную ревизию.
+  if(state.inFlight || !state.dirty) return Promise.resolve();
   const values = readGraphSettingsControls(canvas);
   if(!values){
     setGraphSettingsStatus(canvas, 'Допустимо: 1–5000', 'error');
-    return;
+    return Promise.resolve();
   }
 
   const requestRevision = state.revision;
+  const requestEditRevision = state.editRevision;
   const series = canvas.dataset.series || canvas.dataset.graphId || '';
   const payload = new URLSearchParams({
     series,
     updateInterval:String(values.updateInterval),
     maxPoints:String(values.maxPoints),
-    clientRevision:String(requestRevision)
+    clientRevision:String(requestRevision),
+    requestToken:graphSettingsSessionToken
   });
-  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-  const timeoutId = controller ? setTimeout(()=>controller.abort(), 8000) : null;
-  const options = {method:'POST', body:payload, cache:'no-store'};
-  if(controller) options.signal = controller.signal;
 
+  state.dirty = false;
   state.inFlight = true;
   state.jobId = 0;
-  setGraphSettingsStatus(canvas, 'Сохранение…', 'saving');
-  fetch('/graph/settings', options)
-    .then(async response=>{
-      const data = await response.json().catch(()=>({}));
-      if(!response.ok || !data || data.ok !== true){
-        const requestError = new Error(data.error || 'Ошибка сохранения');
-        requestError.transient = response.status === 503 || response.status === 429;
-        throw requestError;
-      }
-      if(Number(data.clientRevision) !== requestRevision || !Number(data.jobId)) throw new Error('Неверное подтверждение');
-      return data;
-    })
+  setGraphSettingsStatus(canvas, '', '');
+
+  return submitGraphSettings(payload)
     .then(data=>{
+      if(!data || data.ok !== true || Number(data.clientRevision) !== requestRevision || !Number(data.jobId)){
+        throw new Error('Неверное подтверждение ESP32');
+      }
       state.jobId = Number(data.jobId);
-      const pollStartedAt = Date.now();
-      const poll = ()=>{
-        const pollController = typeof AbortController !== 'undefined' ? new AbortController() : null;
-        const pollTimeout = pollController ? setTimeout(()=>pollController.abort(), 4000) : null;
-        const pollOptions = pollController ? {cache:'no-store', signal:pollController.signal} : {cache:'no-store'};
-        fetch('/graph/settings/status?id='+encodeURIComponent(state.jobId), pollOptions)
-          .then(async response=>{
-            const status = await response.json().catch(()=>({}));
-            if(!response.ok) throw new Error(status.error || 'Нет статуса сохранения');
-            if(status.state === 'pending' || status.state === 'saving'){
-              if(Date.now() - pollStartedAt > 30000) throw new Error('Сохранение во Flash не завершено');
-              state.pollTimer = setTimeout(poll, 150);
-              return;
-            }
-            if(status.state !== 'saved') throw new Error(status.error || 'Ошибка записи во Flash');
-            const ackInterval = Number(status.updateInterval);
-            const ackMaxPoints = Number(status.maxPoints);
-            if(!Number.isFinite(ackInterval) || !Number.isFinite(ackMaxPoints)) throw new Error('Некорректный статус');
-            const previousMaxPoints = state.ackMaxPoints;
-            state.ackInterval = ackInterval;
-            state.ackMaxPoints = ackMaxPoints;
-            state.retryCount = 0;
-            state.retryRequested = false;
-            state.inFlight = false;
-            if(state.revision !== requestRevision){ flushGraphSettings(canvas); return; }
-            const controls = graphSettingsControls(canvas);
-            canvas.dataset.updateInterval = String(ackInterval);
-            canvas.dataset.maxPoints = String(ackMaxPoints);
-            if(controls.interval) controls.interval.value = String(ackInterval);
-            if(controls.maxPoints) controls.maxPoints.value = String(ackMaxPoints);
-            setGraphSettingsStatus(canvas, 'Сохранено', 'saved');
-            refreshGraphAfterSettingsAck(canvas, previousMaxPoints);
-          })
-          .finally(()=>{ if(pollTimeout) clearTimeout(pollTimeout); })
-          .catch(error=>{
-            state.inFlight = false;
-            const controls = graphSettingsControls(canvas);
-            if(controls.interval) controls.interval.value = String(state.ackInterval);
-            if(controls.maxPoints) controls.maxPoints.value = String(state.ackMaxPoints);
-            setGraphSettingsStatus(canvas, error.message || 'Ошибка сохранения', 'error');
-            restartCustomGraphInterval(canvas);
-          });
-      };
-      poll();
+      return waitForGraphSettingsJob(state.jobId);
+    })
+    .then(status=>{
+      const ackInterval = Number(status.updateInterval);
+      const ackMaxPoints = Number(status.maxPoints);
+      if(!Number.isFinite(ackInterval) || !Number.isFinite(ackMaxPoints)) throw new Error('Некорректное подтверждение ESP32');
+      const previousMaxPoints = state.ackMaxPoints;
+      state.ackInterval = ackInterval;
+      state.ackMaxPoints = ackMaxPoints;
+      canvas.dataset.updateInterval = String(ackInterval);
+      canvas.dataset.maxPoints = String(ackMaxPoints);
+      if(state.revision === requestRevision && state.editRevision === requestEditRevision){
+        const controls = graphSettingsControls(canvas);
+        if(controls.interval) controls.interval.value = String(ackInterval);
+        if(controls.maxPoints) controls.maxPoints.value = String(ackMaxPoints);
+        setGraphSettingsStatus(canvas, 'Сохранено', 'saved');
+      }
+      refreshGraphAfterSettingsAck(canvas, previousMaxPoints);
     })
     .catch(error=>{
-      if(state.revision !== requestRevision) return; // Более новая редакция будет отправлена сразу после завершения этой.
-      const transient = Boolean(error && (error.transient || error.name === 'AbortError' || error.name === 'TypeError'));
-      if(transient && state.retryCount < 3){
-        state.retryCount++;
-        state.retryRequested = true;
-        setGraphSettingsStatus(canvas, 'Повтор сохранения…', 'saving');
-        return; // Потерянный ACK не откатывает поле: повтор того же атомарного запроса идемпотентен.
+      if(state.revision === requestRevision && state.editRevision === requestEditRevision){
+        const controls = graphSettingsControls(canvas);
+        if(controls.interval) controls.interval.value = String(state.ackInterval);
+        if(controls.maxPoints) controls.maxPoints.value = String(state.ackMaxPoints);
+        setGraphSettingsStatus(canvas, error && error.message ? error.message : 'Настройка не сохранена', 'error');
+        restartCustomGraphInterval(canvas);
       }
-      const controls = graphSettingsControls(canvas);
-      if(controls.interval) controls.interval.value = String(state.ackInterval);
-      if(controls.maxPoints) controls.maxPoints.value = String(state.ackMaxPoints);
-      state.retryRequested = false;
-      setGraphSettingsStatus(canvas, error && error.name === 'AbortError' ? 'Нет ответа ESP32' : (error.message || 'Ошибка сохранения'), 'error');
-      restartCustomGraphInterval(canvas);
     })
     .finally(()=>{
-      if(timeoutId) clearTimeout(timeoutId);
-      if(!state.jobId) state.inFlight = false;
-      if(state.revision !== requestRevision){
+      state.inFlight = false;
+      state.jobId = 0;
+      if(state.dirty || state.revision !== requestRevision){
         if(state.timer) clearTimeout(state.timer);
         state.timer = setTimeout(()=>{ state.timer = null; flushGraphSettings(canvas); }, 0);
-      } else if(state.retryRequested){
-        if(state.timer) clearTimeout(state.timer);
-        state.retryRequested = false;
-        state.timer = setTimeout(()=>{ state.timer = null; flushGraphSettings(canvas); }, 600 * state.retryCount);
       }
     });
 }
@@ -5856,7 +5914,7 @@ function saveSettingRequest(url, options){
   });
 }
 
-function scheduleGraphSettingsSave(canvas, delayMs=350){
+function scheduleGraphSettingsSave(canvas){
   if(!canvas) return;
   const state = getGraphSettingsState(canvas);
   if(!readGraphSettingsControls(canvas)){
@@ -5864,14 +5922,14 @@ function scheduleGraphSettingsSave(canvas, delayMs=350){
     return;
   }
   state.revision++;
-  state.retryCount = 0;
-  state.retryRequested = false;
+  state.editRevision++;
+  state.dirty = true;
   if(state.timer) clearTimeout(state.timer);
-  setGraphSettingsStatus(canvas, 'Ожидает сохранения', 'saving');
+  setGraphSettingsStatus(canvas, '', '');
   state.timer = setTimeout(()=>{
     state.timer = null;
     flushGraphSettings(canvas);
-  }, delayMs);
+  }, 0);
 }
 
 document.querySelectorAll('.graph-update-interval').forEach(select=>{
@@ -5879,7 +5937,7 @@ document.querySelectorAll('.graph-update-interval').forEach(select=>{
   if(!canvas) return;
   if(canvas.dataset.updateInterval) select.value = canvas.dataset.updateInterval;
   getGraphSettingsState(canvas);
-  select.addEventListener('change', ()=>scheduleGraphSettingsSave(canvas, 50));
+  select.addEventListener('change', ()=>scheduleGraphSettingsSave(canvas));
 });
 
 document.querySelectorAll('.graph-max-points').forEach(input=>{
@@ -5887,8 +5945,18 @@ document.querySelectorAll('.graph-max-points').forEach(input=>{
   if(!canvas) return;
   if(canvas.dataset.maxPoints) input.value = canvas.dataset.maxPoints;
   getGraphSettingsState(canvas);
-  input.addEventListener('input', ()=>scheduleGraphSettingsSave(canvas, 450)); // Стрелки и ручной ввод не создают очередь Flash-записей.
-  input.addEventListener('change', ()=>scheduleGraphSettingsSave(canvas, 50));
+  input.addEventListener('input', ()=>{
+    getGraphSettingsState(canvas).editRevision++;
+    if(!readGraphSettingsControls(canvas)) setGraphSettingsStatus(canvas, 'Допустимо: 1–5000', 'error');
+    else setGraphSettingsStatus(canvas, '', '');
+  }); // Пока пользователь печатает число, Flash не трогаем.
+  input.addEventListener('change', ()=>scheduleGraphSettingsSave(canvas));
+  input.addEventListener('keydown', event=>{
+    if(event.key === 'Enter'){
+      event.preventDefault();
+      input.blur(); // change немедленно отправит окончательное значение.
+    }
+  });
 });
 
 window.addEventListener('resize', ()=>{
@@ -6171,8 +6239,22 @@ function setImg(x){
       if(kWebVerboseSerial) Serial.printf("[WEB:/] html-built | bytes=%u reserve=%u buildMs=%u\n", static_cast<unsigned>(html.length()), static_cast<unsigned>(htmlReserveBytes), static_cast<unsigned>(htmlBuildMs)); // Контроль итогового размера только в debug-режиме.
       logWebHeapStats("after-html-build-before-send"); // Проверяем heap после сборки и до сетевой отправки
 
-      const uint32_t sendStartMs = millis();
-      auto htmlPtr = std::make_shared<String>(std::move(html)); // Буфер остается жив до конца асинхронной передачи.
+      return std::make_shared<const String>(std::move(html));
+    };
+
+    webUiSnapshotRenderer = renderWebUiSnapshot;
+    const uint32_t initialWebUiRevision = webUiSnapshotRequestedRevision;
+    publishWebUiSnapshot(renderWebUiSnapshot(), initialWebUiRevision); // До server.begin порт 80 уже имеет готовую страницу.
+    if(!getWebUiSnapshot()) Serial.println("[WEB] Initial UI snapshot build failed");
+    if(!startWebUiSnapshotWorker()) Serial.println("[WEB] Failed to start UI snapshot worker");
+
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest *r){
+      if(!ensureAuthorized(r)) return;
+      auto htmlPtr = getWebUiSnapshot();
+      if(!htmlPtr){
+        r->send(500, "text/plain; charset=UTF-8", "UI snapshot unavailable");
+        return;
+      }
       const size_t htmlTotalLen = htmlPtr->length();
       AsyncWebServerResponse *response = r->beginChunkedResponse(
         "text/html; charset=UTF-8",
@@ -6181,23 +6263,11 @@ function setImg(x){
           if(maxLen == 0) return RESPONSE_TRY_AGAIN;
           const size_t remaining = htmlTotalLen - index;
           const size_t toCopy = remaining < maxLen ? remaining : maxLen;
-          memcpy(buffer, htmlPtr->c_str() + index, toCopy); // Только PSRAM -> внутренняя RAM сети; Flash-кэш не отключается.
+          memcpy(buffer, htmlPtr->c_str() + index, toCopy);
           return toCopy;
         });
       response->addHeader("Cache-Control", "no-store");
-      webUiCacheBuildInProgress = false;
       r->send(response);
-      Serial.printf("[WEB:/] PSRAM page queued | bytes=%u | buildMs=%u\n",
-                    static_cast<unsigned>(htmlTotalLen), static_cast<unsigned>(htmlBuildMs));
-      stageSendMs = millis() - sendStartMs;
-      if(kWebVerboseSerial) Serial.printf("[WEB:/][timing] sendQueued=%u ms\n", static_cast<unsigned>(stageSendMs)); // Лог сетевого этапа только в debug-режиме.
-      const uint32_t slowestMs = max(max(stageBuildHeaderMs, stageRenderTabsMs), max(stageRenderPopupsMs, stageSendMs)); // Вычисляем узкое место текущего запроса
-      const char *slowestStage = (slowestMs == stageBuildHeaderMs) ? "buildHeader" : // Имя самого долгого этапа для быстрого анализа
-                                 (slowestMs == stageRenderTabsMs) ? "renderTabs" :
-                                 (slowestMs == stageRenderPopupsMs) ? "renderPopups" : "send";
-      if(kWebVerboseSerial) Serial.printf("[WEB:/][timing] slowestStage=%s %u ms\n", slowestStage, static_cast<unsigned>(slowestMs)); // Итоговый лог только в debug-режиме.
-      if(kWebVerboseSerial) Serial.printf("[WEB:/] send queued | totalMs=%u\n", static_cast<unsigned>(millis() - requestStartMs)); // Полная длительность только в debug-режиме.
-      logWebHeapStats("after-send-queued"); // Контроль heap после постановки ответа в отправку
     });
 
     // Вход в Web только по паролю. Страница и обработчик не требуют сессии,
@@ -6289,10 +6359,11 @@ function setImg(x){
       };
 
       const String series = bodyParam("series");
+      const String requestToken = bodyParam("requestToken");
       uint32_t requestedInterval = 0;
       uint32_t requestedMaxPoints = 0;
       uint32_t clientRevision = 0;
-      if(!series.length() || series.length() > 32 ||
+      if(!series.length() || series.length() > 32 || !requestToken.length() || requestToken.length() > 48 ||
          !parseUnsignedDecimal(bodyParam("updateInterval"), requestedInterval) ||
          !parseUnsignedDecimal(bodyParam("maxPoints"), requestedMaxPoints) ||
          !parseUnsignedDecimal(bodyParam("clientRevision"), clientRevision)){
@@ -6305,49 +6376,24 @@ function setImg(x){
         return;
       }
 
-      ensureGraphDataMutex();
-      if(graphDataMutex == nullptr || xSemaphoreTake(graphDataMutex, pdMS_TO_TICKS(50)) != pdTRUE){
-        sendJson(503, "{\"ok\":false,\"error\":\"График занят, повторите сохранение\"}", "1");
-        return;
-      }
-
-      auto configIt = seriesConfig.find(series);
-      if(configIt == seriesConfig.end()){
-        xSemaphoreGive(graphDataMutex);
+      const GraphSettings requestedSettings{static_cast<unsigned long>(requestedInterval), static_cast<int>(requestedMaxPoints)};
+      static uint32_t graphSettingsServerRevision = 0;
+      const uint32_t serverRevision = ++graphSettingsServerRevision;
+      uint32_t jobId = 0;
+      const GraphSettingsUpdateResult updateResult =
+        queueGraphSeriesSettingsUpdate(series, requestedSettings, jobId, requestToken, clientRevision);
+      if(updateResult == GraphSettingsUpdateResult::UnknownSeries){
         sendJson(404, "{\"ok\":false,\"error\":\"Серия графика не найдена\"}");
         return;
       }
-
-      const GraphSettings requestedSettings{static_cast<unsigned long>(requestedInterval), static_cast<int>(requestedMaxPoints)};
-      const GraphSettings previousSettings = configIt->second;
-      static uint32_t graphSettingsServerRevision = 0;
-      const uint32_t serverRevision = ++graphSettingsServerRevision;
-      const uint32_t jobId = queueGraphSettingsSave(series, requestedSettings);
-      if(jobId == 0){
-        xSemaphoreGive(graphDataMutex);
+      if(updateResult == GraphSettingsUpdateResult::QueueBusy){
         sendJson(503, "{\"ok\":false,\"error\":\"Очередь сохранения занята\"}", "1");
         return;
       }
-
-      // Очередь уже приняла Flash-job: публикуем новую пару в RAM под тем же lock,
-      // чтобы не вернуть 503 после фактически принятого задания.
-      configIt->second = requestedSettings;
-      if(previousSettings.updateInterval != requestedSettings.updateInterval) seriesLastUpdate[series] = 0;
-      if(series == "main"){
-        updateInterval = requestedSettings.updateInterval;
-        maxPoints = requestedSettings.maxPoints;
-        if(graphPoints.size() > requestedMaxPoints){
-          trimGraphPoints(graphPoints, requestedMaxPoints);
-          seriesRewriteRequired[series] = true;
-        }
-      } else {
-        auto pointsIt = customGraphSeries.find(series);
-        if(pointsIt != customGraphSeries.end() && pointsIt->second.size() > requestedMaxPoints){
-          trimGraphPoints(pointsIt->second, requestedMaxPoints);
-          seriesRewriteRequired[series] = true;
-        }
+      if(updateResult != GraphSettingsUpdateResult::Accepted || jobId == 0){
+        sendJson(500, "{\"ok\":false,\"error\":\"Не удалось применить настройки графика\"}");
+        return;
       }
-      xSemaphoreGive(graphDataMutex);
 
       String ack;
       ack.reserve(200);
@@ -6381,6 +6427,7 @@ function setImg(x){
       json += "\"maxPoints\":" + String(job.settings.maxPoints);
       if(job.error.length()) json += ",\"error\":\"" + jsonEscape(job.error) + "\"";
       json += '}';
+      if(consumeGraphSettingsUiSnapshotNotification(jobId)) invalidateWebUiCache();
       AsyncWebServerResponse *response = r->beginResponse(200, "application/json", json);
       response->addHeader("Cache-Control", "no-store");
       r->send(response);
@@ -7023,51 +7070,37 @@ function setImg(x){
         bool hasOrp = false;
       };
       auto snapshot = std::make_shared<std::vector<GraphResponsePoint>>();
-      {
-        ensureGraphDataMutex();
-        if(graphDataMutex == nullptr || xSemaphoreTake(graphDataMutex, pdMS_TO_TICKS(20)) != pdTRUE){
-          AsyncWebServerResponse *busy = r->beginResponse(503, "application/json", "{\"ok\":false,\"error\":\"График занят\"}");
-          busy->addHeader("Retry-After", "1");
-          r->send(busy);
-          return;
-        }
-        static const vector<GraphPoint> emptySeries;
-        const vector<GraphPoint> *points = &graphPoints;
-        if(series != "main"){
-          auto it = customGraphSeries.find(series);
-          points = (it != customGraphSeries.end()) ? &it->second : &emptySeries;
-        }
-        const vector<GraphPoint> *orpPoints = nullptr;
-        if(isChlorinePpmGraphSeries(series)){
-          auto orpIt = customGraphSeries.find(chlorineOrpGraphSeriesId());
-          if(orpIt != customGraphSeries.end()) orpPoints = &orpIt->second;
-        }
+      static const auto emptyPoints = std::make_shared<const vector<GraphPoint>>();
+      const GraphHistorySnapshot history = getGraphHistorySnapshot(series);
+      const auto points = history.points ? history.points : emptyPoints;
+      std::shared_ptr<const vector<GraphPoint>> orpPoints;
+      if(isChlorinePpmGraphSeries(series)){
+        orpPoints = getGraphHistorySnapshot(chlorineOrpGraphSeriesId()).points;
+      }
 
-        size_t firstPoint = 0;
-        auto cfgIt = seriesConfig.find(series);
-        const size_t responseLimit = cfgIt != seriesConfig.end() && cfgIt->second.maxPoints > 0
-          ? static_cast<size_t>(cfgIt->second.maxPoints)
-          : static_cast<size_t>(defaultGraphPoints);
-        if(points->size() > responseLimit) firstPoint = points->size() - responseLimit; // Не передаём служебный запас сверх Max Points.
-        snapshot->reserve(since == 0 ? points->size() - firstPoint : std::min<size_t>(points->size() - firstPoint, 32)); // Повторный опрос обычно несёт одну точку.
-        size_t orpCursor = 0;
-        for(size_t pointIndex = firstPoint; pointIndex < points->size(); pointIndex++){
-          const auto &point = (*points)[pointIndex];
-          if(point.epoch <= since) continue;
-          GraphResponsePoint responsePoint;
-          responsePoint.epoch = point.epoch;
-          responsePoint.value = point.value;
-          responsePoint.events = point.events;
-          if(orpPoints){
-            while(orpCursor < orpPoints->size() && (*orpPoints)[orpCursor].epoch < point.epoch) orpCursor++;
-            if(orpCursor < orpPoints->size() && (*orpPoints)[orpCursor].epoch == point.epoch){
-              responsePoint.orp = (*orpPoints)[orpCursor].value;
-              responsePoint.hasOrp = true;
-            }
+      GraphSettings responseSettings{defaultGraphUpdateInterval, defaultGraphPoints};
+      getGraphSeriesSettings(series, responseSettings);
+      const size_t responseLimit = responseSettings.maxPoints > 0
+        ? static_cast<size_t>(responseSettings.maxPoints)
+        : static_cast<size_t>(defaultGraphPoints);
+      const size_t firstPoint = points->size() > responseLimit ? points->size() - responseLimit : 0;
+      snapshot->reserve(since == 0 ? points->size() - firstPoint : std::min<size_t>(points->size() - firstPoint, 32));
+      size_t orpCursor = 0;
+      for(size_t pointIndex = firstPoint; pointIndex < points->size(); pointIndex++){
+        const auto &point = (*points)[pointIndex];
+        if(point.epoch <= since) continue;
+        GraphResponsePoint responsePoint;
+        responsePoint.epoch = point.epoch;
+        responsePoint.value = point.value;
+        responsePoint.events = point.events;
+        if(orpPoints){
+          while(orpCursor < orpPoints->size() && (*orpPoints)[orpCursor].epoch < point.epoch) orpCursor++;
+          if(orpCursor < orpPoints->size() && (*orpPoints)[orpCursor].epoch == point.epoch){
+            responsePoint.orp = (*orpPoints)[orpCursor].value;
+            responsePoint.hasOrp = true;
           }
-          snapshot->push_back(responsePoint);
         }
-        xSemaphoreGive(graphDataMutex);
+        snapshot->push_back(responsePoint);
       }
 
       // Компактный поток: [epoch,value], при необходимости добавляются events и ORP.
