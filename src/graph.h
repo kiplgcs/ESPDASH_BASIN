@@ -6,6 +6,7 @@
 #include <algorithm> // lower_bound для сохранения хронологического порядка точек
 #include <functional> // std::function для callback'ов источников данных
 #include <map> // ассоциативные контейнеры для хранения серий и настроек
+#include <utility> // std::move для передачи большого буфера истории без копии
 #include <vector> // динамические массивы точек графика
 
 #include "fs_utils.h" // утилиты работы с файловой системой (SPIFFS)
@@ -51,6 +52,7 @@ inline bool isChlorinePpmGraphSeries(const String &series){ return series == chl
 // Новые записи сбрасываются хвостом, а полная перезапись выполняется только
 // после накопления запаса сверх выбранного лимита.
 inline const size_t graphTrimSlackMin = 64;
+inline const size_t graphTrimSlackMax = 512; // Не держим по 2500 лишних точек при лимите 5000.
 inline const unsigned long graphFlushIntervalMs = 30000;
 inline const size_t graphFlushPendingLimit = 32;
 inline std::map<String, size_t> seriesUnsavedTail;
@@ -59,7 +61,8 @@ inline std::map<String, bool> seriesRewriteRequired; // Повтор атома�
 
 inline size_t graphTrimSlackFor(size_t limit){
   const size_t half = limit / 2;
-  return half > graphTrimSlackMin ? half : graphTrimSlackMin;
+  const size_t slack = half > graphTrimSlackMin ? half : graphTrimSlackMin;
+  return slack < graphTrimSlackMax ? slack : graphTrimSlackMax;
 }
 
 // Web и основная логика работают на разных ядрах, поэтому снимок истории и
@@ -72,16 +75,42 @@ inline void ensureGraphDataMutex(){
 
 class GraphDataGuard {
  public:
-  GraphDataGuard(){
+  explicit GraphDataGuard(TickType_t waitTicks = portMAX_DELAY){
     ensureGraphDataMutex();
-    locked = graphDataMutex != nullptr && xSemaphoreTake(graphDataMutex, portMAX_DELAY) == pdTRUE;
+    locked_ = graphDataMutex != nullptr && xSemaphoreTake(graphDataMutex, waitTicks) == pdTRUE;
   }
-  ~GraphDataGuard(){ if(locked) xSemaphoreGive(graphDataMutex); }
+  ~GraphDataGuard(){ if(locked_) xSemaphoreGive(graphDataMutex); }
   GraphDataGuard(const GraphDataGuard&) = delete;
   GraphDataGuard& operator=(const GraphDataGuard&) = delete;
+  bool locked() const { return locked_; }
 
  private:
-  bool locked = false;
+  bool locked_ = false;
+};
+
+// Настройки могут одновременно сохраняться из нескольких HTTP-запросов. Их
+// временные файлы общие для серии, поэтому отдельный mutex защищает весь цикл
+// write -> flush -> atomic rename. В отличие от graphDataMutex ожидание здесь
+// ограничено: сетевой callback сможет вернуть 503, а не зависнуть до WDT.
+inline SemaphoreHandle_t graphSettingsIoMutex = nullptr;
+
+inline void ensureGraphSettingsIoMutex(){
+  if(graphSettingsIoMutex == nullptr) graphSettingsIoMutex = xSemaphoreCreateMutex();
+}
+
+class GraphSettingsIoGuard {
+ public:
+  explicit GraphSettingsIoGuard(TickType_t waitTicks){
+    ensureGraphSettingsIoMutex();
+    locked_ = graphSettingsIoMutex != nullptr && xSemaphoreTake(graphSettingsIoMutex, waitTicks) == pdTRUE;
+  }
+  ~GraphSettingsIoGuard(){ if(locked_) xSemaphoreGive(graphSettingsIoMutex); }
+  GraphSettingsIoGuard(const GraphSettingsIoGuard&) = delete;
+  GraphSettingsIoGuard& operator=(const GraphSettingsIoGuard&) = delete;
+  bool locked() const { return locked_; }
+
+ private:
+  bool locked_ = false;
 };
 
 inline String graphDataPath(const String &series){ // формирует путь к файлу данных графика
@@ -90,13 +119,62 @@ inline String graphDataPath(const String &series){ // формирует пут�
 
 struct GraphSettings { unsigned long updateInterval; int maxPoints; }; // настройки графика: интервал и размер
 
-inline String graphConfigPath(const String &series){ // путь к JSON-файлу настроек серии
-  return "/graph_config_" + sanitizeSeriesId(series) + ".json"; // имя файла конфигурации
+// HTTP callbacks AsyncWebServer выполняются в задаче async_tcp. Любая запись
+// SPIFFS из этой задачи может остановить её на время erase/program flash и
+// привести к Task WDT. Поэтому Web только кладёт маленький запрос в RAM, а
+// фактическую запись выполняет отдельная служебная задача.
+enum class GraphSettingsSaveState : uint8_t { Unknown, Pending, Saving, Saved, Failed };
+
+struct GraphSettingsSaveJob {
+  uint32_t id = 0;
+  String series;
+  GraphSettings settings{defaultGraphUpdateInterval, defaultGraphPoints};
+  GraphSettingsSaveState state = GraphSettingsSaveState::Unknown;
+  String error;
+  unsigned long completedAt = 0;
+};
+
+inline SemaphoreHandle_t graphSettingsQueueMutex = nullptr;
+inline TaskHandle_t graphSettingsWorkerHandle = nullptr;
+inline std::vector<GraphSettingsSaveJob> graphSettingsSaveJobs;
+inline uint32_t graphSettingsNextJobId = 1;
+inline constexpr size_t graphSettingsMaxJobs = 16;
+inline constexpr unsigned long graphSettingsJobRetentionMs = 120000;
+
+inline void ensureGraphSettingsQueueMutex(){
+  if(graphSettingsQueueMutex == nullptr) graphSettingsQueueMutex = xSemaphoreCreateMutex();
 }
 
-inline bool loadGraphSettings(const String &series, GraphSettings &settings){ // загрузка настроек серии из SPIFFS
+inline const char *graphSettingsSaveStateText(GraphSettingsSaveState state){
+  switch(state){
+    case GraphSettingsSaveState::Pending: return "pending";
+    case GraphSettingsSaveState::Saving: return "saving";
+    case GraphSettingsSaveState::Saved: return "saved";
+    case GraphSettingsSaveState::Failed: return "failed";
+    default: return "unknown";
+  }
+}
+
+inline String graphConfigPath(const String &series){ // путь к JSON-файлу настроек серии
+  String safe = sanitizeSeriesId(series);
+  if(safe.length() > 12) safe = safe.substring(0, 12); // 14 + 12 + 5 = 31 байт: предел имени SPIFFS.
+  return "/graph_config_" + safe + ".json"; // имя файла конфигурации
+}
+
+inline bool loadGraphSettings(const String &series, GraphSettings &settings,
+                              TickType_t waitTicks = pdMS_TO_TICKS(250)){ // загрузка настроек серии из SPIFFS
   if(!spiffsMounted) return false; // если файловая система не смонтирована — выходим
+  GraphSettingsIoGuard ioGuard(waitTicks); // Не читаем путь между rename старого и нового файла.
+  if(!ioGuard.locked()) return false; // Сетевой запрос не должен ждать Flash без ограничения.
   String path = graphConfigPath(series); // получаем путь к конфигурации
+  const String configStem = path.substring(0, path.length() - 5); // Убираем .json, чтобы не превысить SPIFFS name limit 31.
+  const String temporaryPath = configStem + ".tmp";
+  const String backupPath = configStem + ".bak";
+  if(!SPIFFS.exists(path) && SPIFFS.exists(backupPath)) SPIFFS.rename(backupPath, path); // Восстановление после reset между двумя rename.
+  if(SPIFFS.exists(path)){
+    if(SPIFFS.exists(backupPath)) SPIFFS.remove(backupPath);
+    if(SPIFFS.exists(temporaryPath)) SPIFFS.remove(temporaryPath);
+  }
   if(!SPIFFS.exists(path)) return false; // если файла нет — используем значения по умолчанию
   File f = SPIFFS.open(path, FILE_READ); // открываем файл на чтение
   if(!f) return false; // если файл не открылся — ошибка
@@ -110,23 +188,161 @@ inline bool loadGraphSettings(const String &series, GraphSettings &settings){ //
   return true; // успешная загрузка
 }
 
-inline void saveGraphSettings(const String &series, const GraphSettings &settings){ // сохранение настроек графика
-  if(!spiffsMounted) return; // если SPIFFS недоступен — выходим
+inline bool saveGraphSettings(const String &series, const GraphSettings &settings,
+                              TickType_t waitTicks = pdMS_TO_TICKS(250)){ // атомарное сохранение настроек графика
+  if(!spiffsMounted) return false; // если SPIFFS недоступен — выходим
+  GraphSettingsIoGuard ioGuard(waitTicks); // Два HTTP save одной серии не используют один .tmp одновременно.
+  if(!ioGuard.locked()) return false; // Вместо неограниченного ожидания вызывающий код сможет вернуть ошибку.
   String path = graphConfigPath(series); // путь к файлу настроек
-  if(SPIFFS.exists(path)){ // если файл уже существует
-    SPIFFS.remove(path); // удаляем старую версию
-  }
-  File f = SPIFFS.open(path, FILE_WRITE); // открываем файл на запись
+  const String configStem = path.substring(0, path.length() - 5); // .tmp/.bak заменяют .json и остаются в лимите SPIFFS.
+  const String temporaryPath = configStem + ".tmp";
+  const String backupPath = configStem + ".bak";
+  if(!SPIFFS.exists(path) && SPIFFS.exists(backupPath)) SPIFFS.rename(backupPath, path); // Сначала возвращаем рабочую копию после прошлого reset.
+  if(SPIFFS.exists(path) && SPIFFS.exists(backupPath)) SPIFFS.remove(backupPath); // Старый backup больше не нужен.
+  if(SPIFFS.exists(temporaryPath)) SPIFFS.remove(temporaryPath); // Остаток только от ранее прерванной попытки.
+  File f = SPIFFS.open(temporaryPath, FILE_WRITE); // Рабочий config остается доступен до полной записи нового.
   if(!f){ // если файл не открылся
     Serial.println("Failed to open graph config for writing: " + path); // сообщение об ошибке
-    return; // выходим
+    return false; // выходим
   }
   StaticJsonDocument<256> doc; // создаём JSON-документ
   doc["updateInterval"] = settings.updateInterval; // сохраняем интервал обновления
   doc["maxPoints"] = settings.maxPoints; // сохраняем максимальное количество точек
-  serializeJson(doc, f); // записываем JSON в файл
+  const size_t written = serializeJson(doc, f); // записываем JSON во временный файл
+  f.flush();
+  const bool writeOk = written > 0 && f.getWriteError() == 0;
   f.close(); // закрываем файл
+  if(!writeOk){
+    SPIFFS.remove(temporaryPath);
+    Serial.println("Failed to write graph config: " + path);
+    return false;
+  }
+
+  // Сначала полностью подготовлен новый файл. Старый лишь переименовывается в
+  // backup и может быть восстановлен при любой ошибке следующего rename.
+  if(SPIFFS.exists(backupPath)) SPIFFS.remove(backupPath);
+  const bool hadOriginal = SPIFFS.exists(path);
+  if(hadOriginal && !SPIFFS.rename(path, backupPath)){
+    SPIFFS.remove(temporaryPath);
+    return false;
+  }
+  if(!SPIFFS.rename(temporaryPath, path)){
+    if(hadOriginal && SPIFFS.exists(backupPath)) SPIFFS.rename(backupPath, path);
+    SPIFFS.remove(temporaryPath);
+    return false;
+  }
+  if(SPIFFS.exists(backupPath)) SPIFFS.remove(backupPath);
+  return true;
 }
+
+inline void pruneGraphSettingsJobsLocked(unsigned long now){
+  graphSettingsSaveJobs.erase(
+    std::remove_if(graphSettingsSaveJobs.begin(), graphSettingsSaveJobs.end(),
+      [now](const GraphSettingsSaveJob &job){
+        const bool completed = job.state == GraphSettingsSaveState::Saved || job.state == GraphSettingsSaveState::Failed;
+        return completed && job.completedAt != 0 && now - job.completedAt >= graphSettingsJobRetentionMs;
+      }),
+    graphSettingsSaveJobs.end());
+}
+
+inline uint32_t queueGraphSettingsSave(const String &series, const GraphSettings &settings){
+  // Без живого worker Pending-job никто не обработает, а Web будет опрашивать
+  // его бесконечно. Нулевой id позволяет HTTP handler сразу вернуть 503.
+  if(graphSettingsWorkerHandle == nullptr){
+    Serial.println("[GRAPH] Settings save rejected: worker is not running");
+    return 0;
+  }
+  ensureGraphSettingsQueueMutex();
+  if(graphSettingsQueueMutex == nullptr || xSemaphoreTake(graphSettingsQueueMutex, pdMS_TO_TICKS(20)) != pdTRUE) return 0;
+  pruneGraphSettingsJobsLocked(millis());
+  if(graphSettingsSaveJobs.size() >= graphSettingsMaxJobs){
+    xSemaphoreGive(graphSettingsQueueMutex);
+    return 0;
+  }
+  uint32_t id = graphSettingsNextJobId++;
+  if(id == 0) id = graphSettingsNextJobId++;
+  GraphSettingsSaveJob job;
+  job.id = id;
+  job.series = series;
+  job.settings = settings;
+  job.state = GraphSettingsSaveState::Pending;
+  graphSettingsSaveJobs.push_back(std::move(job));
+  xSemaphoreGive(graphSettingsQueueMutex);
+  return id;
+}
+
+inline bool getGraphSettingsSaveJob(uint32_t id, GraphSettingsSaveJob &snapshot){
+  ensureGraphSettingsQueueMutex();
+  if(id == 0 || graphSettingsQueueMutex == nullptr || xSemaphoreTake(graphSettingsQueueMutex, pdMS_TO_TICKS(20)) != pdTRUE) return false;
+  bool found = false;
+  for(const auto &job : graphSettingsSaveJobs){
+    if(job.id != id) continue;
+    snapshot = job;
+    found = true;
+    break;
+  }
+  xSemaphoreGive(graphSettingsQueueMutex);
+  return found;
+}
+
+inline void graphSettingsWorkerTask(void *){
+  for(;;){
+    uint32_t jobId = 0;
+    String series;
+    GraphSettings settings{defaultGraphUpdateInterval, defaultGraphPoints};
+
+    if(graphSettingsQueueMutex != nullptr && xSemaphoreTake(graphSettingsQueueMutex, pdMS_TO_TICKS(50)) == pdTRUE){
+      for(auto &job : graphSettingsSaveJobs){
+        if(job.state != GraphSettingsSaveState::Pending) continue;
+        job.state = GraphSettingsSaveState::Saving;
+        jobId = job.id;
+        series = job.series;
+        settings = job.settings;
+        break;
+      }
+      xSemaphoreGive(graphSettingsQueueMutex);
+    }
+
+    if(jobId == 0){
+      vTaskDelay(pdMS_TO_TICKS(20));
+      continue;
+    }
+
+    const bool saved = saveGraphSettings(series, settings, pdMS_TO_TICKS(1000));
+    if(graphSettingsQueueMutex != nullptr && xSemaphoreTake(graphSettingsQueueMutex, pdMS_TO_TICKS(100)) == pdTRUE){
+      for(auto &job : graphSettingsSaveJobs){
+        if(job.id != jobId) continue;
+        job.state = saved ? GraphSettingsSaveState::Saved : GraphSettingsSaveState::Failed;
+        job.error = saved ? String() : String("Не удалось сохранить настройки во Flash");
+        job.completedAt = millis();
+        break;
+      }
+      xSemaphoreGive(graphSettingsQueueMutex);
+    }
+    if(!saved) Serial.printf("[GRAPH] Deferred settings write failed: %s\n", series.c_str());
+    vTaskDelay(1);
+  }
+}
+
+inline bool startGraphSettingsWorker(){
+  ensureGraphSettingsQueueMutex();
+  if(graphSettingsQueueMutex == nullptr){
+    Serial.println("[GRAPH] Failed to create settings queue mutex");
+    return false;
+  }
+  if(graphSettingsWorkerHandle != nullptr) return true;
+  TaskHandle_t createdWorker = nullptr;
+  const BaseType_t result = xTaskCreatePinnedToCore(graphSettingsWorkerTask, "GraphSettingsIO", 4096, nullptr, 1,
+                                                    &createdWorker, 0);
+  if(result != pdPASS || createdWorker == nullptr){
+    graphSettingsWorkerHandle = nullptr;
+    Serial.println("[GRAPH] Failed to create settings worker task");
+    return false;
+  }
+  graphSettingsWorkerHandle = createdWorker;
+  return true;
+}
+
 
 inline bool saveGraphSeries(const String &series, const vector<GraphPoint> &points){ // полная перезапись данных графика
   if(!spiffsMounted) return false; // если SPIFFS недоступен — выходим
@@ -140,12 +356,36 @@ inline bool saveGraphSeries(const String &series, const vector<GraphPoint> &poin
     return false; // выходим
   }
   bool writeOk = true;
+  // File.printf на каждую из 5000 точек создаёт тысячи отдельных обращений к
+  // SPIFFS. Небольшой stack-буфер находится во внутренней RAM и записывается
+  // крупными блоками; это одновременно быстрее и безопасно при Flash cache off.
+  char writeBuffer[1024];
+  size_t bufferedBytes = 0;
+  auto flushWriteBuffer = [&]() -> bool {
+    if(bufferedBytes == 0) return true;
+    const size_t written = f.write(reinterpret_cast<const uint8_t *>(writeBuffer), bufferedBytes);
+    if(written != bufferedBytes) return false;
+    bufferedBytes = 0;
+    vTaskDelay(1); // Между Flash-блоками обслуживаются idle/network задачи.
+    return true;
+  };
   for(const auto &p : points){ // перебираем все точки
-    if(f.printf("%lu,%.3f,%u\n", static_cast<unsigned long>(p.epoch), p.value, static_cast<unsigned>(p.events)) == 0){
+    char line[80];
+    const int lineLength = snprintf(line, sizeof(line), "%lu,%.3f,%u\n",
+                                    static_cast<unsigned long>(p.epoch), p.value,
+                                    static_cast<unsigned>(p.events));
+    if(lineLength <= 0 || static_cast<size_t>(lineLength) >= sizeof(line)){
       writeOk = false;
       break;
     }
+    if(bufferedBytes + static_cast<size_t>(lineLength) > sizeof(writeBuffer) && !flushWriteBuffer()){
+      writeOk = false;
+      break;
+    }
+    memcpy(writeBuffer + bufferedBytes, line, static_cast<size_t>(lineLength));
+    bufferedBytes += static_cast<size_t>(lineLength);
   }
+  if(writeOk && !flushWriteBuffer()) writeOk = false;
   f.flush();
   if(f.getWriteError() != 0) writeOk = false;
   f.close(); // закрываем файл
@@ -207,9 +447,14 @@ inline uint32_t parseLegacyGraphTime(const String &text){
   return parsed > 0 ? static_cast<uint32_t>(parsed) : 0;
 }
 
-inline void loadGraphSeries(const String &series, vector<GraphPoint> &points){ // загрузка точек графика из файла
+inline void loadGraphSeries(const String &series, vector<GraphPoint> &points,
+                            size_t pointLimit = static_cast<size_t>(maxGraphPoints)){ // загрузка последних точек графика из файла
   points.clear(); // очищаем текущие данные
   if(!spiffsMounted) return; // если SPIFFS недоступен — выходим
+  if(pointLimit == 0) pointLimit = static_cast<size_t>(defaultGraphPoints); // Нулевой лимит не должен загрузить неограниченный файл.
+  if(pointLimit > static_cast<size_t>(maxGraphPoints)) pointLimit = static_cast<size_t>(maxGraphPoints);
+  points.reserve(pointLimit); // Один PSRAM-блок вместо каскада realloc при загрузке длинной истории.
+  const size_t loadSlack = graphTrimSlackFor(pointLimit); // Размер ограниченного временного хвоста при последовательном чтении.
   String path = graphDataPath(series); // путь к файлу данных
   const String temporaryPath = path + ".tmp";
   const String backupPath = path + ".bak";
@@ -244,8 +489,14 @@ inline void loadGraphSeries(const String &series, vector<GraphPoint> &points){ /
     gp.value = line.substring(sep + 1, sep2 < 0 ? line.length() : sep2).toFloat();
     gp.events = sep2 < 0 ? 0 : static_cast<uint16_t>(line.substring(sep2 + 1).toInt());
     points.push_back(gp); // добавляем точку в массив
+    if(points.size() > pointLimit + loadSlack){
+      // Для старого/поврежденного большого файла держим только хвост. Так при
+      // maxPoints=100 временный vector не разрастается до тысяч записей.
+      trimGraphPoints(points, pointLimit);
+    }
   }
   f.close(); // закрываем файл
+  trimGraphPoints(points, pointLimit); // В RAM всегда остается не больше выбранного Max Points.
   seriesUnsavedTail[series] = 0;
   seriesRewriteRequired[series] = false;
   seriesLastFlush[series] = millis();
@@ -288,7 +539,7 @@ inline void loadGraph(){ // инициализация основной сери
   updateInterval = mainCfg.updateInterval; // сохраняем интервал обновления как глобальный
   maxPoints = mainCfg.maxPoints; // сохраняем лимит точек как глобальный
 
-  loadGraphSeries("main", graphPoints); // загружаем сохранённые точки основной серии
+  loadGraphSeries("main", graphPoints, static_cast<size_t>(mainCfg.maxPoints)); // загружаем только выбранный хвост основной серии
   if(graphPoints.size() > static_cast<size_t>(mainCfg.maxPoints)){
     trimGraphPoints(graphPoints, static_cast<size_t>(mainCfg.maxPoints));
     saveGraphSeries("main", graphPoints);
@@ -327,10 +578,6 @@ inline void registerGraphSource( // регистрация новой серии
   GraphDataGuard guard; // регистрация затрагивает общие карты и массивы
   graphValueProviders[name] = getter; // сохраняем функцию-источник значений
 
-  vector<GraphPoint> stored; // временное хранилище загруженных точек
-  loadGraphSeries(name, stored); // загружаем сохранённые точки серии
-  if(stored.empty() && fallback.length()) loadGraphSeries(fallback, stored); // если пусто — пробуем fallback
-
   unsigned long safeDefaultInterval = defaultInterval < minGraphUpdateInterval
                                      ? minGraphUpdateInterval
                                      : defaultInterval; // защита от слишком малого интервала
@@ -345,14 +592,20 @@ inline void registerGraphSource( // регистрация новой серии
   if(cfg.maxPoints < minGraphPoints) cfg.maxPoints = minGraphPoints; // минимальное количество точек
   if(cfg.maxPoints > maxGraphPoints) cfg.maxPoints = maxGraphPoints; // максимальное количество точек
 
+  // Сначала известен сохраненный лимит, и только потом читается history. Это
+  // исключает временную загрузку всего старого файла при maxPoints=100.
+  vector<GraphPoint> stored; // временное хранилище загруженных точек
+  stored.reserve(static_cast<size_t>(cfg.maxPoints));
+  loadGraphSeries(name, stored, static_cast<size_t>(cfg.maxPoints)); // загружаем выбранный хвост серии
+  if(stored.empty() && fallback.length()){
+    loadGraphSeries(fallback, stored, static_cast<size_t>(cfg.maxPoints)); // если пусто — пробуем fallback
+  }
+
   seriesConfig[name] = cfg; // сохраняем настройки серии
   seriesLastUpdate[name] = 0; // инициализируем таймер обновления
 
   if(!stored.empty()){ // если данные серии были загружены
-    const bool oversized = stored.size() > static_cast<size_t>(cfg.maxPoints);
-    trimGraphPoints(stored, cfg.maxPoints); // приводим количество точек к допустимому
-    customGraphSeries[name] = stored; // сохраняем точки пользовательской серии
-    if(oversized) saveGraphSeries(name, customGraphSeries[name]); // файл также приводим к выбранному лимиту
+    customGraphSeries[name] = std::move(stored); // Передаем PSRAM-буфер без второй большой копии.
   }
 }
 

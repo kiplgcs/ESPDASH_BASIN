@@ -4,5 +4,6 @@
     "vector": "cpp",
     "chrono": "cpp"
   },
-  "CodeGPT.apiKey": "OpenAI"
+  "CodeGPT.apiKey": "OpenAI",
+  "cmake.sourceDirectory": "D:/!!Projects_PIO/!!!!!!!ESPDASH_BASIN/lib/Adafruit BusIO"
 }

@@ -50,6 +50,7 @@ void webMqttTask(void * /*parameter*/) { // Определяем задачу Fr
   for (;;) { // Запускаем бесконечный цикл, потому что задача должна работать весь аптайм контроллера.
     wifiModuleLoop(); // Выполняем обслуживание WiFi и WEB-интерфейса в сетевом контуре ядра 0.
     handleMqttLoop(); // Выполняем обслуживание MQTT в том же сетевом контуре ядра 0.
+    serviceDeferredWebRestart(); // Перезапускаемся вне async_tcp callback и только после flush очереди настроек.
     vTaskDelay(pdMS_TO_TICKS(2)); // Делаем короткую паузу, чтобы отдать CPU другим задачам FreeRTOS.
   } // Закрываем цикл непрерывного обслуживания сетевого контура.
 } // Закрываем функцию задачи, закрепляемой за ядром 0.
@@ -226,6 +227,8 @@ void setup() {
 
   // ---------- Настройка графиков ----------
   loadGraph();
+  if(!startGraphSettingsWorker()) Serial.println("[BOOT] Failed to start deferred graph settings writer");
+  if(!persistenceStartWorker()) Serial.println("[BOOT] Failed to start deferred NVS writer");
 
   dash.begin(); // Запуск дашборда
 

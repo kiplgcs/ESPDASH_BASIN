@@ -931,7 +931,10 @@ inline void handleMqttCommandMessage(char* topic, byte* payload, unsigned int le
   }
 
   if(topicStr == "home/esp32/button/restart/set"){
-    ESP.restart(); // перезапуск
+    // Не перезагружаемся из MQTT callback. Retained/пустое сообщение брокера
+    // иначе создаёт бесконечный цикл connect -> restart. Перезапуск устройства
+    // остаётся доступен только через авторизованный Web endpoint /restart.
+    Serial.printf("[MQTT] Restart command ignored (payload=%s)\n", message.c_str());
     return;
   }
   
@@ -1583,7 +1586,8 @@ inline void persistMqttSettings(){ // сохранение настроек MQTT
   saveValue<String>("mqttPass", mqttPassword); // Дублируем пароль MQTT в NVS.
   saveValue<String>("mqttBaseTopic", mqttBaseTopic); // Дублируем базовый MQTT топик в NVS.
   saveValue<int>("mqttEnabled", mqttEnabled ? 1 : 0); // Дублируем флаг включения MQTT в NVS.
-  if(!spiffsMounted) return; // NVS уже сохранен, если SPIFFS не смонтирован
+  return; // NVS is authoritative; never write SPIFFS from an AsyncWebServer callback.
+  if(!spiffsMounted) return; // Legacy mqtt.json writer below stays unreachable.
   JsonDocument doc; // JSON-документ
   doc["host"] = mqttHost; // адрес брокера
   doc["port"] = mqttPort; // порт брокера
@@ -1750,7 +1754,8 @@ if(!resolveMqttHost()) return; // хост не резолвится
 
       mqttSubscribeRequired("homeassistant/status", 0); // HA birth/restart replay
       mqttSubscribeRequired("home/esp32/+/set", 0); // все одноуровневые discovery command topics без дублей
-      mqttSubscribeRequired("home/esp32/button/restart/set", 0); // двухуровневая служебная команда
+      // MQTT restart намеренно не подписываем: retained command не должен
+      // когда-либо перезагружать контроллер при подключении к брокеру.
     
     } else { // если не удалось подключиться
       mqttIsConnected = false; // сброс флага
@@ -1802,7 +1807,17 @@ inline void applyMqttState(){ // применение состояния MQTT
   }
 }
 
+inline volatile bool mqttApplyRequested = false;
+
+inline void requestMqttApply(){
+  mqttApplyRequested = true; // HTTP меняет только RAM; сеть применяется из WebMqtt task.
+}
+
 inline void handleMqttLoop(){ // основной цикл MQTT
+  if(mqttApplyRequested){
+    mqttApplyRequested = false;
+    applyMqttState();
+  }
   if(!mqttClient.connected()) connectMqtt(); // переподключение
   mqttIsConnected = mqttClient.connected(); // обновление флага
 

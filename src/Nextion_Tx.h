@@ -388,7 +388,7 @@ if (Nx_page_id == 3 && !triggerRestartNextion && !nextionFiltrWriteHoldActive())
     savedNextionFiltrTime3 = Filtr_Time3;
     myNex.writeNum("set_filtr.sw1.val", Filtr_Time3 ? 1 : 0);
   }
-    static uint16_t savedNextionFiltrOn1 = 65535;
+  static uint16_t savedNextionFiltrOn1 = 65535;
   static uint16_t savedNextionFiltrOff1 = 65535;
   static uint16_t savedNextionFiltrOn2 = 65535;
   static uint16_t savedNextionFiltrOff2 = 65535;

@@ -71,6 +71,39 @@ inline String resolveUiValueOverride(const String &id, const String &fallback){ 
 
 // ---------- Создание веб-сервера ----------
 inline AsyncWebServer server(80);  // Создаем веб-сервер на порту 80
+inline SemaphoreHandle_t graphSettingsApplyMutex = nullptr; // Последовательно применяем пары interval/maxPoints, не удерживая graphDataMutex во время SPIFFS.
+inline volatile bool webRestartRequested = false;
+inline unsigned long webRestartRequestedAt = 0;
+
+inline void requestDeferredWebRestart(){
+  webRestartRequestedAt = millis();
+  webRestartRequested = true;
+}
+
+inline void serviceDeferredWebRestart(){
+  if(!webRestartRequested || millis() - webRestartRequestedAt < 500) return;
+  persistenceFlush(5000);
+  ESP.restart();
+}
+
+inline void ensureGraphSettingsApplyMutex(){
+  if(graphSettingsApplyMutex == nullptr) graphSettingsApplyMutex = xSemaphoreCreateMutex();
+}
+
+inline void sendQueuedPersistenceResponse(AsyncWebServerRequest *request, bool accepted){
+  if(!accepted){
+    request->send(503, "application/json", "{\"ok\":false,\"error\":\"Очередь сохранения занята\"}");
+    return;
+  }
+  const PersistenceSubmission barrier = persistenceBarrierTrackedResult();
+  if(!barrier.accepted || barrier.jobId == 0){
+    request->send(503, "application/json", "{\"ok\":false,\"error\":\"Очередь подтверждения занята\"}");
+    return;
+  }
+  const String response = "{\"ok\":true,\"jobId\":" + String(barrier.jobId) + '}';
+  request->send(202, "application/json", response);
+}
+
 inline constexpr const char *webUiCachePath = "/web_ui_cache.html"; // Готовая страница отдается из SPIFFS без отдельного 260 КБ RAM-буфера на клиента.
 inline constexpr const char *webUiCacheTempPath = "/web_ui_cache.tmp";
 inline bool webUiCacheBuildInProgress = false; // Не даем двум клиентам одновременно строить большую HTML-страницу.
@@ -211,11 +244,8 @@ inline void invalidateLiveJsonCache(){
 }
 
 inline void invalidateWebUiCache(){
-  if(!spiffsMounted) return;
   webUiCacheBuildInProgress = false;
   invalidateLiveJsonCache();
-  if(SPIFFS.exists(webUiCachePath)) SPIFFS.remove(webUiCachePath);
-  if(SPIFFS.exists(webUiCacheTempPath)) SPIFFS.remove(webUiCacheTempPath);
 }
 
 // ---------- Глобальные переменные для UI ----------
@@ -1492,8 +1522,6 @@ public:
       UITimerEntry created; // Создание нового таймера
       created.id = id; // Установка идентификатора
       created.label = label; // Установка отображаемого имени
-      created.on = static_cast<uint16_t>(loadValue<int>((id + "_ON").c_str(), 0)); // Загрузка сохранённого времени включения
-      created.off = static_cast<uint16_t>(loadValue<int>((id + "_OFF").c_str(), 0)); // Загрузка сохранённого времени выключения
       created.on = loadTimerValue(id, "_ON"); // Загрузка времени включения с учётом legacy-ключей
       created.off = loadTimerValue(id, "_OFF"); // Загрузка времени выключения с учётом legacy-ключей
       created.callback = cb; // Привязка callback-функции
@@ -1524,7 +1552,6 @@ public:
     uint16_t minutes = parseTimeToMinutes(value); // Преобразование строки времени в минуты
     if(isOn) entry->on = minutes; // Обновление времени включения
     else entry->off = minutes; // Обновление времени выключения
-    saveValue<int>(fieldId.c_str(), minutes); // Сохранение значения по исходному ключу
     String storageKey = timerStorageKey(base, isOn ? "_ON" : "_OFF"); // Формирование ключа хранения
     saveValue<int>(storageKey.c_str(), minutes); // Сохранение значения по ключу хранения
     if(entry->callback) entry->callback(entry->on, entry->off); // Вызов callback при изменении таймера
@@ -1536,8 +1563,6 @@ public:
     entry.on = onMinutes; // Установка времени включения
     entry.off = offMinutes; // Установка времени выключения
     if(persist){
-      saveValue<int>((id + "_ON").c_str(), entry.on); // Сохранение времени включения
-      saveValue<int>((id + "_OFF").c_str(), entry.off); // Сохранение времени выключения
       String onKey = timerStorageKey(id, "_ON"); // Формирование ключа времени включения
       String offKey = timerStorageKey(id, "_OFF"); // Формирование ключа времени выключения
       saveValue<int>(onKey.c_str(), entry.on); // Сохранение времени включения по ключу хранения
@@ -1558,7 +1583,7 @@ private:
     return nullptr; // Таймер не найден
   }
   
-    uint16_t defaultTimerValue(const String &id, const String &suffix){
+  uint16_t defaultTimerValue(const String &id, const String &suffix){
     const bool isOn = suffix == "_ON";
     if(id == "FiltrTimer1") return isOn ? 9 * 60 : 12 * 60;
     if(id == "FiltrTimer2") return isOn ? 14 * 60 : 17 * 60;
@@ -1570,17 +1595,39 @@ private:
     return 0;
   }
 
+  bool tryLoadStoredTimerValue(const String &key, int &value){
+    const PreferencesStorageKey storageKey(key.c_str()); // Используем ту же схему коротких/хешированных NVS-ключей, что и saveValue().
+    if(!storageKey.valid()) return false;
+    const char *nameSpace = storageKey.nameSpace(valuePreferencesNamespace, longValuePreferencesNamespace);
+    bool found = false;
+    lockPrefs();
+    if(prefs.begin(nameSpace, true)){
+      if(prefs.isKey(storageKey.storageKey())){
+        const int storedValue = prefs.getInt(storageKey.storageKey(), -1);
+        if(storedValue >= 0 && storedValue < 1440){
+          value = storedValue;
+          found = true;
+        }
+      }
+      prefs.end();
+    }
+    unlockPrefs();
+    return found; // Отсутствующий legacy-ключ не создается и не подменяет first-boot значение нулем.
+  }
+
   uint16_t loadTimerValue(const String &id, const String &suffix){
     String storageKey = timerStorageKey(id, suffix); // Формирование ключа хранения
-    int value = loadValue<int>(storageKey.c_str(), -1); // Загрузка значения из хранилища
-    if(value < 0){
-      String legacyKey = legacyTimerStorageKey(id, suffix); // Формирование legacy-ключа
-      if(legacyKey.length()){
-        value = loadValue<int>(legacyKey.c_str(), 0); // Загрузка значения по legacy-ключу
-      } else {
-        value = defaultTimerValue(id, suffix); // Значение по умолчанию
-      }
+    int value = -1;
+    if(tryLoadStoredTimerValue(storageKey, value)) return static_cast<uint16_t>(value); // Сначала читаем актуальный ключ без записи sentinel.
+
+    String legacyKey = legacyTimerStorageKey(id, suffix); // Формирование legacy-ключа
+    if(legacyKey.length() && tryLoadStoredTimerValue(legacyKey, value)){
+      saveValue<int>(storageKey.c_str(), value); // Найденный legacy-ключ один раз переносим в каноническое хранилище.
+      return static_cast<uint16_t>(value);
     }
+
+    value = defaultTimerValue(id, suffix); // На чистой NVS применяем заявленное first-boot значение.
+    saveValue<int>(storageKey.c_str(), value); // Дефолт сразу становится каноническим сохраненным значением.
     return static_cast<uint16_t>(value); // Возврат значения в минутах
   }
 };
@@ -1747,6 +1794,61 @@ inline bool ensureAdminAuthorized(AsyncWebServerRequest *request){
   return false;
 }
 
+inline void handleGeneralSaveRequest(AsyncWebServerRequest *request){
+  if(!ensureAuthorized(request)) return;
+  if(!request->hasParam("key") || !request->hasParam("val")){
+    request->send(400, "application/json", "{\"ok\":false,\"error\":\"Missing key or val\"}");
+    return;
+  }
+  const String key = request->getParam("key")->value();
+  const String value = request->getParam("val")->value();
+  if(key == "graphMainMaxPoints" || key == "graphMainUpdateInterval" ||
+     key.startsWith("graphUpdateInterval_") || key.startsWith("graphMaxPoints_")){
+    request->send(410, "application/json", "{\"ok\":false,\"error\":\"Обновите страницу и используйте /graph/settings\"}");
+    return;
+  }
+  invalidateLiveJsonCache();
+  if(ui.updateTimerField(key, value) ||
+     applyWaterControlRequest(key, value.toInt() != 0) ||
+     applyChemistrySettingRequest(key, value) ||
+     applyLightThresholdSettingRequest(key, value) ||
+     applyLightModeSettingRequest(key, value) ||
+     applyRs485ConfigRequest(key, value) ||
+     uiApplyValueForId(key, value)){
+    sendQueuedPersistenceResponse(request, true);
+    return;
+  }
+  bool accepted = true;
+  if(key == "ACO_Work"){
+    ACO_Work = sanitizeDosingPeriodValue(value.toInt());
+    holdNextionDispensersReads();
+    accepted = saveValue<int>("ACO_Work", ACO_Work);
+  } else if(key == "H2O2_Work"){
+    H2O2_Work = sanitizeDosingPeriodValue(value.toInt());
+    holdNextionDispensersReads();
+    accepted = saveValue<int>("H2O2_Work", H2O2_Work);
+  } else if(key == "ThemeColor"){
+    ThemeColor = value;
+    accepted = saveValue<String>(key.c_str(), value);
+    invalidateWebUiCache();
+  } else if(key == "gmtOffset"){
+    applyGmtOffsetFromEsp(value.toInt(), true);
+    syncNextionRtcFromEpoch(getCurrentEpoch());
+  } else if(key == "ssid" || key == "pass" || key == "ssid2" || key == "pass2"){
+    accepted = saveValue<String>(key.c_str(), value);
+  } else if(key == "apSSID"){
+    StoredAPSSID = value;
+    accepted = saveValue<String>(key.c_str(), value);
+  } else if(key == "apPASS"){
+    StoredAPPASS = value;
+    accepted = saveValue<String>(key.c_str(), value);
+  } else {
+    request->send(404, "application/json", "{\"ok\":false,\"error\":\"Неизвестная настройка\"}");
+    return;
+  }
+  sendQueuedPersistenceResponse(request, accepted);
+}
+
 
 // ---------- Структуры UI ----------
 struct Tab { String id; String title; }; // Описание вкладки UI: идентификатор и отображаемый заголовок
@@ -1811,6 +1913,7 @@ private:
 // Настройка веб-сервера
   void setupServer(){
     MiniDash *self=this; // Указатель на текущий экземпляр для использования в колбэках
+    ensureGraphSettingsApplyMutex(); // Создаем mutex в setup-задаче до запуска AsyncTCP callbacks.
     normalizeLightThresholds(); // Пороги автосвета должны быть валидны до первой отдачи Web и до /live.
     invalidateWebUiCache(); // После загрузки новой прошивки структура страницы строится заново один раз.
 
@@ -2002,7 +2105,29 @@ private:
       server.on("/", HTTP_GET, [self](AsyncWebServerRequest *r){
       if(!ensureAuthorized(r)) return;
 
+      if(webUiCacheBuildInProgress){
+        AsyncWebServerResponse *busy = r->beginResponse(503, "text/plain; charset=UTF-8", "Страница формируется, повторите через секунду");
+        busy->addHeader("Retry-After", "1");
+        busy->addHeader("Cache-Control", "no-store");
+        r->send(busy);
+        return;
+      }
       webUiCacheBuildInProgress = true;
+
+      // Один согласованный RAM-снимок конфигурации на всю страницу. Если график
+      // занят короткой записью history, лучше вернуть retryable 503, чем показать
+      // дефолты и дать пользователю случайно затереть реальные настройки.
+      ensureGraphDataMutex();
+      if(graphDataMutex == nullptr || xSemaphoreTake(graphDataMutex, pdMS_TO_TICKS(50)) != pdTRUE){
+        webUiCacheBuildInProgress = false;
+        AsyncWebServerResponse *busy = r->beginResponse(503, "text/plain; charset=UTF-8", "Данные графиков обновляются, повторите через секунду");
+        busy->addHeader("Retry-After", "1");
+        busy->addHeader("Cache-Control", "no-store");
+        r->send(busy);
+        return;
+      }
+      const std::map<String, GraphSettings> graphSettingsSnapshot = seriesConfig;
+      xSemaphoreGive(graphDataMutex);
 
       const uint32_t requestStartMs = millis(); // Общее время GET /: потом сравниваем с таймингами этапов
       if(kWebVerboseSerial) Serial.printf("[WEB:/] PSRAM page build started | core=%d | heap=%u | psram=%u\n",
@@ -2187,6 +2312,8 @@ private:
       ".graph-controls .control-group{flex:1;min-width:220px;display:flex;align-items:center;gap:10px;} " // Группа контролов графика
       ".graph-controls label{display:inline-flex;font-size:0.72em;color:#9fb4c8;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:0;white-space:nowrap;} " // Подписи графика
       ".graph-controls select,.graph-controls input{margin-bottom:0;flex:1;} " // Поля управления графиком
+      ".graph-settings-status{flex:0 0 142px;min-height:22px;text-align:right;font-size:.78em;color:#9fb4c8;white-space:nowrap;} " // Подтверждение атомарного сохранения настроек графика.
+      ".graph-settings-status.saving{color:#facc15}.graph-settings-status.saved{color:#86efac}.graph-settings-status.error{color:#fca5a5;} " // Состояния сохранения без всплывающих окон.
       ".graph-card{position:relative;overflow:hidden;background:linear-gradient(180deg,#171924,#10131d);border-radius:8px;}"  // Карточка графика
       ".graph-heading{text-align:center;font-size:1.05em;font-weight:500;color:#dce5f2;margin-bottom:10px;}"  // Заголовок графика
       ".graph-canvas-wrap{position:relative;min-width:0;} " // Оси позиционируются относительно canvas, а не панели навигации.
@@ -2837,25 +2964,11 @@ private:
                   unsigned long defaultUpdate = defaultGraphUpdateInterval; // Новые графики по умолчанию обновляются раз в 60 минут.
                   GraphSettings seriesSettings{defaultUpdate, defaultGraphMax}; // Настройки серии
 
-                  bool graphSettingsLoadedFromFlash = false; // Нужен для миграции старых конфигов, где maxPoints случайно стал 30.
-                  bool runtimeSettingsFound = false;
-                  {
-                    GraphDataGuard guard; // seriesConfig одновременно читается основной задачей графиков.
-                    auto runtimeSeriesSettings = seriesConfig.find(seriesName); // Ищем уже примененные настройки серии в RAM.
-                    if(runtimeSeriesSettings != seriesConfig.end()){
-                      seriesSettings = runtimeSeriesSettings->second; // Например, графики насосов следуют периоду дозирования.
-                      runtimeSettingsFound = true;
-                    }
+                  auto runtimeSeriesSettings = graphSettingsSnapshot.find(seriesName);
+                  if(runtimeSeriesSettings != graphSettingsSnapshot.end()){
+                    seriesSettings = runtimeSeriesSettings->second; // Например, графики насосов следуют периоду дозирования.
                   }
-                  if(!runtimeSettingsFound && !loadGraphSettings(seriesName, seriesSettings)){ // Загрузка сохранённых настроек
-                    graphSettingsLoadedFromFlash = loadGraphSettings(valueName, seriesSettings);
-                  } else if(!runtimeSettingsFound) {
-                    graphSettingsLoadedFromFlash = true; // Настройки серии прочитаны из SPIFFS.
-                  }
-                  if(graphSettingsLoadedFromFlash && maxPointsRaw.length() && defaultGraphMax > 30 && seriesSettings.maxPoints == 30){ // Исправляем старый баг: при сохранении интервала мог записаться дефолт 30.
-                    seriesSettings.maxPoints = defaultGraphMax;
-                    saveGraphSettings(seriesName, seriesSettings);
-                  }
+                  // SPIFFS/NVS не читаем и не изменяем из async_tcp: loadGraph() уже загрузил настройки в setup().
                   int graphUpdateInterval = seriesSettings.updateInterval; // Интервал обновления графика
                   if(graphUpdateInterval < (int)minGraphUpdateInterval) graphUpdateInterval = minGraphUpdateInterval;
                   if(graphUpdateInterval > (int)maxGraphUpdateInterval) graphUpdateInterval = maxGraphUpdateInterval;
@@ -2887,7 +3000,7 @@ private:
               html += "</div>"; // Закрытие карточки графика
                   html += "<div class='card graph-controls' style='margin-bottom:0;'>"; // Панель управления графиком
                   html += "<div class='control-group'><label>Интервал обновления</label>"; // Выбор интервала
-                  html += "<select class='graph-update-interval' data-graph='"+e.id+"'>"; // Select интервала
+                  html += "<select id='graphUpdateInterval_"+e.id+"' class='graph-update-interval' data-graph='"+e.id+"' data-skip-save='1'>"; // Этот select сохраняется единым graph-settings запросом вместе с Max Points.
                   auto formatIntervalLabel = [](unsigned long valMs){ // Форматирование интервала: секунды, минуты, затем часы+минуты.
                       if(valMs < 60000UL){
                           unsigned long seconds = valMs / 1000UL;
@@ -2931,8 +3044,9 @@ private:
                   }
                   html += "</select></div>"; // Закрытие select
                   html += "<div class='control-group'><label>Точек на графике</label>"; // Выбор количества точек
-                  html += "<input class='graph-max-points' data-graph='"+e.id+"' type='number' min='1' max='"+String(maxSelectablePoints)+"' value='"+graphMaxStr+"'>"; // Input max точек
+                  html += "<input id='graphMaxPoints_"+e.id+"' class='graph-max-points' data-graph='"+e.id+"' data-skip-save='1' type='number' min='1' max='"+String(maxSelectablePoints)+"' step='1' value='"+graphMaxStr+"'>"; // До 5000 точек; общий /save не должен посылать второй запрос.
                   html += "</div>";
+                  html += "<div class='graph-settings-status saved' data-graph-settings-status='"+e.id+"' role='status' aria-live='polite'>Сохранено</div>"; // Неблокирующее подтверждение фактического ACK устройства.
                   html += "</div>";
                   html += "<div class='card graph-table-card'>"; // Карточка истории точек
                   html += "<div class='graph-table-head'><div class='stat-heading'>История точек</div>";
@@ -3470,27 +3584,27 @@ private:
               "<h4 class='section-title'>Основная сеть WiFi</h4>"
               "<div class='card compact wifi-card'>"
               "<div class='wifi-field'><label>SSID основной сети</label><div class='input-with-action'>"
-              "<input id='ssid' value='"+loadValue<String>("ssid",defaultSSID)+"'>"
+              "<input id='ssid' value='"+currentStaSsid()+"'>"
               "<button class='btn-secondary' id='scan-btn' onclick=\"scanWiFi('ssid','scan-btn')\">Scan WiFi</button>"
               "</div></div>"
               
-              "<div class='wifi-field'><label>Пароль основной сети</label><input id='pass' type='password' value='"+loadValue<String>("pass",defaultPASS)+"'></div>"
+              "<div class='wifi-field'><label>Пароль основной сети</label><input id='pass' type='password' value='"+currentStaPass()+"'></div>"
               "</div>"
               "<h4 class='section-title'>Резервная сеть WiFi</h4>"
               "<div class='card compact wifi-card'>"
               "<div class='wifi-field'><label>SSID резервной сети</label><div class='input-with-action'>"
-              "<input id='ssid2' value='"+loadValue<String>("ssid2", String(""))+"'>"
+              "<input id='ssid2' value='"+currentBackupStaSsid()+"'>"
               "<button class='btn-secondary' id='scan-backup-btn' onclick=\"scanWiFi('ssid2','scan-backup-btn')\">Scan WiFi</button>"
               "</div></div>"
-              "<div class='wifi-field'><label>Пароль резервной сети</label><input id='pass2' type='password' value='"+loadValue<String>("pass2", String(""))+"'></div>"
+              "<div class='wifi-field'><label>Пароль резервной сети</label><input id='pass2' type='password' value='"+currentBackupStaPass()+"'></div>"
               "</div>"
               "<h4 class='section-title'>Сервисная точка доступа ESP32</h4>"
               "<div class='card compact wifi-card'>"
-              "<div class='wifi-field'><label>AP SSID</label><input id='ap_ssid' value='"+loadValue<String>("apSSID", String(apSSID))+"'></div>"
-              "<div class='wifi-field'><label>AP Password</label><input id='ap_pass' type='password' value='"+loadValue<String>("apPASS", String(apPASS))+"'></div>"
+              "<div class='wifi-field'><label>AP SSID</label><input id='ap_ssid' value='"+currentApSsid()+"'></div>"
+              "<div class='wifi-field'><label>AP Password</label><input id='ap_pass' type='password' value='"+currentApPass()+"'></div>"
               "</div>"
               
-              "<div class='wifi-field'><label>Hostname</label><input id='hostname' value='"+loadValue<String>("hostname", String(defaultHostname))+"'></div>"
+              "<div class='wifi-field'><label>Hostname</label><input id='hostname' value='"+currentWifiHostName()+"'></div>"
 
               "<div class='wifi-actions'><button class='btn-primary' onclick='saveWiFi()'>Save WiFi</button>"
               "<div class='wifi-hint'>Текущее состояние сети обновляется автоматически</div></div>"
@@ -4030,7 +4144,7 @@ function toggleSidebar(){
     });
     mqttEnabledState = enabledValue === '1' && hostValue.trim().length > 0;
     updateMqttActivationButton(mqttEnabledState, mqttConnectedState && mqttEnabledState);
-    fetch('/mqtt/save',{method:'POST', body:payload})
+    saveSettingRequest('/mqtt/save',{method:'POST', body:payload})
       .then(()=>{
         if(manual){
           mqttInputEdited.host = mqttInputEdited.port = mqttInputEdited.user = mqttInputEdited.pass = mqttInputEdited.baseTopic = false;
@@ -4058,10 +4172,8 @@ function saveProfileSettings(){
     if(statusEl) statusEl.innerText = 'Сохранение...';
 
     const payload = new URLSearchParams({pass, adminPass, clearPass, clearAdminPass});
-    fetch('/profile/save', {method:'POST', body: payload})
-      .then(async response=>{
-        const data = await response.json().catch(()=>({}));
-        if(!response.ok) throw new Error(data.error || 'save failed');
+    saveSettingRequest('/profile/save', {method:'POST', body: payload})
+      .then(()=>{
         if(passInput) passInput.value = '';
         if(adminPassInput) adminPassInput.value = '';
         if(clearPassInput) clearPassInput.checked = false;
@@ -4366,7 +4478,7 @@ const scheduleSave = (key, value, delay=300)=>{
   if(!key) return;
   if(saveDebounceTimers[key]) clearTimeout(saveDebounceTimers[key]);
   saveDebounceTimers[key] = setTimeout(()=>{
-    fetch('/save?key='+encodeURIComponent(key)+'&val='+encodeURIComponent(value))
+    saveSettingRequest('/save?key='+encodeURIComponent(key)+'&val='+encodeURIComponent(value))
       .finally(()=>{
         const el = document.getElementById(key);
         const holdMs = chemicalInputIds.has(key) ? 4000 : 1500;
@@ -4519,7 +4631,7 @@ function toggleButton(id){
   btn.dataset.state = newState;
   btn.classList.toggle('on', newState == 1);
   btn.classList.toggle('off', newState == 0);
-  fetch('/button?id=' + encodeURIComponent(id) + '&state=' + newState)
+  saveSettingRequest('/button?id=' + encodeURIComponent(id) + '&state=' + newState)
     .then(resp => {
       btn.innerText = newState == 1 ? "ON" : "OFF";
     });
@@ -4604,7 +4716,7 @@ if(themeInput){
     markManualChange(themeInput);
     const c = e.target.value;
     refreshThemeColorUI(c);
-    fetch('/save?key=ThemeColor&val='+encodeURIComponent(c));
+    saveSettingRequest('/save?key=ThemeColor&val='+encodeURIComponent(c));
   });
 }
 
@@ -4625,7 +4737,7 @@ document.querySelectorAll('input[type=text],input[type=number],input[type=time],
   el.addEventListener('change', ()=>{
     markManualChange(el);
     if(el.id==='LEDColor') refreshLedColorUI(el.value);
-    fetch('/save?key='+el.id+'&val='+encodeURIComponent(el.value));
+    saveSettingRequest('/save?key='+el.id+'&val='+encodeURIComponent(el.value));
   });
   listenToManual(el);
   if(el.id==='LEDColor') refreshLedColorUI(el.value);
@@ -4635,7 +4747,7 @@ document.querySelectorAll('input[type=checkbox][id]').forEach(el=>{
   el.addEventListener('change', ()=>{
     markManualChange(el);
     const value = el.checked ? 1 : 0;
-    fetch('/save?key='+el.id+'&val='+encodeURIComponent(value));
+    saveSettingRequest('/save?key='+el.id+'&val='+encodeURIComponent(value));
     clearManualFlag(el);
   });
   listenToManual(el);
@@ -4647,7 +4759,7 @@ document.querySelectorAll('div.select-days').forEach(el=>{
     chk.addEventListener('change', ()=>{
       let selected = Array.from(el.querySelectorAll('input[type=checkbox]:checked')).map(c=>c.value).join(',');
       el.dataset.manual = '1';
-      fetch('/save?key='+el.id+'&val='+encodeURIComponent(selected));
+      saveSettingRequest('/save?key='+el.id+'&val='+encodeURIComponent(selected));
       clearManualFlag(el);
     });
   });
@@ -4762,9 +4874,8 @@ function saveWiFi(){
  let app=document.getElementById('ap_pass').value;
  let h=document.getElementById('hostname').value;
  const body = new URLSearchParams({ssid:s, pass:p, ssid2:s2, pass2:p2, ap_ssid:aps, ap_pass:app, hostname:h});
- fetch('/wifi/save', {method:'POST', body})
-   .then(r=>r.json())
-   .then(data=>{
+  saveSettingRequest('/wifi/save', {method:'POST', body})
+    .then(data=>{
      const connected = data && data.connected ? ' (подключено)' : ' (AP mode)';
      wifiInputEdited.ssid = false;
      wifiInputEdited.pass = false;
@@ -5502,67 +5613,282 @@ refreshCustomGraphActivity();
 document.addEventListener('visibilitychange', refreshCustomGraphActivity);
 
 
-document.querySelectorAll('.graph-update-interval').forEach(select=>{
-  const graphId = select.dataset.graph;
-  const canvas = document.getElementById('graph_'+graphId);
-  const series = canvas ? (canvas.dataset.series || graphId) : graphId;
-  if(canvas && canvas.dataset.updateInterval) select.value = canvas.dataset.updateInterval;
-  select.addEventListener('change', ()=>{
-    let value = parseInt(select.value);
-    if(isNaN(value) || value < 5000) value = 5000;
-    select.value = value;
-    const target = document.getElementById('graph_'+graphId);
-    if(!target) return;
-    const previousInterval = target.dataset.updateInterval || String(value);
-    target.dataset.updateInterval = value;
-    // fetch('/save?key=graphUpdateInterval_'+graphId+'&val='+encodeURIComponent(value));
-    fetch('/save?key=graphUpdateInterval_'+graphId+'&series='+encodeURIComponent(series)+'&val='+encodeURIComponent(value))
-      .then(response=>{ if(!response.ok) throw new Error('graph settings'); fetchCustomGraph(target); })
-      .catch(()=>{
-        target.dataset.updateInterval = previousInterval;
-        select.value = previousInterval;
-        restartCustomGraphInterval(target);
-      });
+const graphSettingsStates = new Map(); // Один последовательный запрос на серию; новые изменения заменяют ожидающие старые.
+
+function graphSettingsControls(canvas){
+  const graphId = canvas ? (canvas.dataset.graphId || '') : '';
+  return {
+    interval: document.getElementById('graphUpdateInterval_'+graphId),
+    maxPoints: document.getElementById('graphMaxPoints_'+graphId),
+    status: document.querySelector(`[data-graph-settings-status="${graphId}"]`)
+  };
+}
+
+function setGraphSettingsStatus(canvas, text, state=''){
+  const status = graphSettingsControls(canvas).status;
+  if(!status) return;
+  status.textContent = text;
+  status.classList.remove('saving', 'saved', 'error');
+  if(state) status.classList.add(state);
+}
+
+function getGraphSettingsState(canvas){
+  if(!graphSettingsStates.has(canvas)){
+    graphSettingsStates.set(canvas, {
+      timer:null,
+      inFlight:false,
+      revision:0,
+      retryCount:0,
+      retryRequested:false,
+      jobId:0,
+      pollTimer:null,
+      ackInterval:Number(canvas.dataset.updateInterval || 5000),
+      ackMaxPoints:Number(canvas.dataset.maxPoints || 100)
+    });
+  }
+  return graphSettingsStates.get(canvas);
+}
+
+function readGraphSettingsControls(canvas){
+  const controls = graphSettingsControls(canvas);
+  if(!controls.interval || !controls.maxPoints) return null;
+  const updateInterval = Number.parseInt(controls.interval.value, 10);
+  const maxPoints = Number.parseInt(controls.maxPoints.value, 10);
+  const maxSelectable = Number.parseInt(controls.maxPoints.max, 10) || 5000;
+  if(!Number.isFinite(updateInterval) || updateInterval < 5000 || updateInterval > 86400000) return null;
+  if(!Number.isFinite(maxPoints) || maxPoints < 1 || maxPoints > maxSelectable) return null;
+  return {updateInterval, maxPoints};
+}
+
+function refreshGraphAfterSettingsAck(canvas, previousMaxPoints){
+  const maxChanged = Number(previousMaxPoints) !== Number(canvas.dataset.maxPoints);
+  if(maxChanged){
+    const activeFetch = getCustomGraphFetchState(canvas);
+    if(activeFetch.controller){ try { activeFetch.controller.abort(); } catch(_){} }
+    graphHistories.delete(canvas); // После подтвержденного изменения лимита перечитываем серверную историю.
+    graphDataCache.delete(canvas);
+    graphTableRenderKeys.delete(canvas.dataset.tableId);
+    if(graphPersistTimers.has(canvas)){
+      clearTimeout(graphPersistTimers.get(canvas));
+      graphPersistTimers.delete(canvas);
+    }
+    try { localStorage.removeItem(graphStorageKey(canvas)); } catch(_){}
+    getGraphView(canvas).offset = 0;
+  }
+  fetchCustomGraph(canvas);
+}
+
+function flushGraphSettings(canvas){
+  if(!canvas) return;
+  const state = getGraphSettingsState(canvas);
+  if(state.inFlight) return; // finally отправит только последнюю накопленную ревизию.
+  const values = readGraphSettingsControls(canvas);
+  if(!values){
+    setGraphSettingsStatus(canvas, 'Допустимо: 1–5000', 'error');
+    return;
+  }
+
+  const requestRevision = state.revision;
+  const series = canvas.dataset.series || canvas.dataset.graphId || '';
+  const payload = new URLSearchParams({
+    series,
+    updateInterval:String(values.updateInterval),
+    maxPoints:String(values.maxPoints),
+    clientRevision:String(requestRevision)
   });
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timeoutId = controller ? setTimeout(()=>controller.abort(), 8000) : null;
+  const options = {method:'POST', body:payload, cache:'no-store'};
+  if(controller) options.signal = controller.signal;
+
+  state.inFlight = true;
+  state.jobId = 0;
+  setGraphSettingsStatus(canvas, 'Сохранение…', 'saving');
+  fetch('/graph/settings', options)
+    .then(async response=>{
+      const data = await response.json().catch(()=>({}));
+      if(!response.ok || !data || data.ok !== true){
+        const requestError = new Error(data.error || 'Ошибка сохранения');
+        requestError.transient = response.status === 503 || response.status === 429;
+        throw requestError;
+      }
+      if(Number(data.clientRevision) !== requestRevision || !Number(data.jobId)) throw new Error('Неверное подтверждение');
+      return data;
+    })
+    .then(data=>{
+      state.jobId = Number(data.jobId);
+      const pollStartedAt = Date.now();
+      const poll = ()=>{
+        const pollController = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        const pollTimeout = pollController ? setTimeout(()=>pollController.abort(), 4000) : null;
+        const pollOptions = pollController ? {cache:'no-store', signal:pollController.signal} : {cache:'no-store'};
+        fetch('/graph/settings/status?id='+encodeURIComponent(state.jobId), pollOptions)
+          .then(async response=>{
+            const status = await response.json().catch(()=>({}));
+            if(!response.ok) throw new Error(status.error || 'Нет статуса сохранения');
+            if(status.state === 'pending' || status.state === 'saving'){
+              if(Date.now() - pollStartedAt > 30000) throw new Error('Сохранение во Flash не завершено');
+              state.pollTimer = setTimeout(poll, 150);
+              return;
+            }
+            if(status.state !== 'saved') throw new Error(status.error || 'Ошибка записи во Flash');
+            const ackInterval = Number(status.updateInterval);
+            const ackMaxPoints = Number(status.maxPoints);
+            if(!Number.isFinite(ackInterval) || !Number.isFinite(ackMaxPoints)) throw new Error('Некорректный статус');
+            const previousMaxPoints = state.ackMaxPoints;
+            state.ackInterval = ackInterval;
+            state.ackMaxPoints = ackMaxPoints;
+            state.retryCount = 0;
+            state.retryRequested = false;
+            state.inFlight = false;
+            if(state.revision !== requestRevision){ flushGraphSettings(canvas); return; }
+            const controls = graphSettingsControls(canvas);
+            canvas.dataset.updateInterval = String(ackInterval);
+            canvas.dataset.maxPoints = String(ackMaxPoints);
+            if(controls.interval) controls.interval.value = String(ackInterval);
+            if(controls.maxPoints) controls.maxPoints.value = String(ackMaxPoints);
+            setGraphSettingsStatus(canvas, 'Сохранено', 'saved');
+            refreshGraphAfterSettingsAck(canvas, previousMaxPoints);
+          })
+          .finally(()=>{ if(pollTimeout) clearTimeout(pollTimeout); })
+          .catch(error=>{
+            state.inFlight = false;
+            const controls = graphSettingsControls(canvas);
+            if(controls.interval) controls.interval.value = String(state.ackInterval);
+            if(controls.maxPoints) controls.maxPoints.value = String(state.ackMaxPoints);
+            setGraphSettingsStatus(canvas, error.message || 'Ошибка сохранения', 'error');
+            restartCustomGraphInterval(canvas);
+          });
+      };
+      poll();
+    })
+    .catch(error=>{
+      if(state.revision !== requestRevision) return; // Более новая редакция будет отправлена сразу после завершения этой.
+      const transient = Boolean(error && (error.transient || error.name === 'AbortError' || error.name === 'TypeError'));
+      if(transient && state.retryCount < 3){
+        state.retryCount++;
+        state.retryRequested = true;
+        setGraphSettingsStatus(canvas, 'Повтор сохранения…', 'saving');
+        return; // Потерянный ACK не откатывает поле: повтор того же атомарного запроса идемпотентен.
+      }
+      const controls = graphSettingsControls(canvas);
+      if(controls.interval) controls.interval.value = String(state.ackInterval);
+      if(controls.maxPoints) controls.maxPoints.value = String(state.ackMaxPoints);
+      state.retryRequested = false;
+      setGraphSettingsStatus(canvas, error && error.name === 'AbortError' ? 'Нет ответа ESP32' : (error.message || 'Ошибка сохранения'), 'error');
+      restartCustomGraphInterval(canvas);
+    })
+    .finally(()=>{
+      if(timeoutId) clearTimeout(timeoutId);
+      if(!state.jobId) state.inFlight = false;
+      if(state.revision !== requestRevision){
+        if(state.timer) clearTimeout(state.timer);
+        state.timer = setTimeout(()=>{ state.timer = null; flushGraphSettings(canvas); }, 0);
+      } else if(state.retryRequested){
+        if(state.timer) clearTimeout(state.timer);
+        state.retryRequested = false;
+        state.timer = setTimeout(()=>{ state.timer = null; flushGraphSettings(canvas); }, 600 * state.retryCount);
+      }
+    });
+}
+
+function showSaveError(message){
+  let box = document.getElementById('global-save-error');
+  if(!box){
+    box = document.createElement('div');
+    box.id = 'global-save-error';
+    box.style.cssText = 'position:fixed;left:12px;right:12px;bottom:12px;z-index:99999;padding:12px 16px;border-radius:8px;background:#7f1d1d;color:#fff;box-shadow:0 4px 18px #0008;text-align:center';
+    document.body.appendChild(box);
+  }
+  box.textContent = message || 'Настройка не сохранена';
+  box.hidden = false;
+  clearTimeout(showSaveError.timer);
+  showSaveError.timer = setTimeout(()=>{ box.hidden = true; }, 7000);
+}
+
+function persistenceStatus(jobId){
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = controller ? setTimeout(()=>controller.abort(), 4000) : null;
+  const options = controller ? {cache:'no-store', signal:controller.signal} : {cache:'no-store'};
+  return fetch('/persistence/status?id='+encodeURIComponent(jobId), options)
+    .then(async response=>{
+      const data = await response.json().catch(()=>({}));
+      if(!response.ok) throw new Error(data.error || 'Нет статуса сохранения');
+      return data;
+    }).finally(()=>{ if(timer) clearTimeout(timer); });
+}
+
+function waitForPersistence(jobId, timeoutMs=20000){
+  const startedAt = Date.now();
+  return new Promise((resolve, reject)=>{
+    const poll = ()=>persistenceStatus(jobId).then(data=>{
+      if(data.state === 'pending' || data.state === 'writing'){
+        if(Date.now() - startedAt >= timeoutMs){ reject(new Error('ESP32 не завершила запись')); return; }
+        setTimeout(poll, 120);
+        return;
+      }
+      if(data.state === 'superseded' && Number(data.supersededBy) > 0){
+        jobId = Number(data.supersededBy);
+        setTimeout(poll, 0);
+        return;
+      }
+      if(data.state !== 'succeeded'){ reject(new Error(data.error || 'Ошибка записи NVS')); return; }
+      resolve(data);
+    }).catch(reject);
+    poll();
+  });
+}
+
+function saveSettingRequest(url, options){
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = controller ? setTimeout(()=>controller.abort(), 8000) : null;
+  const requestOptions = Object.assign({}, options || {});
+  if(controller) requestOptions.signal = controller.signal;
+  return fetch(url, requestOptions).then(async response=>{
+    const contentType = response.headers.get('content-type') || '';
+    const data = contentType.includes('application/json') ? await response.json().catch(()=>({})) : {};
+    if(!response.ok) throw new Error(data.error || 'Ошибка сохранения');
+    if(data.jobId) return waitForPersistence(Number(data.jobId)).then(()=>data);
+    return data;
+  }).finally(()=>{ if(timer) clearTimeout(timer); }).catch(error=>{
+    showSaveError(error && error.message ? error.message : 'Настройка не сохранена');
+    throw error;
+  });
+}
+
+function scheduleGraphSettingsSave(canvas, delayMs=350){
+  if(!canvas) return;
+  const state = getGraphSettingsState(canvas);
+  if(!readGraphSettingsControls(canvas)){
+    setGraphSettingsStatus(canvas, 'Допустимо: 1–5000', 'error');
+    return;
+  }
+  state.revision++;
+  state.retryCount = 0;
+  state.retryRequested = false;
+  if(state.timer) clearTimeout(state.timer);
+  setGraphSettingsStatus(canvas, 'Ожидает сохранения', 'saving');
+  state.timer = setTimeout(()=>{
+    state.timer = null;
+    flushGraphSettings(canvas);
+  }, delayMs);
+}
+
+document.querySelectorAll('.graph-update-interval').forEach(select=>{
+  const canvas = document.getElementById('graph_'+select.dataset.graph);
+  if(!canvas) return;
+  if(canvas.dataset.updateInterval) select.value = canvas.dataset.updateInterval;
+  getGraphSettingsState(canvas);
+  select.addEventListener('change', ()=>scheduleGraphSettingsSave(canvas, 50));
 });
 
 document.querySelectorAll('.graph-max-points').forEach(input=>{
-  const graphId = input.dataset.graph;
-  const canvas = document.getElementById('graph_'+graphId);
-  const series = canvas ? (canvas.dataset.series || graphId) : graphId;
-  if(canvas && canvas.dataset.maxPoints) input.value = canvas.dataset.maxPoints;
-  input.addEventListener('change', ()=>{
-    let value = parseInt(input.value);
-    if(isNaN(value) || value < 1) value = 1;
-    const max = parseInt(input.max) || 100;
-    if(value > max) value = max;
-    input.value = value;
-    const target = document.getElementById('graph_'+graphId);
-    if(!target) return;
-    const previousMaxPoints = target.dataset.maxPoints || String(value);
-    const activeFetch = getCustomGraphFetchState(target);
-    if(activeFetch.controller){ try { activeFetch.controller.abort(); } catch(_){} }
-    target.dataset.maxPoints = value;
-    graphHistories.delete(target); // при увеличении лимита перечитываем ранее обрезанную историю с устройства
-    graphDataCache.delete(target);
-    graphTableRenderKeys.delete(target.dataset.tableId);
-    if(graphPersistTimers.has(target)){
-      clearTimeout(graphPersistTimers.get(target));
-      graphPersistTimers.delete(target);
-    }
-    try { localStorage.removeItem(graphStorageKey(target)); } catch(_){}
-    getGraphView(target).offset = 0;
-    // fetch('/save?key=graphMaxPoints_'+graphId+'&val='+encodeURIComponent(value));
-    fetch('/save?key=graphMaxPoints_'+graphId+'&series='+encodeURIComponent(series)+'&val='+encodeURIComponent(value))
-      .then(response=>{ if(!response.ok) throw new Error('graph settings'); fetchCustomGraph(target); })
-      .catch(()=>{
-        target.dataset.maxPoints = previousMaxPoints;
-        input.value = previousMaxPoints;
-        graphHistories.delete(target);
-        graphDataCache.delete(target);
-        fetchCustomGraph(target);
-      });
-  });
+  const canvas = document.getElementById('graph_'+input.dataset.graph);
+  if(!canvas) return;
+  if(canvas.dataset.maxPoints) input.value = canvas.dataset.maxPoints;
+  getGraphSettingsState(canvas);
+  input.addEventListener('input', ()=>scheduleGraphSettingsSave(canvas, 450)); // Стрелки и ручной ввод не создают очередь Flash-записей.
+  input.addEventListener('change', ()=>scheduleGraphSettingsSave(canvas, 50));
 });
 
 window.addEventListener('resize', ()=>{
@@ -5935,138 +6261,157 @@ function setImg(x){
       r->send(200, "application/json", "{\"status\":\"ok\"}");
     });
 
+    server.on("/graph/settings", HTTP_POST, [](AsyncWebServerRequest *r){
+      if(!ensureAuthorized(r)) return;
+      auto sendJson = [&](int statusCode, const String &payload, const char *retryAfter = nullptr){
+        AsyncWebServerResponse *response = r->beginResponse(statusCode, "application/json", payload);
+        response->addHeader("Cache-Control", "no-store");
+        if(retryAfter) response->addHeader("Retry-After", retryAfter);
+        r->send(response);
+      };
+      auto bodyParam = [&](const char *name)->String{
+        if(r->hasParam(name, true)) return r->getParam(name, true)->value();
+        if(r->hasParam(name)) return r->getParam(name)->value();
+        return String();
+      };
+      auto parseUnsignedDecimal = [](String raw, uint32_t &value)->bool{
+        raw.trim();
+        if(!raw.length()) return false;
+        uint64_t parsed = 0;
+        for(size_t index = 0; index < raw.length(); ++index){
+          const char c = raw.charAt(index);
+          if(c < '0' || c > '9') return false;
+          parsed = parsed * 10ULL + static_cast<uint8_t>(c - '0');
+          if(parsed > 0xFFFFFFFFULL) return false;
+        }
+        value = static_cast<uint32_t>(parsed);
+        return true;
+      };
+
+      const String series = bodyParam("series");
+      uint32_t requestedInterval = 0;
+      uint32_t requestedMaxPoints = 0;
+      uint32_t clientRevision = 0;
+      if(!series.length() || series.length() > 32 ||
+         !parseUnsignedDecimal(bodyParam("updateInterval"), requestedInterval) ||
+         !parseUnsignedDecimal(bodyParam("maxPoints"), requestedMaxPoints) ||
+         !parseUnsignedDecimal(bodyParam("clientRevision"), clientRevision)){
+        sendJson(400, "{\"ok\":false,\"error\":\"Некорректные параметры графика\"}");
+        return;
+      }
+      if(requestedInterval < minGraphUpdateInterval || requestedInterval > maxGraphUpdateInterval ||
+         requestedMaxPoints < static_cast<uint32_t>(minGraphPoints) || requestedMaxPoints > static_cast<uint32_t>(maxGraphPoints)){
+        sendJson(422, "{\"ok\":false,\"error\":\"Интервал или число точек вне допустимого диапазона\"}");
+        return;
+      }
+
+      ensureGraphDataMutex();
+      if(graphDataMutex == nullptr || xSemaphoreTake(graphDataMutex, pdMS_TO_TICKS(50)) != pdTRUE){
+        sendJson(503, "{\"ok\":false,\"error\":\"График занят, повторите сохранение\"}", "1");
+        return;
+      }
+
+      auto configIt = seriesConfig.find(series);
+      if(configIt == seriesConfig.end()){
+        xSemaphoreGive(graphDataMutex);
+        sendJson(404, "{\"ok\":false,\"error\":\"Серия графика не найдена\"}");
+        return;
+      }
+
+      const GraphSettings requestedSettings{static_cast<unsigned long>(requestedInterval), static_cast<int>(requestedMaxPoints)};
+      const GraphSettings previousSettings = configIt->second;
+      static uint32_t graphSettingsServerRevision = 0;
+      const uint32_t serverRevision = ++graphSettingsServerRevision;
+      const uint32_t jobId = queueGraphSettingsSave(series, requestedSettings);
+      if(jobId == 0){
+        xSemaphoreGive(graphDataMutex);
+        sendJson(503, "{\"ok\":false,\"error\":\"Очередь сохранения занята\"}", "1");
+        return;
+      }
+
+      // Очередь уже приняла Flash-job: публикуем новую пару в RAM под тем же lock,
+      // чтобы не вернуть 503 после фактически принятого задания.
+      configIt->second = requestedSettings;
+      if(previousSettings.updateInterval != requestedSettings.updateInterval) seriesLastUpdate[series] = 0;
+      if(series == "main"){
+        updateInterval = requestedSettings.updateInterval;
+        maxPoints = requestedSettings.maxPoints;
+        if(graphPoints.size() > requestedMaxPoints){
+          trimGraphPoints(graphPoints, requestedMaxPoints);
+          seriesRewriteRequired[series] = true;
+        }
+      } else {
+        auto pointsIt = customGraphSeries.find(series);
+        if(pointsIt != customGraphSeries.end() && pointsIt->second.size() > requestedMaxPoints){
+          trimGraphPoints(pointsIt->second, requestedMaxPoints);
+          seriesRewriteRequired[series] = true;
+        }
+      }
+      xSemaphoreGive(graphDataMutex);
+
+      String ack;
+      ack.reserve(200);
+      ack = "{\"ok\":true,\"series\":\"" + jsonEscape(series) + "\",";
+      ack += "\"jobId\":" + String(jobId) + ',';
+      ack += "\"updateInterval\":" + String(requestedSettings.updateInterval) + ',';
+      ack += "\"maxPoints\":" + String(requestedSettings.maxPoints) + ',';
+      ack += "\"clientRevision\":" + String(clientRevision) + ',';
+      ack += "\"serverRevision\":" + String(serverRevision) + '}';
+      sendJson(200, ack);
+    });
+
+    server.on("/graph/settings/status", HTTP_GET, [](AsyncWebServerRequest *r){
+      if(!ensureAuthorized(r)) return;
+      if(!r->hasParam("id")){
+        r->send(400, "application/json", "{\"ok\":false,\"error\":\"Missing id\"}");
+        return;
+      }
+      const uint32_t jobId = static_cast<uint32_t>(strtoul(r->getParam("id")->value().c_str(), nullptr, 10));
+      GraphSettingsSaveJob job;
+      if(!getGraphSettingsSaveJob(jobId, job)){
+        r->send(404, "application/json", "{\"ok\":false,\"error\":\"Задание не найдено\"}");
+        return;
+      }
+      String json;
+      json.reserve(220);
+      json = "{\"ok\":true,\"jobId\":" + String(job.id) + ",";
+      json += "\"state\":\"" + String(graphSettingsSaveStateText(job.state)) + "\",";
+      json += "\"series\":\"" + jsonEscape(job.series) + "\",";
+      json += "\"updateInterval\":" + String(job.settings.updateInterval) + ',';
+      json += "\"maxPoints\":" + String(job.settings.maxPoints);
+      if(job.error.length()) json += ",\"error\":\"" + jsonEscape(job.error) + "\"";
+      json += '}';
+      AsyncWebServerResponse *response = r->beginResponse(200, "application/json", json);
+      response->addHeader("Cache-Control", "no-store");
+      r->send(response);
+    });
+
+    server.on("/persistence/status", HTTP_GET, [](AsyncWebServerRequest *r){
+      if(!ensureAuthorized(r)) return;
+      if(!r->hasParam("id")){
+        r->send(400, "application/json", "{\"ok\":false,\"error\":\"Missing id\"}");
+        return;
+      }
+      const PersistenceJobId id = static_cast<PersistenceJobId>(strtoul(r->getParam("id")->value().c_str(), nullptr, 10));
+      const PersistenceJobInfo info = persistenceJobStatus(id);
+      if(!info.known()){
+        r->send(404, "application/json", "{\"ok\":false,\"error\":\"Задание NVS не найдено\"}");
+        return;
+      }
+      String json;
+      json.reserve(180);
+      json = "{\"ok\":true,\"jobId\":" + String(info.id) + ",";
+      json += "\"state\":\"" + String(persistenceJobStateName(info.state)) + "\",";
+      json += "\"error\":\"" + String(persistenceErrorName(info.error)) + "\",";
+      json += "\"supersededBy\":" + String(info.supersededBy) + '}';
+      AsyncWebServerResponse *response = r->beginResponse(200, "application/json", json);
+      response->addHeader("Cache-Control", "no-store");
+      r->send(response);
+    });
+
 
     // ---------------- SAVE ----------------
-       server.on("/save", HTTP_GET, [self](AsyncWebServerRequest *r){
-      if(!ensureAuthorized(r)) return;
-      if(r->hasParam("key") && r->hasParam("val")){
-        String key = r->getParam("key")->value();
-        String valStr = r->getParam("val")->value();
-        invalidateLiveJsonCache();
-                if(ui.updateTimerField(key, valStr)){
-          r->send(200,"text/plain","OK");
-          return;
-        }
-        if(applyWaterControlRequest(key, valStr.toInt() != 0)){ // Для уровня воды сначала применяем взаимные блокировки и сохраняем итог.
-          r->send(200,"text/plain","OK"); // Возвращаем успешный ответ после безопасного применения.
-          return; // Не отдаем эти опасные поля в общий обработчик без блокировок.
-        }
-        if(applyChemistrySettingRequest(key, valStr)){ // Пределы pH/CL нормализуем и сохраняем сразу.
-          r->send(200,"text/plain","OK"); // Возвращаем успешный ответ после безопасного применения.
-          return; // Не отдаем эти пределы в общий обработчик без проверки диапазонов.
-        }
-        if(applyLightThresholdSettingRequest(key, valStr)){ // Пороги освещенности нормализуем и сохраняем сразу.
-          r->send(200,"text/plain","OK");
-          return;
-        }
-        if(applyLightModeSettingRequest(key, valStr)){ // Взаимоисключающие режимы уличного освещения по датчику.
-          r->send(200,"text/plain","OK");
-          return;
-        }
-        if(applyRs485ConfigRequest(key, valStr)){
-          r->send(200,"text/plain","OK");
-          return;
-        }
-        if(uiApplyValueForId(key, valStr)){
-          r->send(200,"text/plain","OK");
-          return;
-        }
-
-      //Вывод информации из EEPROM  на WEB страницу
-        if(key=="ACO_Work"){
-          ACO_Work = sanitizeDosingPeriodValue(valStr.toInt()); // Web тоже сохраняет только разрешенный код периода.
-          holdNextionDispensersReads(); // После Web-изменения не даем старому значению Nextion сразу перетереть ESP32.
-          saveValue<int>("ACO_Work", ACO_Work);
-          r->send(200,"text/plain","OK");
-          return;
-        }
-        if(key=="H2O2_Work"){
-          H2O2_Work = sanitizeDosingPeriodValue(valStr.toInt()); // Web тоже сохраняет только разрешенный код периода.
-          holdNextionDispensersReads(); // После Web-изменения не даем старому значению Nextion сразу перетереть ESP32.
-          saveValue<int>("H2O2_Work", H2O2_Work);
-          r->send(200,"text/plain","OK");
-          return;
-        }
-
-           if(key=="ThemeColor") { ThemeColor = valStr; saveValue<String>(key.c_str(), valStr); invalidateWebUiCache(); }
-          else if(key=="gmtOffset") {
-          applyGmtOffsetFromEsp(valStr.toInt(), true); // Веб-изменение GMT сразу сохраняем в ESP, сдвигаем локальное время и отправляем в Nextion.
-          syncNextionRtcFromEpoch(getCurrentEpoch()); // После сдвига GMT сразу обновляем RTC Nextion новым локальным временем.
-        }
-                else if(key=="graphMainMaxPoints") {
-          GraphDataGuard guard;
-          int valInt = valStr.toInt();
-          if(valInt < minGraphPoints) valInt = minGraphPoints;
-          if(valInt > maxGraphPoints) valInt = maxGraphPoints;
-          maxPoints = valInt;
-          trimGraphPoints(graphPoints, maxPoints);
-          saveGraphSeries("main", graphPoints);
-          saveGraphSettings("main", GraphSettings{updateInterval, maxPoints});
-          seriesConfig["main"].maxPoints = maxPoints;
-          invalidateWebUiCache();
-        }
-        else if(key=="graphMainUpdateInterval") {
-          GraphDataGuard guard;
-          int valInt = valStr.toInt();
-          if(valInt < minGraphUpdateInterval) valInt = minGraphUpdateInterval;
-          if(valInt > maxGraphUpdateInterval) valInt = maxGraphUpdateInterval;
-          updateInterval = valInt;
-          saveGraphSettings("main", GraphSettings{updateInterval, maxPoints});
-          seriesConfig["main"].updateInterval = updateInterval;
-          seriesLastUpdate["main"] = 0;
-          invalidateWebUiCache();
-        }
-        else if(key.startsWith("graphUpdateInterval_")) {
-          GraphDataGuard guard;
-          String series = key.substring(String("graphUpdateInterval_").length());
-          if(r->hasParam("series")) series = r->getParam("series")->value();
-          int valInt = valStr.toInt();
-          if(valInt < minGraphUpdateInterval) valInt = minGraphUpdateInterval;
-          if(valInt > maxGraphUpdateInterval) valInt = maxGraphUpdateInterval;
-          int preservedMaxPoints = defaultGraphPoints; // При сохранении только интервала не сбрасываем выбранный Max Points.
-          auto runtimeCfg = seriesConfig.find(series);
-          if(runtimeCfg != seriesConfig.end() && runtimeCfg->second.maxPoints > 0) preservedMaxPoints = runtimeCfg->second.maxPoints;
-          GraphSettings cfg{static_cast<unsigned long>(valInt), preservedMaxPoints};
-          loadGraphSettings(series, cfg);
-          cfg.updateInterval = valInt;
-          if(cfg.maxPoints < minGraphPoints) cfg.maxPoints = preservedMaxPoints;
-          if(cfg.maxPoints > maxGraphPoints) cfg.maxPoints = maxGraphPoints;
-          saveGraphSettings(series, cfg);
-          seriesConfig[series].updateInterval = cfg.updateInterval;
-          seriesConfig[series].maxPoints = cfg.maxPoints;
-          seriesLastUpdate[series] = 0;
-          invalidateWebUiCache();
-        }
-        else if(key.startsWith("graphMaxPoints_")) {
-          GraphDataGuard guard;
-          String series = key.substring(String("graphMaxPoints_").length());
-          if(r->hasParam("series")) series = r->getParam("series")->value();
-          int valInt = valStr.toInt();
-          if(valInt < minGraphPoints) valInt = minGraphPoints;
-          if(valInt > maxGraphPoints) valInt = maxGraphPoints;
-          GraphSettings cfg{updateInterval, valInt};
-          loadGraphSettings(series, cfg);
-          cfg.maxPoints = valInt;
-          saveGraphSettings(series, cfg);
-          seriesConfig[series].maxPoints = cfg.maxPoints;
-          if(seriesConfig[series].updateInterval == 0) seriesConfig[series].updateInterval = cfg.updateInterval;
-          auto it = customGraphSeries.find(series);
-          if(it != customGraphSeries.end()){
-            trimGraphPoints(it->second, valInt);
-            saveGraphSeries(it->first, it->second);
-          }
-          invalidateWebUiCache();
-        }
-        else if(key=="ssid") saveValue<String>(key.c_str(), valStr);
-        else if(key=="pass") saveValue<String>(key.c_str(), valStr);
-        else if(key=="ssid2") saveValue<String>(key.c_str(), valStr);
-        else if(key=="pass2") saveValue<String>(key.c_str(), valStr);
-        
-        else if(key=="apSSID") { StoredAPSSID = valStr; saveValue<String>(key.c_str(), valStr); }
-        else if(key=="apPASS") { StoredAPPASS = valStr; saveValue<String>(key.c_str(), valStr); }
-      }
-      r->send(200,"text/plain","OK");
-    });
+    server.on("/save", HTTP_GET, [](AsyncWebServerRequest *r){ handleGeneralSaveRequest(r); });
 
     server.on("/time/set", HTTP_POST, [](AsyncWebServerRequest *r){
       if(!ensureAuthorized(r)) return;
@@ -6147,8 +6492,7 @@ function setImg(x){
       }
       setBaseEpoch(epoch);
       syncNextionRtcFromEpoch(epoch);
-      String payloadJson = "{\"status\":\"ok\",\"current\":\"" + jsonEscape(getCurrentDateTime()) + "\"}";
-      r->send(200, "application/json", payloadJson);
+      sendQueuedPersistenceResponse(r, true);
     });
 
 
@@ -6184,8 +6528,13 @@ function setImg(x){
 
      
       saveMqttSettings();
-      applyMqttState();
-      r->send(200, "application/json", "{\"status\":\"saved\"}");
+      requestMqttApply();
+      const PersistenceSubmission barrier = persistenceBarrierTrackedResult();
+      if(!barrier.accepted || barrier.jobId == 0){
+        r->send(503, "application/json", "{\"status\":\"error\",\"error\":\"Очередь сохранения занята\"}");
+        return;
+      }
+      r->send(202, "application/json", "{\"status\":\"queued\",\"jobId\":" + String(barrier.jobId) + "}");
     });
 
 
@@ -6196,8 +6545,13 @@ function setImg(x){
       else if(r->hasParam("enabled")) enabled = r->getParam("enabled")->value().toInt() == 1;
       mqttEnabled = mqttHost.length() > 0 && enabled;
       saveMqttSettings();
-      applyMqttState();
-      r->send(200, "application/json", "{\"status\":\"updated\"}");
+      requestMqttApply();
+      const PersistenceSubmission barrier = persistenceBarrierTrackedResult();
+      if(!barrier.accepted || barrier.jobId == 0){
+        r->send(503, "application/json", "{\"status\":\"error\",\"error\":\"Очередь сохранения занята\"}");
+        return;
+      }
+      r->send(202, "application/json", "{\"status\":\"queued\",\"jobId\":" + String(barrier.jobId) + "}");
     });
 
     server.on("/profile/save", HTTP_POST, [](AsyncWebServerRequest *r){
@@ -6221,14 +6575,20 @@ function setImg(x){
       else if(newPassword.length()) authPassword = newPassword;
       if(clearAdminPassword) adminPassword = "";
       else if(newAdminPassword.length()) adminPassword = newAdminPassword;
-      saveValue<String>("authPass", authPassword);
-      saveValue<String>("adminPass", adminPassword);
+      const bool accepted = saveValue<String>("authPass", authPassword) &&
+                            saveValue<String>("adminPass", adminPassword);
       const bool passwordChanged = !secureStringEquals(previousPassword, authPassword);
       const bool adminPasswordChanged = !secureStringEquals(previousAdminPassword, adminPassword);
       if(passwordChanged) regenerateAuthSession();
       if(passwordChanged || adminPasswordChanged) invalidateWebUiCache();
-      AsyncWebServerResponse *response = r->beginResponse(200, "application/json",
-        String("{\"status\":\"saved\",\"authConfigured\":") + (isAuthConfigured() ? "true" : "false") +
+      const PersistenceSubmission barrier = accepted ? persistenceBarrierTrackedResult() : PersistenceSubmission{};
+      if(!accepted || !barrier.accepted || barrier.jobId == 0){
+        r->send(503, "application/json", "{\"ok\":false,\"error\":\"Очередь сохранения профиля занята\"}");
+        return;
+      }
+      AsyncWebServerResponse *response = r->beginResponse(202, "application/json",
+        String("{\"status\":\"queued\",\"jobId\":") + String(barrier.jobId) +
+        ",\"authConfigured\":" + (isAuthConfigured() ? "true" : "false") +
         ",\"adminConfigured\":" + (isAdminAuthConfigured() ? "true" : "false") + "}");
       response->addHeader("Cache-Control", "no-store");
       if(passwordChanged){
@@ -6245,29 +6605,29 @@ function setImg(x){
         int state = r->getParam("state")->value().toInt();
         invalidateLiveJsonCache();
        if(applyWaterControlRequest(id, state != 0)){ // Кнопки слива/долива применяем через защитную логику.
-          r->send(200, "text/plain", "OK");
+          sendQueuedPersistenceResponse(r, true);
           return;
        }
        if(id == "button_Lamp"){
           applyLampControlMode(state ? "on" : "off");
-          r->send(200, "text/plain", "OK");
+          sendQueuedPersistenceResponse(r, true);
           return;
        }
        if(id == "button_WS2815"){
           applyRgbControlMode(state ? "on" : "off");
-          r->send(200, "text/plain", "OK");
+          sendQueuedPersistenceResponse(r, true);
           return;
        }
        if(id == "Pow_Ul_light"){
           applyUlLightControlMode(state ? "on" : "off");
-          r->send(200, "text/plain", "OK");
+          sendQueuedPersistenceResponse(r, true);
           return;
        }
        if(uiApplyValueForId(id, String(state))){
-          r->send(200, "text/plain", "OK");
+          sendQueuedPersistenceResponse(r, true);
           return;
         }
-        r->send(200, "text/plain", "OK");
+        r->send(404, "application/json", "{\"ok\":false,\"error\":\"Неизвестная кнопка\"}");
       } else {
         r->send(400, "text/plain", "Missing params");
       }
@@ -6287,8 +6647,7 @@ function setImg(x){
       }
       AktualReadRelay = false;
       invalidateLiveJsonCache();
-      String json = "{\"status\":\"ok\",\"relay\":" + String(relay) + ",\"state\":" + String(rs485RelayCommandState(static_cast<uint8_t>(relay)) ? 1 : 0) + "}";
-      r->send(200, "application/json", json);
+      sendQueuedPersistenceResponse(r, true);
     });
 
     server.on("/rs485/all-off", HTTP_POST, [](AsyncWebServerRequest *r){
@@ -6296,7 +6655,7 @@ function setImg(x){
       applyRs485AllOffRequest();
       AktualReadRelay = false;
       invalidateLiveJsonCache();
-      r->send(200, "application/json", "{\"status\":\"ok\"}");
+      sendQueuedPersistenceResponse(r, true);
     });
 
     server.on("/rs485/poll", HTTP_POST, [](AsyncWebServerRequest *r){
@@ -6610,21 +6969,30 @@ function setImg(x){
         return fallback;
       };
 
-      String ssid = paramOr("ssid", loadValue<String>("ssid", String(defaultSSID)));
-      String pass = paramOr("pass", loadValue<String>("pass", String(defaultPASS)));
-      String backupSsid = paramOr("ssid2", loadValue<String>("ssid2", String("")));
-      String backupPass = paramOr("pass2", loadValue<String>("pass2", String("")));
-      String apSsid = paramOr("ap_ssid", loadValue<String>("apSSID", String(::apSSID)));
-      String apPass = paramOr("ap_pass", loadValue<String>("apPASS", String(::apPASS)));
-      String host = paramOr("hostname", loadValue<String>("hostname", String(defaultHostname)));
+      String ssid = paramOr("ssid", currentStaSsid());
+      String pass = paramOr("pass", currentStaPass());
+      String backupSsid = paramOr("ssid2", currentBackupStaSsid());
+      String backupPass = paramOr("pass2", currentBackupStaPass());
+      String apSsid = paramOr("ap_ssid", currentApSsid());
+      String apPass = paramOr("ap_pass", currentApPass());
+      String host = paramOr("hostname", currentWifiHostName());
 
       StoredAPSSID = apSsid;
       StoredAPPASS = apPass;
-      saveWifiConfig(ssid, pass, backupSsid, backupPass, apSsid, apPass, host);
+      if(!saveWifiConfig(ssid, pass, backupSsid, backupPass, apSsid, apPass, host)){
+        r->send(503, "application/json", "{\"saved\":0,\"error\":\"Очередь сохранения WiFi занята\"}");
+        return;
+      }
       invalidateWebUiCache();
       WifiStatusInfo wifiInfo = getWifiStatus();
+      const PersistenceSubmission barrier = persistenceBarrierTrackedResult();
+      if(!barrier.accepted || barrier.jobId == 0){
+        r->send(503, "application/json", "{\"saved\":0,\"error\":\"Очередь подтверждения WiFi занята\"}");
+        return;
+      }
 
       String response = "{\"saved\":1,\"connected\":" + String(wifiIsConnected() ? 1 : 0) + ",";
+      response += "\"jobId\":" + String(barrier.jobId) + ",";
       response += "\"status\":\"" + jsonEscape(wifiInfo.statusText) + "\",";
       response += "\"ip\":\"" + jsonEscape(wifiIsConnected() ? WiFi.localIP().toString() : String("")) + "\"}";
 
@@ -6635,10 +7003,8 @@ function setImg(x){
 
     server.on("/restart", HTTP_POST, [](AsyncWebServerRequest *r){
             if(!ensureAuthorized(r)) return;
-      r->send(200, "text/plain", "Restarting");
-      r->client()->stop();
-      delay(100);
-      ESP.restart();
+      r->send(202, "application/json", "{\"status\":\"restart_queued\"}");
+      requestDeferredWebRestart();
     });
 
 
@@ -6658,7 +7024,13 @@ function setImg(x){
       };
       auto snapshot = std::make_shared<std::vector<GraphResponsePoint>>();
       {
-        GraphDataGuard guard; // копируем стабильный снимок, пока main-loop не меняет vector
+        ensureGraphDataMutex();
+        if(graphDataMutex == nullptr || xSemaphoreTake(graphDataMutex, pdMS_TO_TICKS(20)) != pdTRUE){
+          AsyncWebServerResponse *busy = r->beginResponse(503, "application/json", "{\"ok\":false,\"error\":\"График занят\"}");
+          busy->addHeader("Retry-After", "1");
+          r->send(busy);
+          return;
+        }
         static const vector<GraphPoint> emptySeries;
         const vector<GraphPoint> *points = &graphPoints;
         if(series != "main"){
@@ -6695,6 +7067,7 @@ function setImg(x){
           }
           snapshot->push_back(responsePoint);
         }
+        xSemaphoreGive(graphDataMutex);
       }
 
       // Компактный поток: [epoch,value], при необходимости добавляются events и ORP.
@@ -6774,9 +7147,9 @@ server.on("/getImage", HTTP_GET, [](AsyncWebServerRequest *r){
         int newv = v.toInt();
         if(newv != 1 && newv != 2) newv = 1;
         jpg = newv;
-        saveValue<int>("jpg", jpg);
+        const bool accepted = saveValue<int>("jpg", jpg);
         Serial.printf("jpg set to %d\n", jpg);
-        r->send(200, "text/plain", "OK");
+        sendQueuedPersistenceResponse(r, accepted);
       } else {
         r->send(400, "text/plain", "Missing val");
       }
