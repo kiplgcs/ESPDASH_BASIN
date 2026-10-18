@@ -155,6 +155,7 @@ extern bool Filtr_Time3; // таймер фильтрации №3
 extern bool Power_Clean; // промывка фильтра
 extern bool Clean_Time1; // таймер промывки
 extern bool Pow_Ul_light; // ручное освещение
+extern bool Pow_Yard_light; // освещение во дворе
 extern bool Ul_light_Time; // таймер уличного освещения
 extern bool UlLight_autosvet; // уличное освещение по датчику
 extern bool UlLight_sensorTimerOff; // улица: датчик включает, таймер отключает
@@ -198,6 +199,8 @@ extern int RgbTimerON; // таймер RGB ON
 extern int RgbTimerOFF; // таймер RGB OFF
 extern int UlLightTimerON; // таймер уличного освещения ON
 extern int UlLightTimerOFF; // таймер уличного освещения OFF
+extern int YardLightTimerON; // таймер освещения во дворе ON
+extern int YardLightTimerOFF; // таймер освещения во дворе OFF
 extern int Sider_heat; // уставка нагрева
 extern bool RoomTemper; // контроль температуры в помещении
 extern float RoomTempOn; // граница включения отопления
@@ -206,6 +209,7 @@ extern bool Power_Warm_floor_heating; // обогрев пола
 extern String SetLamp; // режим лампы
 extern String SetRGB; // режим RGB
 extern String SetUlLight; // режим уличного освещения
+extern String SetYardLight; // режим освещения во дворе
 extern bool Lamp; // состояние лампы
 extern bool Lamp_autosvet; // авто-режим лампы
 extern bool Power_Time1; // режим таймера лампы
@@ -231,10 +235,13 @@ extern int RgbLightOffThreshold; // порог включения RGB в тем�
 extern int RgbLightOnThreshold; // порог выключения RGB при свете
 extern int UlLightOffThreshold; // порог включения улицы в темноте
 extern int UlLightOnThreshold; // порог выключения улицы при свете
+extern int YardLightOffThreshold; // порог включения двора в темноте
+extern int YardLightOnThreshold; // порог выключения двора при свете
 extern String LightSensorLiveInfo; // диагностическая строка датчика освещенности
 extern String LampLightAutoState; // состояние автоматики лампы
 extern String RgbLightAutoState; // состояние автоматики RGB
 extern String UlLightAutoState; // состояние автоматики улицы
+extern String YardLightAutoState; // состояние автоматики освещения во дворе
 extern String PoolWaterLevelStageInfo; // этап автоматики уровня бассейна
 extern String DrainPitStageInfo; // этап автоматики слива
 extern int ToppingWorkMinutes; // время работы долива
@@ -441,6 +448,8 @@ inline void mqttPublishLightThresholds(){ // нормализация одной
   publishMqttStateInt("home/esp32/RgbLightOnThreshold", RgbLightOnThreshold);
   publishMqttStateInt("home/esp32/UlLightOffThreshold", UlLightOffThreshold);
   publishMqttStateInt("home/esp32/UlLightOnThreshold", UlLightOnThreshold);
+  publishMqttStateInt("home/esp32/YardLightOffThreshold", YardLightOffThreshold);
+  publishMqttStateInt("home/esp32/YardLightOnThreshold", YardLightOnThreshold);
 }
 
 inline bool mqttPayloadIsOn(String payload){ // проверка включения
@@ -477,6 +486,10 @@ inline void mqttApplyRgbMode(const String &rawMode){
 
 inline void mqttApplyUlLightMode(const String &rawMode){
   applyUlLightControlMode(rawMode);
+}
+
+inline void mqttApplyYardLightMode(const String &rawMode){
+  applyYardLightControlMode(rawMode);
 }
 
 inline String mqttLedAutoplayState(){
@@ -808,6 +821,20 @@ inline void handleMqttCommandMessage(char* topic, byte* payload, unsigned int le
     return;
   }
 
+  if(topicStr == "home/esp32/YardLightTimer_ON/set"){
+    if(mqttApplyTimerField("YardLightTimer_ON", message)){
+      publishMqttStateString("home/esp32/YardLightTimer_ON", formatMinutesToTime(mqttTimerOnMinutes("YardLightTimer")));
+    }
+    return;
+  }
+
+  if(topicStr == "home/esp32/YardLightTimer_OFF/set"){
+    if(mqttApplyTimerField("YardLightTimer_OFF", message)){
+      publishMqttStateString("home/esp32/YardLightTimer_OFF", formatMinutesToTime(mqttTimerOffMinutes("YardLightTimer")));
+    }
+    return;
+  }
+
   if(topicStr == "home/esp32/Pow_Ul_light/set"){
     bool requestedState = false;
     if(!mqttParseBooleanPayload(message, requestedState)) return;
@@ -815,6 +842,17 @@ inline void handleMqttCommandMessage(char* topic, byte* payload, unsigned int le
     publishMqttStateBool("home/esp32/Pow_Ul_light", Pow_Ul_light || (rs485RelayDataFresh() && ReadRelayArray[15])); // публикация фактического состояния
     publishMqttStateString("home/esp32/SetUlLight", SetUlLight);
     publishMqttStateBool("home/esp32/Ul_light_Time", Ul_light_Time);
+    return;
+  }
+
+  if(topicStr == "home/esp32/Pow_Yard_light/set"){
+    bool requestedState = false;
+    if(!mqttParseBooleanPayload(message, requestedState)) return;
+    mqttApplyYardLightMode(requestedState ? "on" : "off");
+    const bool yardLightActual = rs485RelayDataFresh() ? ReadRelayArray[7] : Pow_Yard_light;
+    publishMqttStateBool("home/esp32/Pow_Yard_light", yardLightActual);
+    publishMqttStateBool("home/esp32/YardLightActual", yardLightActual);
+    publishMqttStateString("home/esp32/SetYardLight", SetYardLight);
     return;
   }
 
@@ -887,6 +925,17 @@ inline void handleMqttCommandMessage(char* topic, byte* payload, unsigned int le
     return;
   }
 
+  if(topicStr == "home/esp32/SetYardLight/set"){
+    if(mqttIsAllowedMode(message)){
+      mqttApplyYardLightMode(message);
+      publishMqttStateString("home/esp32/SetYardLight", SetYardLight);
+      const bool yardLightActual = rs485RelayDataFresh() ? ReadRelayArray[7] : Pow_Yard_light;
+      publishMqttStateBool("home/esp32/Pow_Yard_light", yardLightActual);
+      publishMqttStateBool("home/esp32/YardLightActual", yardLightActual);
+    }
+    return;
+  }
+
   if(topicStr == "home/esp32/PH_Lower/set" || topicStr == "home/esp32/PH_Upper/set" ||
      topicStr == "home/esp32/PH_setting/set" || topicStr == "home/esp32/CL_Lower/set" ||
      topicStr == "home/esp32/CL_Upper/set"){
@@ -901,7 +950,8 @@ inline void handleMqttCommandMessage(char* topic, byte* payload, unsigned int le
 
   if(topicStr == "home/esp32/LampLightOffThreshold/set" || topicStr == "home/esp32/LampLightOnThreshold/set" ||
      topicStr == "home/esp32/RgbLightOffThreshold/set" || topicStr == "home/esp32/RgbLightOnThreshold/set" ||
-     topicStr == "home/esp32/UlLightOffThreshold/set" || topicStr == "home/esp32/UlLightOnThreshold/set"){
+     topicStr == "home/esp32/UlLightOffThreshold/set" || topicStr == "home/esp32/UlLightOnThreshold/set" ||
+     topicStr == "home/esp32/YardLightOffThreshold/set" || topicStr == "home/esp32/YardLightOnThreshold/set"){
     int parsed = 0;
     if(!mqttParseInteger(message, parsed)) return;
     (void)parsed;
@@ -1123,7 +1173,11 @@ inline MqttDiscoveryGroup mqttDiscoveryGroupForEntityId(const char* id){
   if(entityId == "Pow_Ul_light" || entityId == "OutdoorLightActual" || entityId == "SetUlLight" ||
      entityId == "Ul_light_Time" || entityId == "UlLightTimer_ON" || entityId == "UlLightTimer_OFF" ||
      entityId == "UlLightAutoState" || entityId == "UlLightOffThreshold" ||
-     entityId == "UlLightOnThreshold") return DISCOVERY_GROUP_OUTDOOR_LIGHTING;
+     entityId == "UlLightOnThreshold" || entityId == "Pow_Yard_light" ||
+     entityId == "YardLightActual" || entityId == "SetYardLight" ||
+     entityId == "YardLightTimer_ON" || entityId == "YardLightTimer_OFF" ||
+     entityId == "YardLightAutoState" || entityId == "YardLightOffThreshold" ||
+     entityId == "YardLightOnThreshold") return DISCOVERY_GROUP_OUTDOOR_LIGHTING;
 
   if(entityId == "CurrentTime" || entityId == "ClockSelect") return DISCOVERY_GROUP_TIME;
 
@@ -1339,10 +1393,12 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
     {"binary_sensor", "LampActual", "Pool Lamp Actual State", "home/esp32/LampActual", nullptr, "power", nullptr, nullptr, nullptr, "1", "0"},
     {"binary_sensor", "RgbActual", "RGB Actual State", "home/esp32/RgbActual", nullptr, "power", nullptr, nullptr, nullptr, "1", "0"},
     {"binary_sensor", "OutdoorLightActual", "Outdoor Light Actual State", "home/esp32/OutdoorLightActual", nullptr, "power", nullptr, nullptr, nullptr, "1", "0"},
+    {"binary_sensor", "YardLightActual", "Courtyard Light Actual State", "home/esp32/YardLightActual", nullptr, "power", nullptr, nullptr, nullptr, "1", "0"},
     {"sensor", "LightSensorLiveInfo", "Outdoor Light Sensor Status", "home/esp32/LightSensorLiveInfo", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"sensor", "LampLightAutoState", "Pool Lamp Automation", "home/esp32/LampLightAutoState", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"sensor", "RgbLightAutoState", "RGB Automation", "home/esp32/RgbLightAutoState", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"sensor", "UlLightAutoState", "Outdoor Light Automation", "home/esp32/UlLightAutoState", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"sensor", "YardLightAutoState", "Courtyard Light Automation", "home/esp32/YardLightAutoState", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"binary_sensor", "Power_H2O2", "NaOCl Pump State", "home/esp32/Power_H2O2", nullptr, "power", nullptr, nullptr, nullptr, "1", "0"},
     {"binary_sensor", "Power_ACO", "ACO Pump State", "home/esp32/Power_ACO", nullptr, "power", nullptr, nullptr, nullptr, "1", "0"},
     {"binary_sensor", "Power_Heat", "Heating State", "home/esp32/Power_Heat", nullptr, "power", nullptr, nullptr, nullptr, "1", "0"},
@@ -1404,6 +1460,9 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
     {"switch", "Ul_light_Time", "01 ⏱️ Активация таймера улицы", "home/esp32/Ul_light_Time", "home/esp32/Ul_light_Time/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"text", "UlLightTimer_ON", "02 🟢 Время вкл. улицы по таймеру", "home/esp32/UlLightTimer_ON", "home/esp32/UlLightTimer_ON/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"text", "UlLightTimer_OFF", "03 🔴 Время откл. улицы по таймеру", "home/esp32/UlLightTimer_OFF", "home/esp32/UlLightTimer_OFF/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"switch", "Pow_Yard_light", "🏡 Освещение во дворе (ручной)", "home/esp32/Pow_Yard_light", "home/esp32/Pow_Yard_light/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"text", "YardLightTimer_ON", "🟢 Время вкл. двора по таймеру", "home/esp32/YardLightTimer_ON", "home/esp32/YardLightTimer_ON/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"text", "YardLightTimer_OFF", "🔴 Время откл. двора по таймеру", "home/esp32/YardLightTimer_OFF", "home/esp32/YardLightTimer_OFF/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
      {"switch", "PH_Control_ACO", "🧪 Контроль pH (ACO)", "home/esp32/PH_Control_ACO", "home/esp32/PH_Control_ACO/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"switch", "NaOCl_H2O2_Control", "🧪 Контроль хлора (NaOCl)", "home/esp32/NaOCl_H2O2_Control", "home/esp32/NaOCl_H2O2_Control/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"switch", "RoomTemper", "Контроль температуры в помещении", "home/esp32/RoomTemper", "home/esp32/RoomTemper/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
@@ -1414,6 +1473,8 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
     {"number", "RgbLightOnThreshold", "RGB Bright OFF Threshold", "home/esp32/RgbLightOnThreshold", "home/esp32/RgbLightOnThreshold/set", nullptr, "%", nullptr, nullptr, nullptr, nullptr, nullptr, "0", "100", "1"},
     {"number", "UlLightOffThreshold", "Outdoor Dark ON Threshold", "home/esp32/UlLightOffThreshold", "home/esp32/UlLightOffThreshold/set", nullptr, "%", nullptr, nullptr, nullptr, nullptr, nullptr, "0", "100", "1"},
     {"number", "UlLightOnThreshold", "Outdoor Bright OFF Threshold", "home/esp32/UlLightOnThreshold", "home/esp32/UlLightOnThreshold/set", nullptr, "%", nullptr, nullptr, nullptr, nullptr, nullptr, "0", "100", "1"},
+    {"number", "YardLightOffThreshold", "Courtyard Dark ON Threshold", "home/esp32/YardLightOffThreshold", "home/esp32/YardLightOffThreshold/set", nullptr, "%", nullptr, nullptr, nullptr, nullptr, nullptr, "0", "100", "1"},
+    {"number", "YardLightOnThreshold", "Courtyard Bright OFF Threshold", "home/esp32/YardLightOnThreshold", "home/esp32/YardLightOnThreshold/set", nullptr, "%", nullptr, nullptr, nullptr, nullptr, nullptr, "0", "100", "1"},
     {"number", "PH_Lower", "pH Lower Limit", "home/esp32/PH_Lower", "home/esp32/PH_Lower/set", nullptr, "pH", nullptr, nullptr, nullptr, nullptr, nullptr, "6", "9", "0.1"},
     {"number", "PH_Upper", "pH Upper Limit", "home/esp32/PH_Upper", "home/esp32/PH_Upper/set", nullptr, "pH", nullptr, nullptr, nullptr, nullptr, nullptr, "6", "9", "0.1"},
     {"number", "CL_Lower", "Free Chlorine Lower Limit", "home/esp32/CL_Lower", "home/esp32/CL_Lower/set", nullptr, "mg/L", nullptr, nullptr, nullptr, nullptr, nullptr, "0.2", "2.5", "0.1"},
@@ -1445,7 +1506,7 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
   static const char* const ledColorOrderOptions[] = {"GRB", "RGB", "GBR", "RBG", "BRG", "BGR"};
   static const char* const dosingOptions[] = {"1", "2", "14", "15", "16", "3", "4", "5", "6", "8", "9", "10", "11", "12", "13", "7"};
   const size_t baseCount = sizeof(baseEntities) / sizeof(baseEntities[0]); // количество base сущностей
-  const size_t selectCount = 9;
+  const size_t selectCount = 10;
   const size_t rs485EntityCount = 32; // Только безопасное отображение: 16 readback + 16 дискретных входов.
   const size_t totalCount = baseCount + selectCount + rs485EntityCount;
 
@@ -1466,17 +1527,19 @@ if(mqttDiscoveryStage == DISCOVERY_MAIN_ENTITIES){
           result = publishMqttDiscoverySelect("SetRGB", "🎛️ Режим управления RGB подсветкой", "home/esp32/SetRGB", "home/esp32/SetRGB/set", selectOptions, 5, deviceId, deviceName, true, true);
         } else if(mqttDiscoveryIndex == baseCount + 2){
           result = publishMqttDiscoverySelect("SetUlLight", "🚏 Режим уличного освещения", "home/esp32/SetUlLight", "home/esp32/SetUlLight/set", selectOptions, 5, deviceId, deviceName, true, true);
-      } else if(mqttDiscoveryIndex == baseCount + 3){
-         result = publishMqttDiscoverySelect("LedColorMode", "🎨 Режим цвета", "home/esp32/LedColorMode", "home/esp32/LedColorMode/set", ledColorModeOptions, 2, deviceId, deviceName, true, true);
+        } else if(mqttDiscoveryIndex == baseCount + 3){
+          result = publishMqttDiscoverySelect("SetYardLight", "🏡 Режим освещения во дворе", "home/esp32/SetYardLight", "home/esp32/SetYardLight/set", selectOptions, 5, deviceId, deviceName, true, true);
       } else if(mqttDiscoveryIndex == baseCount + 4){
-          result = publishMqttDiscoverySelect("LedPattern", "✨ Режим подсветки", "home/esp32/LedPattern", "home/esp32/LedPattern/set", ledPatternOptions, 24, deviceId, deviceName, true, true);
+         result = publishMqttDiscoverySelect("LedColorMode", "🎨 Режим цвета", "home/esp32/LedColorMode", "home/esp32/LedColorMode/set", ledColorModeOptions, 2, deviceId, deviceName, true, true);
       } else if(mqttDiscoveryIndex == baseCount + 5){
-         result = publishMqttDiscoverySelect("LedAutoplay", "🔁 Автосмена", "home/esp32/LedAutoplay", "home/esp32/LedAutoplay/set", ledAutoplayOptions, 2, deviceId, deviceName, true, true);
+          result = publishMqttDiscoverySelect("LedPattern", "✨ Режим подсветки", "home/esp32/LedPattern", "home/esp32/LedPattern/set", ledPatternOptions, 24, deviceId, deviceName, true, true);
       } else if(mqttDiscoveryIndex == baseCount + 6){
-          result = publishMqttDiscoverySelect("LedColorOrder", "🎚️ Порядок цветов ленты", "home/esp32/LedColorOrder", "home/esp32/LedColorOrder/set", ledColorOrderOptions, 6, deviceId, deviceName, true, true);
+         result = publishMqttDiscoverySelect("LedAutoplay", "🔁 Автосмена", "home/esp32/LedAutoplay", "home/esp32/LedAutoplay/set", ledAutoplayOptions, 2, deviceId, deviceName, true, true);
       } else if(mqttDiscoveryIndex == baseCount + 7){
-          result = publishMqttDiscoverySelect("ACO_Work", "⏳ Период дозирования ACO", "home/esp32/ACO_Work", "home/esp32/ACO_Work/set", dosingOptions, 16, deviceId, deviceName, true, true);
+          result = publishMqttDiscoverySelect("LedColorOrder", "🎚️ Порядок цветов ленты", "home/esp32/LedColorOrder", "home/esp32/LedColorOrder/set", ledColorOrderOptions, 6, deviceId, deviceName, true, true);
       } else if(mqttDiscoveryIndex == baseCount + 8){
+          result = publishMqttDiscoverySelect("ACO_Work", "⏳ Период дозирования ACO", "home/esp32/ACO_Work", "home/esp32/ACO_Work/set", dosingOptions, 16, deviceId, deviceName, true, true);
+      } else if(mqttDiscoveryIndex == baseCount + 9){
          result = publishMqttDiscoverySelect("H2O2_Work", "⏳ Период дозирования NaOCl", "home/esp32/H2O2_Work", "home/esp32/H2O2_Work/set", dosingOptions, 16, deviceId, deviceName, true, true);
       } else {
         const size_t dynamicIndex = mqttDiscoveryIndex - baseCount - selectCount;
@@ -1862,10 +1925,13 @@ inline void handleMqttLoop(){ // основной цикл MQTT
       publishMqttStateBool("home/esp32/LampActual", Lamp || (rs485RelayFresh && ReadRelayArray[0]));
       publishMqttStateBool("home/esp32/RgbActual", Pow_WS2815 || (rs485RelayFresh && ReadRelayArray[1]));
       publishMqttStateBool("home/esp32/OutdoorLightActual", Pow_Ul_light || (rs485RelayFresh && ReadRelayArray[15]));
+      const bool yardLightActual = rs485RelayFresh ? ReadRelayArray[7] : Pow_Yard_light;
+      publishMqttStateBool("home/esp32/YardLightActual", yardLightActual);
       publishMqttStateString("home/esp32/LightSensorLiveInfo", uiValueForId("LightSensorLiveInfo"));
       publishMqttStateString("home/esp32/LampLightAutoState", uiValueForId("LampLightAutoState"));
       publishMqttStateString("home/esp32/RgbLightAutoState", uiValueForId("RgbLightAutoState"));
       publishMqttStateString("home/esp32/UlLightAutoState", uiValueForId("UlLightAutoState"));
+      publishMqttStateString("home/esp32/YardLightAutoState", uiValueForId("YardLightAutoState"));
 
       publishMqttStateBool("home/esp32/Rs485Enabled", Rs485Enabled);
       publishMqttStateInt("home/esp32/Rs485BaudRate", Rs485ActiveBaudRate);
@@ -1962,11 +2028,15 @@ inline void handleMqttLoop(){ // основной цикл MQTT
       publishMqttStateString("home/esp32/UlLightTimer_ON", formatMinutesToTime(mqttTimerOnMinutes("UlLightTimer")));
       publishMqttStateString("home/esp32/UlLightTimer_OFF", formatMinutesToTime(mqttTimerOffMinutes("UlLightTimer")));
       publishMqttStateBool("home/esp32/Pow_Ul_light", Pow_Ul_light || (rs485RelayFresh && ReadRelayArray[15]));
+      publishMqttStateString("home/esp32/YardLightTimer_ON", formatMinutesToTime(mqttTimerOnMinutes("YardLightTimer")));
+      publishMqttStateString("home/esp32/YardLightTimer_OFF", formatMinutesToTime(mqttTimerOffMinutes("YardLightTimer")));
+      publishMqttStateBool("home/esp32/Pow_Yard_light", yardLightActual);
       publishMqttStateBool("home/esp32/Activation_Heat", Activation_Heat);
 
       publishMqttStateString("home/esp32/SetLamp", SetLamp);
       publishMqttStateString("home/esp32/SetRGB", SetRGB);
       publishMqttStateString("home/esp32/SetUlLight", SetUlLight);
+      publishMqttStateString("home/esp32/SetYardLight", SetYardLight);
       publishMqttStateString("home/esp32/CurrentTime", CurrentTime);
       publishMqttStateInt("home/esp32/ClockSelect", gmtOffset_correct);
       mqttForcePublishAllStates = false; // Полный снимок отправлен, дальше state-публикации идут только при изменении.

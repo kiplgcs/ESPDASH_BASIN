@@ -172,6 +172,8 @@ inline void interface(){ // Декларатиынве функции интер
         UI_DISPLAY("LampLightAutoState", LampLightAutoState, "💡 Состояние лампы бассейна");
         UI_DUAL_RANGE_KEYS("UlLightThresholdRange", UlLightOffThreshold, UlLightOnThreshold, "UlLightOffThreshold", "UlLightOnThreshold", 0, 100, 1, "🚏 Улица: включить / выключить, %");
         UI_DISPLAY("UlLightAutoState", UlLightAutoState, "🚏 Состояние уличного освещения");
+        UI_DUAL_RANGE_KEYS("YardLightThresholdRange", YardLightOffThreshold, YardLightOnThreshold, "YardLightOffThreshold", "YardLightOnThreshold", 0, 100, 1, "🏡 Двор: включить / выключить, %");
+        UI_DISPLAY("YardLightAutoState", YardLightAutoState, "🏡 Состояние освещения во дворе");
         UI_DUAL_RANGE_KEYS("RgbLightThresholdRange", RgbLightOffThreshold, RgbLightOnThreshold, "RgbLightOffThreshold", "RgbLightOnThreshold", 0, 100, 1, "🌈 RGB: включить / выключить, %");
         UI_DISPLAY("RgbLightAutoState", RgbLightAutoState, "🌈 Состояние RGB");
         UI_DISPLAY("LightSensorDiagnosticInfo", LightSensorDiagnosticInfo, "🧪 Подробная диагностика ADC");
@@ -400,6 +402,16 @@ UI_COLOR("LEDColor", LEDColor, "🎨 Цвет подсветки");
                                           {"timer", "Включение по таймеру"}}), "🚏 Режим уличного освещения", onSetUlLightChange);
     UI_DISPLAY("UlLightAutoState", UlLightAutoState, "🚏 Состояние уличного освещения");
         UI_TIMER("UlLightTimer", "⏲️ Таймер уличного освещения", UlLightTimerON, UlLightTimerOFF, noopTimerCallback);
+
+    // Освещение во дворе
+    UI_BUTTON_DEFAULT("Pow_Yard_light", Pow_Yard_light, "gray", "🏡 Включить / Отключить: освещение во дворе", 0);
+    UI_SELECT_CB("SetYardLight", SetYardLight, (std::initializer_list<UIOption>{{"off", "Освещение во дворе отключено постоянно"},
+                                             {"on", "Освещение во дворе включено постоянно"},
+                                             {"auto", "Включение по датчику освещенности (по порогам)"},
+                                             {"auto_timer_off", "Включение по датчику, отключение по таймеру"},
+                                             {"timer", "Включение по таймеру"}}), "🏡 Режим освещения во дворе", onSetYardLightChange);
+    UI_DISPLAY("YardLightAutoState", YardLightAutoState, "🏡 Состояние освещения во дворе");
+        UI_TIMER("YardLightTimer", "⏲️ Таймер освещения во дворе", YardLightTimerON, YardLightTimerOFF, noopTimerCallback);
 
     // Настройка времени
     UI_PAGE();

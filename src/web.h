@@ -353,6 +353,7 @@ inline String DaysSelect = "Sun"; // Выбор дней недели: по ум
 inline String SetLamp = "timer"; // Режим работы лампы: по умолчанию включение по таймеру
 inline String SetRGB = "timer"; // Режим управления RGB подсветкой: по умолчанию включение по таймеру
 inline String SetUlLight = "timer"; // Режим уличного освещения: по умолчанию включение по таймеру
+inline String SetYardLight = "off"; // Освещение во дворе на R8 при первом запуске безопасно выключено.
 inline String StoredAPSSID;      // Сохраненный SSID точки доступа
 inline String StoredAPPASS;      // Сохраненный пароль точки доступа
 inline String authPassword;      // Пароль для доступа к веб-интерфейсу
@@ -454,11 +455,14 @@ String LightSensorDiagnosticInfo = ""; // Подробная диагности�
 String LightThresholdHelp = "0% = темно, 100% = ярко. Для текущей схемы LDR + внешний 10 кОм к GND затемнение повышает напряжение GPIO3, поэтому шкала инверсная: примерно 2.80 В = ярко, 3.30 В = темно. Полный авто-режим включает свет ниже нижнего порога и выключает выше верхнего. Режим 'датчик -> таймер' включает по нижнему порогу только внутри окна таймера и выключает в конце этого окна.";
 String LampLightAutoState = ""; // Текущее состояние автоматики лампы бассейна по освещенности.
 String UlLightAutoState = ""; // Текущее состояние автоматики уличного освещения по освещенности.
+String YardLightAutoState = ""; // Текущее состояние автоматики освещения во дворе.
 String RgbLightAutoState = ""; // Текущее состояние автоматики RGB по освещенности.
 int LampLightOffThreshold = 75; // Лампа бассейна: нижний порог, при падении ниже него включаем.
 int LampLightOnThreshold = 85; // Лампа бассейна: верхний порог, при росте выше него выключаем.
 int UlLightOffThreshold = 75; // Уличное освещение: нижний порог включения в темноте.
 int UlLightOnThreshold = 85; // Уличное освещение: верхний порог отключения при свете.
+int YardLightOffThreshold = 75; // Двор: нижний порог включения в темноте.
+int YardLightOnThreshold = 85; // Двор: верхний порог отключения при свете.
 int RgbLightOffThreshold = 75; // RGB: нижний порог включения в темноте.
 int RgbLightOnThreshold = 85; // RGB: верхний порог отключения при свете.
 //int Lumen_Ul_percent; //Освещенность в процентах
@@ -514,11 +518,12 @@ float RoomTempOn = 3.0f;
 float RoomTempOff = 4.0f;
 bool Power_Warm_floor_heating = false;
 	
-bool Pow_Ul_light, Pow_Ul_light1; // Промывка фильтра
+bool Pow_Ul_light, Pow_Ul_light1; // Команда уличного освещения через R16.
 bool Ul_light_Time = false, Saved_Ul_light_Time; // Разрешения работы включения по времени
 bool UlLight_autosvet = false, Saved_UlLight_autosvet; // Автоматическое уличное освещение по датчику GPIO3.
 bool UlLight_sensorTimerOff = false, Saved_UlLight_sensorTimerOff; // Улица: включение по датчику, отключение по таймеру.
 String Ul_light_timeON, Ul_light_timeOFF; // Утавки времени включения
+bool Pow_Yard_light = false; // Команда освещения во дворе через физическое реле R8.
 
 
 bool Activation_Water_Level = true;
@@ -623,8 +628,8 @@ inline String DrainPitStageInfo; // Текущий этап слива в яму
 inline String CleanLogicInfo = "Промывка: реле 9 насос, реле 10 компрессор, реле 11 клапан FILTRATION, реле 12 клапан BACKWASH, реле 13 сброс песка. Последовательность: останов насоса, воздух, перевод клапанов, обратная промывка, возврат в фильтрацию, краткий сброс песка.";
 inline String PhLogicInfo = "pH: насос кислоты ACO подключен к реле 7. При pH выше верхнего предела реле включается только импульсом 5 секунд; повтор задается списком. Остановка контроля при pH ниже нижнего предела или выключенной фильтрации.";
 inline String ClLogicInfo = "CL: насос NaOCl на реле 6. Управление идет по нижнему/верхнему CL; отдельный ORP-порог в веб-настройках не нужен. Хлор подается импульсом 5 секунд, только при нормальном pH, потоке и фильтрации."; // Коротко объясняет текущую логику дозирования CL без старого ORP-порога.
-inline String RelayShortInfo = "RS485: реле 9 насос фильтрации, 6 NaOCl, 7 ACO, 14 долив, входы 1/2/3 уровни воды.";
-inline String Rs485UsageInfo = "Задействовано: R1 лампа бассейна; R2 питание WS2815; R6 насос NaOCl; R7 насос ACO; R9 насос фильтрации/слив; R10 компрессор клапанов; R11 клапан FILTRATION; R12 клапан BACKWASH; R13 сброс песка; R14 клапан долива; R15 теплый пол; R16 улица. Свободны/резерв: R3, R4, R5, R8. Входы: IN1 нижний уровень бассейна, IN2 верхний уровень бассейна, IN3 верхний уровень сливной ямы, IN4-IN16 свободны.";
+inline String RelayShortInfo = "RS485: R5 нагрев, R6 NaOCl, R7 ACO, R8 свет двора, R9 фильтрация, R14 долив, R16 улица; DI1/DI2/DI3 уровни воды.";
+inline String Rs485UsageInfo = "Задействовано: R1 лампа бассейна; R2 питание WS2815; R5 нагреватель воды; R6 насос NaOCl; R7 насос ACO; R8 освещение во дворе; R9 насос фильтрации/слив; R10 компрессор клапанов; R11 клапан FILTRATION; R12 клапан BACKWASH; R13 сброс песка; R14 клапан долива; R15 теплый пол; R16 улица. Свободны/резерв: R3, R4. Входы: DI1 нижний уровень бассейна, DI2 верхний уровень бассейна, DI3 верхний уровень сливной ямы, DI4-DI16 свободны.";
 
 inline bool poolLowerLevelLowRaw(){ // Сырой нижний датчик: 1 означает падение уровня ниже датчика.
   return WaterLevelSensorLower;
@@ -795,6 +800,7 @@ inline void normalizeLightThresholdPair(int &offThreshold, int &onThreshold) { /
 inline void normalizeLightThresholds() { // Исправляет все пороги датчика освещенности после загрузки или сохранения.
   normalizeLightThresholdPair(LampLightOffThreshold, LampLightOnThreshold);
   normalizeLightThresholdPair(UlLightOffThreshold, UlLightOnThreshold);
+  normalizeLightThresholdPair(YardLightOffThreshold, YardLightOnThreshold);
   normalizeLightThresholdPair(RgbLightOffThreshold, RgbLightOnThreshold);
 }
 
@@ -803,6 +809,8 @@ inline void persistLightThresholds() { // Сохраняет пороги авт
   saveValue<int>("LampLightOnThreshold", LampLightOnThreshold);
   saveValue<int>("UlLightOffThreshold", UlLightOffThreshold);
   saveValue<int>("UlLightOnThreshold", UlLightOnThreshold);
+  saveValue<int>("YardLightOffThreshold", YardLightOffThreshold);
+  saveValue<int>("YardLightOnThreshold", YardLightOnThreshold);
   saveValue<int>("RgbLightOffThreshold", RgbLightOffThreshold);
   saveValue<int>("RgbLightOnThreshold", RgbLightOnThreshold);
 }
@@ -820,11 +828,14 @@ inline bool applyLightThresholdSettingRequest(const String &id, const String &ra
   bool handled = true;
   if (id == "LampLightThresholdRange") handled = parseLightThresholdRange(rawValue, LampLightOffThreshold, LampLightOnThreshold);
   else if (id == "UlLightThresholdRange") handled = parseLightThresholdRange(rawValue, UlLightOffThreshold, UlLightOnThreshold);
+  else if (id == "YardLightThresholdRange") handled = parseLightThresholdRange(rawValue, YardLightOffThreshold, YardLightOnThreshold);
   else if (id == "RgbLightThresholdRange") handled = parseLightThresholdRange(rawValue, RgbLightOffThreshold, RgbLightOnThreshold);
   else if (id == "LampLightOffThreshold") LampLightOffThreshold = rawValue.toInt();
   else if (id == "LampLightOnThreshold") LampLightOnThreshold = rawValue.toInt();
   else if (id == "UlLightOffThreshold") UlLightOffThreshold = rawValue.toInt();
   else if (id == "UlLightOnThreshold") UlLightOnThreshold = rawValue.toInt();
+  else if (id == "YardLightOffThreshold") YardLightOffThreshold = rawValue.toInt();
+  else if (id == "YardLightOnThreshold") YardLightOnThreshold = rawValue.toInt();
   else if (id == "RgbLightOffThreshold") RgbLightOffThreshold = rawValue.toInt();
   else if (id == "RgbLightOnThreshold") RgbLightOnThreshold = rawValue.toInt();
   else return false;
@@ -837,6 +848,7 @@ inline bool applyLightThresholdSettingRequest(const String &id, const String &ra
 inline void applyLampControlMode(const String &rawMode);
 inline void applyRgbControlMode(const String &rawMode);
 inline void applyUlLightControlMode(const String &rawMode);
+inline void applyYardLightControlMode(const String &rawMode);
 
 inline bool applyLightModeSettingRequest(const String &id, const String &rawValue) { // Legacy-флаги переводим в единый canonical mode.
   const bool requestedState = rawValue.toInt() != 0;
@@ -940,6 +952,13 @@ inline void applyUlLightControlMode(const String &rawMode) {
   saveValue<int>("Ul_light_Time", Ul_light_Time ? 1 : 0);
   saveValue<int>("UlLight_autosvet", UlLight_autosvet ? 1 : 0);
   saveValue<int>("UlLight_sensorTimerOff", UlLight_sensorTimerOff ? 1 : 0);
+}
+
+inline void applyYardLightControlMode(const String &rawMode) {
+  SetYardLight = normalizeLightControlMode(rawMode);
+  Pow_Yard_light = SetYardLight == "on";
+  saveValue<String>("SetYardLight", SetYardLight);
+  saveButtonState("Pow_Yard_light", Pow_Yard_light ? 1 : 0);
 }
 
 inline String buildLightAutoStateText(const String &name, bool currentState, int offThreshold, int onThreshold) { // Короткий статус для popup.
@@ -1066,6 +1085,10 @@ inline void loadRs485PanelSettings() {
     const String key = rs485ManualRelayKey(relay);
     Rs485ManualRelayState[relay] = loadValue<int>(key.c_str(), 0) != 0;
   }
+  if (Rs485ManualRelayState[7]) { // R8 больше не ручной резерв: старое сохраненное ON не должно включить дворовый свет.
+    Rs485ManualRelayState[7] = false;
+    persistRs485ManualRelay(7);
+  }
 }
 
 inline bool applyRs485ConfigRequest(const String &key, const String &value) {
@@ -1112,7 +1135,7 @@ inline bool rs485RelayCommandState(uint8_t relay) {
     case 4: return Power_Heat;
     case 5: return Power_H2O2 || ManualPulse_H2O2_Active;
     case 6: return Power_ACO || ManualPulse_ACO_Active;
-    case 7: return Rs485ManualRelayState[7];
+    case 7: return Pow_Yard_light;
     case 8: return Power_Filtr;
     case 9: return AirPump || AirPumpAuto;
     case 10: return SolValveFiltration || ValveFiltrationAuto;
@@ -1136,9 +1159,11 @@ inline bool applyRs485RelayRequest(uint8_t relay, bool requestedState) {
       return true;
     case 2:
     case 3:
-    case 7:
       Rs485ManualRelayState[relay] = requestedState;
       persistRs485ManualRelay(relay);
+      return true;
+    case 7:
+      applyYardLightControlMode(requestedState ? "on" : "off");
       return true;
     case 4:
       Activation_Heat = requestedState;
@@ -1216,6 +1241,7 @@ inline void applyRs485AllOffRequest() {
   RoomTemper = false;
   Power_Warm_floor_heating = false;
   applyUlLightControlMode("off");
+  applyYardLightControlMode("off");
   for (uint8_t relay = 0; relay < 16; relay++) {
     Rs485ManualRelayState[relay] = false;
     persistRs485ManualRelay(relay);
@@ -1442,6 +1468,8 @@ inline int RgbTimerON = 20 * 60;         // Таймер RGB-подсветки:
 inline int RgbTimerOFF = 60;             // Таймер RGB-подсветки: 01:00 по умолчанию
 inline int UlLightTimerON = 20 * 60;     // Таймер уличного освещения: 20:00 по умолчанию
 inline int UlLightTimerOFF = 3 * 60;     // Таймер уличного освещения: 03:00 по умолчанию
+inline int YardLightTimerON = 20 * 60;   // Таймер освещения во дворе: 20:00 по умолчанию
+inline int YardLightTimerOFF = 3 * 60;   // Таймер освещения во дворе: 03:00 по умолчанию
 
 
 bool ColorRGB = false;    //режим ручного задания цвета
@@ -1650,6 +1678,7 @@ private:
     if(id == "LampTimer") return isOn ? 20 * 60 : 60;
     if(id == "RgbTimer") return isOn ? 20 * 60 : 60;
     if(id == "UlLightTimer") return isOn ? 20 * 60 : 3 * 60;
+    if(id == "YardLightTimer") return isOn ? 20 * 60 : 3 * 60;
     return 0;
   }
 
@@ -2055,6 +2084,10 @@ private:
       const bool active = rs485RelayDataFresh() ? ReadRelayArray[15] : Pow_Ul_light;
       return active ? String("1") : String("0");
     });
+    registerUiValueProvider("Pow_Yard_light", [](){ // Освещение во дворе подтверждается физическим readback реле R8.
+      const bool active = rs485RelayDataFresh() ? ReadRelayArray[7] : Pow_Yard_light;
+      return active ? String("1") : String("0");
+    });
     registerUiValueProvider("LightSensorLiveInfo", [](){
       if(LightSensorLiveInfo.length()) return LightSensorLiveInfo;
       return String("ADC GPIO3 еще не получил измерения.");
@@ -2102,6 +2135,30 @@ private:
         return text + "Ждет затемнение: включение при <= " + String(UlLightOffThreshold) + "%; сейчас " + String(Lumen_Ul) + "%.";
       }
       return buildLightAutoStateText("Уличное освещение", Pow_Ul_light, UlLightOffThreshold, UlLightOnThreshold);
+    });
+    registerUiValueProvider("YardLightAutoState", []() -> String {
+      if (SetYardLight == "off") return String("Освещение во дворе: постоянно выключено.");
+      if (SetYardLight == "on") return String("Освещение во дворе: постоянно включено.");
+      if (SetYardLight == "timer") {
+        int h = 0, m = 0;
+        const bool timeOk = getCurrentHourMinute(h, m);
+        UITimerEntry &timer = ui.timer("YardLightTimer");
+        const bool windowActive = timeOk && lightTimeWindowActive(static_cast<uint16_t>(h * 60 + m), timer.on, timer.off);
+        if (!timeOk) return String("Освещение во дворе: режим таймера; время недоступно, выход выключен.");
+        return String("Освещение во дворе: режим таймера; окно ") + formatMinutesToTime(timer.on) + "-" + formatMinutesToTime(timer.off) + "; сейчас " + (windowActive ? "внутри окна." : "вне окна.");
+      }
+      if (SetYardLight == "auto_timer_off") {
+        int h = 0, m = 0;
+        const bool timeOk = getCurrentHourMinute(h, m);
+        UITimerEntry &timer = ui.timer("YardLightTimer");
+        const bool windowActive = timeOk && lightTimeWindowActive(static_cast<uint16_t>(h * 60 + m), timer.on, timer.off);
+        String text = String("Освещение во дворе: режим датчик -> таймер; окно ") + formatMinutesToTime(timer.on) + "-" + formatMinutesToTime(timer.off) + ". ";
+        if (!timeOk) return text + "Время недоступно, автоматика выключит выход.";
+        if (!windowActive) return text + "Сейчас вне окна таймера, выход выключен.";
+        if (Pow_Yard_light) return text + "Включено по датчику и будет выключено в конце окна.";
+        return text + "Ждет затемнение: включение при <= " + String(YardLightOffThreshold) + "%; сейчас " + String(Lumen_Ul) + "%.";
+      }
+      return buildLightAutoStateText("Освещение во дворе", Pow_Yard_light, YardLightOffThreshold, YardLightOnThreshold);
     });
     registerUiValueProvider("RgbLightAutoState", []() -> String {
       if (SetRGB == "auto_timer_off") {
@@ -3149,7 +3206,7 @@ private:
                     "R5: нагреватель воды",
                     "R6: насос NaOCl",
                     "R7: насос ACO / кислота pH",
-                    "R8: резерв / ручное реле",
+                    "R8: освещение во дворе",
                     "R9: насос фильтрации и слив воды",
                     "R10: компрессор воздуха клапанов",
                     "R11: клапан FILTRATION",
@@ -3187,7 +3244,7 @@ private:
                           "<div class='rs485-spec-row'><strong>GPIO10</strong><span>DATA адресной ленты WS2815, 180 LED</span></div>"
                           "<div class='rs485-spec-row'><strong>GPIO14</strong><span>OneWire-шина DS18B20: температура бассейна и после нагревателя</span></div>"
                           "<div class='rs485-spec-row'><strong>GPIO18 / GPIO17</strong><span>Serial2 RS485 Modbus: RX / TX, 19200 8N1; клеммы RS485 A/B на DIN-плате</span></div>"
-                          "<div class='rs485-spec-row'><strong>RS485 реле</strong><span>R1 лампа, R2 питание WS2815, R6 NaOCl, R7 ACO/pH, R9 фильтрация/слив, R10 компрессор, R11 FILTRATION, R12 BACKWASH, R13 сброс песка, R14 долив, R15 теплый пол, R16 уличный свет</span></div>"
+                          "<div class='rs485-spec-row'><strong>RS485 реле</strong><span>R1 лампа, R2 питание WS2815, R5 нагреватель, R6 NaOCl, R7 ACO/pH, R8 свет во дворе, R9 фильтрация/слив, R10 компрессор, R11 FILTRATION, R12 BACKWASH, R13 сброс песка, R14 долив, R15 теплый пол, R16 уличный свет</span></div>"
                           "<div class='rs485-spec-row'><strong>RS485 входы</strong><span>DI1 нижний уровень бассейна, DI2 верхний уровень бассейна, DI3 верхний уровень сливной ямы, DI4-DI16 резерв</span></div>"
                           "</div></div></div></div></div>";
                   renderedCount++;
@@ -3532,10 +3589,11 @@ private:
                     "<div class='rs485-assignments'>"
                     "<div class='rs485-assignment'>R1: лампа бассейна</div>"
                     "<div class='rs485-assignment'>R2: питание RGB-ленты WS2815</div>"
-                    "<div class='rs485-assignment'>R3/R4/R8: резерв / ручное реле</div>"
+                    "<div class='rs485-assignment'>R3/R4: резерв / ручное реле</div>"
                     "<div class='rs485-assignment'>R5: нагреватель воды</div>"
                     "<div class='rs485-assignment'>R6: насос NaOCl</div>"
                     "<div class='rs485-assignment'>R7: насос ACO / кислота pH</div>"
+                    "<div class='rs485-assignment'>R8: освещение во дворе</div>"
                     "<div class='rs485-assignment'>R9: насос фильтрации и слив воды</div>"
                     "<div class='rs485-assignment'>R10: компрессор воздуха клапанов</div>"
                     "<div class='rs485-assignment'>R11: клапан FILTRATION</div>"
@@ -6104,6 +6162,7 @@ window.addEventListener('resize', ()=>{
     syncDashButton('button_Lamp', j.button_Lamp);
     syncDashButton('button_WS2815', j.button_WS2815);
     syncDashButton('Pow_Ul_light', j.Pow_Ul_light);
+    syncDashButton('Pow_Yard_light', j.Pow_Yard_light);
     syncDashButton('Power_H2O2_Button', j.Power_H2O2_Button);
     syncDashButton('Power_ACO_Button', j.Power_ACO_Button);
     syncDashButton('Power_Topping', j.Power_Topping);
@@ -6126,6 +6185,7 @@ window.addEventListener('resize', ()=>{
     if(typeof j.SetLamp !== 'undefined') updateSelectValue('SetLamp', j.SetLamp);
        if(typeof j.SetRGB !== 'undefined') updateSelectValue('SetRGB', j.SetRGB);
     if(typeof j.SetUlLight !== 'undefined') updateSelectValue('SetUlLight', j.SetUlLight);
+    if(typeof j.SetYardLight !== 'undefined') updateSelectValue('SetYardLight', j.SetYardLight);
         if(typeof j.DaysSelect !== 'undefined') updateDaysSelection('DaysSelect', j.DaysSelect);
     if(typeof j.IntInput !== 'undefined') updateInputValue('IntInput', j.IntInput);
     if(typeof j.FloatInput !== 'undefined') updateInputValue('FloatInput', j.FloatInput);
@@ -6667,6 +6727,11 @@ function setImg(x){
        }
        if(id == "Pow_Ul_light"){
           applyUlLightControlMode(state ? "on" : "off");
+          sendQueuedPersistenceResponse(r, true);
+          return;
+       }
+       if(id == "Pow_Yard_light"){
+          applyYardLightControlMode(state ? "on" : "off");
           sendQueuedPersistenceResponse(r, true);
           return;
        }

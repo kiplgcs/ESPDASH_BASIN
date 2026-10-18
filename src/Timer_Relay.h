@@ -569,6 +569,7 @@ inline void updateLightingControlOutputs(bool timeAvailable, int currentHour, in
   UITimerEntry &lampTimer = ui.timer("LampTimer");
   UITimerEntry &rgbTimer = ui.timer("RgbTimer");
   UITimerEntry &ulLightTimer = ui.timer("UlLightTimer");
+  UITimerEntry &yardLightTimer = ui.timer("YardLightTimer");
   const auto timerWindow = [&](const UITimerEntry &entry){
     return timeAvailable && checkTimeInInterval(currentHour, currentMinute, entry.on, entry.off);
   };
@@ -597,6 +598,12 @@ inline void updateLightingControlOutputs(bool timeAvailable, int currentHour, in
   else if (UlLight_sensorTimerOff) Pow_Ul_light = applyLightSensorOnTimerOff(Pow_Ul_light, UlLightOffThreshold, timerWindow(ulLightTimer));
   else if (UlLight_autosvet) Pow_Ul_light = applyLightAutoHysteresis(Pow_Ul_light, UlLightOffThreshold, UlLightOnThreshold);
   else if (Ul_light_Time) Pow_Ul_light = timerWindow(ulLightTimer);
+
+  if (SetYardLight == "off") Pow_Yard_light = false;
+  else if (SetYardLight == "on") Pow_Yard_light = true;
+  else if (SetYardLight == "auto") Pow_Yard_light = applyLightAutoHysteresis(Pow_Yard_light, YardLightOffThreshold, YardLightOnThreshold);
+  else if (SetYardLight == "timer") Pow_Yard_light = timerWindow(yardLightTimer);
+  else if (SetYardLight == "auto_timer_off") Pow_Yard_light = applyLightSensorOnTimerOff(Pow_Yard_light, YardLightOffThreshold, timerWindow(yardLightTimer));
 }
 
 void TimerControlRelay(int interval) {
@@ -1175,7 +1182,7 @@ if (AktualReadInput) {
   queueRelayWriteIfNeeded(1, Pow_WS2815, relayWritesThisPass); // Реле 2: питание RGB-ленты WS2815.
   queueRelayWriteIfNeeded(2, Rs485ManualRelayState[2], relayWritesThisPass); // Реле 3: свободное ручное реле RS485.
   queueRelayWriteIfNeeded(3, Rs485ManualRelayState[3], relayWritesThisPass); // Реле 4: свободное ручное реле RS485.
-  queueRelayWriteIfNeeded(7, Rs485ManualRelayState[7], relayWritesThisPass); // Реле 8: свободное ручное реле RS485.
+  queueRelayWriteIfNeeded(7, Pow_Yard_light, relayWritesThisPass); // Реле 8: освещение во дворе.
   queueRelayWriteIfNeeded(8, Power_Filtr, relayWritesThisPass); // Реле 9: насос фильтрации и слив воды.
 
   const bool heatFiltrationFlowAllowed = FiltrationTimerActive && (Power_Filtr || ReadRelayArray[8]); // Нагрев разрешен только при работе насоса по таймеру фильтрации.

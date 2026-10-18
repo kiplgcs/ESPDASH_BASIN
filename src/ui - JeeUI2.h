@@ -991,6 +991,10 @@ inline void onSetUlLightChange(const String &value){ // обработчик и�
     applyUlLightControlMode(value);
 }
 
+inline void onSetYardLightChange(const String &value){ // обработчик изменения режима освещения во дворе
+    applyYardLightControlMode(value);
+}
+
 inline void onLedColorModeChange(const String &value){ // обработчик выбора режима цвета LED
     ColorRGB = value.equalsIgnoreCase("manual"); // включает ручной режим выбора цвета
 }
