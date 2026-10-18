@@ -16,6 +16,9 @@ constexpr size_t kMaxDs18Sensors = 16; // Служебная строка лог
 inline DeviceAddress ds18Found[kMaxDs18Sensors]; // Служебная строка логики DS18B20.
 inline int ds18FoundCount = 0; // Служебная строка логики DS18B20.
 
+const DeviceAddress kLegacyPoolSensor = {0x28, 0xff, 0x64, 0x1e, 0x83, 0x7a, 0x05, 0x83};
+const DeviceAddress kLegacyHeaterSensor = {0x28, 0xff, 0x64, 0x1e, 0x83, 0x61, 0xbe, 0x5e};
+
 #define ONE_WIRE_BUS 14
 
 OneWire oneWire(ONE_WIRE_BUS); // Служебная строка логики DS18B20.
@@ -167,6 +170,81 @@ inline bool assignDs18SensorFromIndex(DeviceAddress &target, int index, String &
   return true; // Возвращаем рассчитанный результат вызывающему коду.
 }
 
+inline bool ds18AddressEquals(const DeviceAddress &left, const DeviceAddress &right) {
+  return memcmp(left, right, sizeof(DeviceAddress)) == 0;
+}
+
+inline int findScannedDs18Address(const DeviceAddress &address) {
+  for (int index = 0; index < ds18FoundCount; ++index) {
+    if (ds18AddressEquals(ds18Found[index], address)) return index;
+  }
+  return -1;
+}
+
+inline void migrateLegacyDs18Bindings(int &sensor0Index, int &sensor1Index,
+                                      String &sensor0Label, String &sensor1Label) {
+  const bool poolNeedsBinding = deviceAddressIsZero(sensor0) && sensor0Index != -1;
+  const bool heaterNeedsBinding = deviceAddressIsZero(sensor1) && sensor1Index != -1;
+  if (!poolNeedsBinding && !heaterNeedsBinding) return;
+
+  const String scanResult = scanDs18Sensors();
+  if (ds18FoundCount <= 0) {
+    Ds18ScanInfo = scanResult;
+    return;
+  }
+
+  int poolIndex = findScannedDs18Address(sensor0);
+  int heaterIndex = findScannedDs18Address(sensor1);
+  if (poolNeedsBinding) {
+    if (sensor0Index >= 0 && sensor0Index < ds18FoundCount) poolIndex = sensor0Index;
+    else poolIndex = findScannedDs18Address(kLegacyPoolSensor);
+    if (poolIndex < 0) poolIndex = 0;
+    if (poolIndex == heaterIndex) {
+      poolIndex = -1;
+      for (int candidate = 0; candidate < ds18FoundCount; ++candidate) {
+        if (candidate != heaterIndex) {
+          poolIndex = candidate;
+          break;
+        }
+      }
+    }
+    if (poolIndex >= 0) {
+      String bindingInfo;
+      if (assignDs18SensorFromIndex(sensor0, poolIndex, sensor0Label, kDs18Sensor0StorageKey, bindingInfo)) {
+        sensor0Index = poolIndex;
+        saveValue<int>(kDs18Sensor0IndexStorageKey, sensor0Index);
+      }
+    }
+  }
+
+  if (heaterNeedsBinding) {
+    if (sensor1Index >= 0 && sensor1Index < ds18FoundCount && sensor1Index != poolIndex) heaterIndex = sensor1Index;
+    else heaterIndex = findScannedDs18Address(kLegacyHeaterSensor);
+    if (heaterIndex == poolIndex) heaterIndex = -1;
+    if (heaterIndex < 0) {
+      for (int candidate = 0; candidate < ds18FoundCount; ++candidate) {
+        if (candidate != poolIndex) {
+          heaterIndex = candidate;
+          break;
+        }
+      }
+    }
+    if (heaterIndex >= 0) {
+      String bindingInfo;
+      if (assignDs18SensorFromIndex(sensor1, heaterIndex, sensor1Label, kDs18Sensor1StorageKey, bindingInfo)) {
+        sensor1Index = heaterIndex;
+        saveValue<int>(kDs18Sensor1IndexStorageKey, sensor1Index);
+      }
+    }
+  }
+
+  if (DS1Assigned) sensors.setResolution(sensor0, 12);
+  if (DS2Assigned) sensors.setResolution(sensor1, 12);
+  sensors.requestTemperatures();
+  Ds18ScanInfo = "Автопривязка после обновления завершена.\n" + scanResult;
+  Serial.println("[DS18] Legacy bindings migrated: pool=" + sensor0Label + ", heater=" + sensor1Label);
+}
+
 void setup_ds18(String &sensor0Label, String &sensor1Label) { // Начало функции инициализации/чтения DS18B20.
   sensors.begin(); // Выполняем действие библиотеки DallasTemperature для DS18B20.
 
@@ -205,9 +283,10 @@ inline void onDs18Sensor1Select(const int &value) { // Обрабатываем 
 }
 
 inline void setupDs18Bindings() { // Загружаем и применяем UI-связки DS18B20 при старте.
-  setup_ds18(Ds18Sensor0Address, Ds18Sensor1Address); // Загружаем привязанные адреса DS18B20 из NVS при старте.
   Ds18Sensor0Index = loadValue<int>(kDs18Sensor0IndexStorageKey, Ds18Sensor0Index); // Поднимаем из NVS последний индекс для sensor0.
   Ds18Sensor1Index = loadValue<int>(kDs18Sensor1IndexStorageKey, Ds18Sensor1Index); // Поднимаем из NVS последний индекс для sensor1.
+  setup_ds18(Ds18Sensor0Address, Ds18Sensor1Address); // Загружаем привязанные адреса DS18B20 из NVS при старте.
+  migrateLegacyDs18Bindings(Ds18Sensor0Index, Ds18Sensor1Index, Ds18Sensor0Address, Ds18Sensor1Address);
 }
 
 inline void handleDs18ScanButton() { // Отрабатываем нажатие кнопки ручного поиска датчиков.

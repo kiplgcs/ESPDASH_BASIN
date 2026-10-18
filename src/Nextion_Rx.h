@@ -43,6 +43,26 @@ constexpr uint8_t NX_ASYNC_GROUP_DISPENSERS = 1;
 constexpr uint8_t NX_ASYNC_GROUP_FILTR_SWITCHES = 2;
 constexpr uint8_t NX_ASYNC_GROUP_DISPENSERS_CONTROLS = 3;
 constexpr uint8_t NX_ASYNC_GROUP_GMT_OFFSET = 4;
+constexpr uint8_t NX_ASYNC_GROUP_RTC_SNAPSHOT = 5;
+constexpr uint8_t NX_ASYNC_GROUP_LAMP_ON = 6;
+constexpr uint8_t NX_ASYNC_GROUP_LAMP_OFF = 7;
+constexpr uint8_t NX_ASYNC_GROUP_LAMP_CONTROLS = 8;
+constexpr uint8_t NX_ASYNC_GROUP_RGB_ON = 9;
+constexpr uint8_t NX_ASYNC_GROUP_RGB_OFF = 10;
+constexpr uint8_t NX_ASYNC_GROUP_RGB_CONTROLS = 11;
+constexpr uint8_t NX_ASYNC_GROUP_FILTR1_ON = 12;
+constexpr uint8_t NX_ASYNC_GROUP_FILTR1_OFF = 13;
+constexpr uint8_t NX_ASYNC_GROUP_FILTR2_ON = 14;
+constexpr uint8_t NX_ASYNC_GROUP_FILTR2_OFF = 15;
+constexpr uint8_t NX_ASYNC_GROUP_FILTR3_ON = 16;
+constexpr uint8_t NX_ASYNC_GROUP_FILTR3_OFF = 17;
+constexpr uint8_t NX_ASYNC_GROUP_CLEAN_ON = 18;
+constexpr uint8_t NX_ASYNC_GROUP_CLEAN_OFF = 19;
+constexpr uint8_t NX_ASYNC_GROUP_CLEAN_CONTROLS = 20;
+constexpr uint8_t NX_ASYNC_GROUP_CLEAN_DAYS = 21;
+constexpr uint8_t NX_ASYNC_GROUP_HEAT_SETPOINT = 22;
+constexpr uint8_t NX_ASYNC_GROUP_HEAT_CONTROL = 23;
+constexpr uint8_t NX_ASYNC_GROUP_WATER_CONTROLS = 24;
 constexpr uint8_t NX_DISPENSERS_CONTROL_SOURCE_ANY = 255;
 
 struct NextionAsyncNumberRead {
@@ -72,8 +92,23 @@ uint8_t NxDispensersControlPollSourceTarget = NX_DISPENSERS_CONTROL_SOURCE_ANY;
 unsigned long NxGmtOffsetPollRequestUntil = 0;
 unsigned long NxNextGmtOffsetPollAt = 0;
 
+struct NextionPageReadBatch {
+  uint8_t group = NX_ASYNC_GROUP_NONE;
+  uint8_t index = 0;
+  uint8_t count = 0;
+  uint32_t values[7] = {0, 0, 0, 0, 0, 0, 0};
+  bool valid[7] = {false, false, false, false, false, false, false};
+  unsigned long nextReadAt = 0;
+};
+
+NextionPageReadBatch NxPageReadBatch;
+
 inline bool nextionAsyncReadActive() {
   return NxAsyncNumberReadState.active;
+}
+
+inline bool nextionPageReadBatchPending() {
+  return NxPageReadBatch.group != NX_ASYNC_GROUP_NONE;
 }
 
 inline void markNextionActivity() { // Любой trigger/page от Nextion считаем касанием или активностью пользователя.
@@ -288,6 +323,204 @@ inline void applyNextionGmtOffsetAsyncValue(uint32_t value) {
   }
 }
 
+inline uint8_t nextionPageBatchCount(uint8_t group) {
+  switch (group) {
+    case NX_ASYNC_GROUP_RTC_SNAPSHOT: return 7;
+    case NX_ASYNC_GROUP_LAMP_CONTROLS:
+    case NX_ASYNC_GROUP_RGB_CONTROLS:
+    case NX_ASYNC_GROUP_WATER_CONTROLS: return 3;
+    case NX_ASYNC_GROUP_CLEAN_CONTROLS: return 2;
+    case NX_ASYNC_GROUP_CLEAN_DAYS: return 7;
+    case NX_ASYNC_GROUP_HEAT_SETPOINT:
+    case NX_ASYNC_GROUP_HEAT_CONTROL: return 1;
+    default: return 2; // All timer on/off groups contain hour and minute.
+  }
+}
+
+inline void requestNextionPageReadBatch(uint8_t group) {
+  NxPageReadBatch.group = group;
+  NxPageReadBatch.index = 0;
+  NxPageReadBatch.count = nextionPageBatchCount(group);
+  NxPageReadBatch.nextReadAt = millis();
+  for (uint8_t i = 0; i < 7; ++i) {
+    NxPageReadBatch.values[i] = 0;
+    NxPageReadBatch.valid[i] = false;
+  }
+}
+
+inline void requestNextionRtcSnapshotPoll() {
+  if (!nextionPageReadBatchPending()) requestNextionPageReadBatch(NX_ASYNC_GROUP_RTC_SNAPSHOT);
+}
+
+inline const char* nextionPageBatchComponent(uint8_t group, uint8_t target) {
+  static const char* rtc[] = {"rtc5", "rtc4", "rtc3", "rtc2", "rtc1", "rtc0", "rtc6"};
+  static const char* lampOn[] = {"set_lamp.n0.val", "set_lamp.n1.val"};
+  static const char* lampOff[] = {"set_lamp.n2.val", "set_lamp.n3.val"};
+  static const char* lampControls[] = {"set_lamp.sw3.val", "set_lamp.sw0.val", "set_lamp.sw1.val"};
+  static const char* rgbOn[] = {"set_RGB.n0.val", "set_RGB.n1.val"};
+  static const char* rgbOff[] = {"set_RGB.n2.val", "set_RGB.n3.val"};
+  static const char* rgbControls[] = {"set_RGB.sw3.val", "set_RGB.sw0.val", "set_RGB.sw2.val"};
+  static const char* filtr1On[] = {"set_filtr.n0.val", "set_filtr.n1.val"};
+  static const char* filtr1Off[] = {"set_filtr.n2.val", "set_filtr.n3.val"};
+  static const char* filtr2On[] = {"set_filtr.n4.val", "set_filtr.n5.val"};
+  static const char* filtr2Off[] = {"set_filtr.n6.val", "set_filtr.n7.val"};
+  static const char* filtr3On[] = {"set_filtr.n8.val", "set_filtr.n9.val"};
+  static const char* filtr3Off[] = {"set_filtr.n10.val", "set_filtr.n11.val"};
+  static const char* cleanOn[] = {"Clean.n0.val", "Clean.n1.val"};
+  static const char* cleanOff[] = {"Clean.n2.val", "Clean.n3.val"};
+  static const char* cleanControls[] = {"Clean.sw0.val", "Clean.sw1.val"};
+  static const char* cleanDays[] = {"Clean.bt0.val", "Clean.bt1.val", "Clean.bt2.val", "Clean.bt3.val", "Clean.bt4.val", "Clean.bt5.val", "Clean.bt6.val"};
+  static const char* heatSetpoint[] = {"heat.h0.val"};
+  static const char* heatControl[] = {"heat.sw0.val"};
+  static const char* waterControls[] = {"set_topping.sw0.val", "set_topping.sw1.val", "set_topping.sw2.val"};
+  const char* const* components = nullptr;
+  switch (group) {
+    case NX_ASYNC_GROUP_RTC_SNAPSHOT: components = rtc; break;
+    case NX_ASYNC_GROUP_LAMP_ON: components = lampOn; break;
+    case NX_ASYNC_GROUP_LAMP_OFF: components = lampOff; break;
+    case NX_ASYNC_GROUP_LAMP_CONTROLS: components = lampControls; break;
+    case NX_ASYNC_GROUP_RGB_ON: components = rgbOn; break;
+    case NX_ASYNC_GROUP_RGB_OFF: components = rgbOff; break;
+    case NX_ASYNC_GROUP_RGB_CONTROLS: components = rgbControls; break;
+    case NX_ASYNC_GROUP_FILTR1_ON: components = filtr1On; break;
+    case NX_ASYNC_GROUP_FILTR1_OFF: components = filtr1Off; break;
+    case NX_ASYNC_GROUP_FILTR2_ON: components = filtr2On; break;
+    case NX_ASYNC_GROUP_FILTR2_OFF: components = filtr2Off; break;
+    case NX_ASYNC_GROUP_FILTR3_ON: components = filtr3On; break;
+    case NX_ASYNC_GROUP_FILTR3_OFF: components = filtr3Off; break;
+    case NX_ASYNC_GROUP_CLEAN_ON: components = cleanOn; break;
+    case NX_ASYNC_GROUP_CLEAN_OFF: components = cleanOff; break;
+    case NX_ASYNC_GROUP_CLEAN_CONTROLS: components = cleanControls; break;
+    case NX_ASYNC_GROUP_CLEAN_DAYS: components = cleanDays; break;
+    case NX_ASYNC_GROUP_HEAT_SETPOINT: components = heatSetpoint; break;
+    case NX_ASYNC_GROUP_HEAT_CONTROL: components = heatControl; break;
+    case NX_ASYNC_GROUP_WATER_CONTROLS: components = waterControls; break;
+    default: return nullptr;
+  }
+  return target < nextionPageBatchCount(group) ? components[target] : nullptr;
+}
+
+inline bool nextionPageBatchAllValid(uint8_t count) {
+  for (uint8_t i = 0; i < count; ++i) {
+    if (!NxPageReadBatch.valid[i]) return false;
+  }
+  return true;
+}
+
+inline uint16_t nextionBatchMinutes() {
+  const uint32_t hoursValue = NxPageReadBatch.values[0] > 23 ? 23 : NxPageReadBatch.values[0];
+  const uint32_t minutesValue = NxPageReadBatch.values[1] > 59 ? 59 : NxPageReadBatch.values[1];
+  return static_cast<uint16_t>(hoursValue * 60U + minutesValue);
+}
+
+inline void applyNextionPageBatchAsyncValue(uint8_t group, uint8_t target, uint32_t value) {
+  if (group != NxPageReadBatch.group || target >= NxPageReadBatch.count || target >= 7) return;
+  NxPageReadBatch.values[target] = value;
+  NxPageReadBatch.valid[target] = true;
+  const bool finalResponse = NxPageReadBatch.index >= NxPageReadBatch.count && target + 1 >= NxPageReadBatch.count;
+  if (!nextionPageBatchAllValid(NxPageReadBatch.count)) {
+    if (finalResponse) NxPageReadBatch.group = NX_ASYNC_GROUP_NONE;
+    return;
+  }
+
+  if (group == NX_ASYNC_GROUP_RTC_SNAPSHOT) {
+    applyNextionRtcSnapshot(NxPageReadBatch.values);
+  } else if (group == NX_ASYNC_GROUP_LAMP_ON) {
+    const uint16_t timerValue = nextionBatchMinutes();
+    ui.setTimerMinutes("LampTimer", timerValue, ui.timer("LampTimer").off);
+    Saved_Lamp_timeON1 = timerValue;
+  } else if (group == NX_ASYNC_GROUP_LAMP_OFF) {
+    const uint16_t timerValue = nextionBatchMinutes();
+    ui.setTimerMinutes("LampTimer", ui.timer("LampTimer").on, timerValue);
+    Saved_Lamp_timeOFF1 = timerValue;
+  } else if (group == NX_ASYNC_GROUP_LAMP_CONTROLS) {
+    const bool nextLamp = NxPageReadBatch.values[0] != 0;
+    const bool nextTimer = NxPageReadBatch.values[1] != 0;
+    const bool nextAuto = NxPageReadBatch.values[2] != 0;
+    const bool timerChanged = nextTimer != Saved_Power_Time1;
+    const bool autoChanged = nextAuto != Saved_Lamp_autosvet;
+    String mode;
+    if (nextTimer && nextAuto) mode = autoChanged && !timerChanged ? "auto" : "timer";
+    else mode = nextTimer ? "timer" : (nextAuto ? "auto" : (nextLamp ? "on" : "off"));
+    applyLampControlMode(mode);
+  } else if (group == NX_ASYNC_GROUP_RGB_ON) {
+    const uint16_t timerValue = nextionBatchMinutes();
+    ui.setTimerMinutes("RgbTimer", timerValue, ui.timer("RgbTimer").off);
+    Saved_timeON_WS2815 = timerValue;
+  } else if (group == NX_ASYNC_GROUP_RGB_OFF) {
+    const uint16_t timerValue = nextionBatchMinutes();
+    ui.setTimerMinutes("RgbTimer", ui.timer("RgbTimer").on, timerValue);
+    Saved_timeOFF_WS2815 = timerValue;
+  } else if (group == NX_ASYNC_GROUP_RGB_CONTROLS) {
+    const bool nextPower = NxPageReadBatch.values[0] != 0;
+    const bool nextTimer = NxPageReadBatch.values[1] != 0;
+    const bool nextAuto = NxPageReadBatch.values[2] != 0;
+    const bool timerChanged = nextTimer != Saved_WS2815_Time1;
+    const bool autoChanged = nextAuto != Saved_Pow_WS2815_autosvet;
+    String mode;
+    if (nextTimer && nextAuto) mode = autoChanged && !timerChanged ? "auto" : "timer";
+    else mode = nextTimer ? "timer" : (nextAuto ? "auto" : (nextPower ? "on" : "off"));
+    applyRgbControlMode(mode);
+  } else if (group >= NX_ASYNC_GROUP_FILTR1_ON && group <= NX_ASYNC_GROUP_FILTR3_OFF) {
+    const uint16_t timerValue = nextionBatchMinutes();
+    const uint8_t timerNumber = static_cast<uint8_t>((group - NX_ASYNC_GROUP_FILTR1_ON) / 2U) + 1U;
+    const bool isOnValue = ((group - NX_ASYNC_GROUP_FILTR1_ON) % 2U) == 0;
+    const String timerName = "FiltrTimer" + String(timerNumber);
+    UITimerEntry &timer = ui.timer(timerName);
+    ui.setTimerMinutes(timerName, isOnValue ? timerValue : timer.on, isOnValue ? timer.off : timerValue);
+    if (group == NX_ASYNC_GROUP_FILTR1_ON) Saved_Filtr_timeON1 = timerValue;
+    else if (group == NX_ASYNC_GROUP_FILTR1_OFF) Saved_Filtr_timeOFF1 = timerValue;
+    else if (group == NX_ASYNC_GROUP_FILTR2_ON) Saved_Filtr_timeON2 = timerValue;
+    else if (group == NX_ASYNC_GROUP_FILTR2_OFF) Saved_Filtr_timeOFF2 = timerValue;
+    else if (group == NX_ASYNC_GROUP_FILTR3_ON) Saved_Filtr_timeON3 = timerValue;
+    else Saved_Filtr_timeOFF3 = timerValue;
+  } else if (group == NX_ASYNC_GROUP_CLEAN_ON) {
+    const uint16_t timerValue = nextionBatchMinutes();
+    ui.setTimerMinutes("CleanTimer1", timerValue, ui.timer("CleanTimer1").off);
+    Saved_Clean_timeON1 = timerValue;
+  } else if (group == NX_ASYNC_GROUP_CLEAN_OFF) {
+    const uint16_t timerValue = nextionBatchMinutes();
+    ui.setTimerMinutes("CleanTimer1", ui.timer("CleanTimer1").on, timerValue);
+    Saved_Clean_timeOFF1 = timerValue;
+  } else if (group == NX_ASYNC_GROUP_CLEAN_CONTROLS) {
+    Saved_Clean_Time1 = Clean_Time1 = NxPageReadBatch.values[0] != 0;
+    Power_Clean1 = Power_Clean = NxPageReadBatch.values[1] != 0;
+    saveValue<int>("Clean_Time1", Clean_Time1 ? 1 : 0);
+    saveValue<int>("Power_Clean", Power_Clean ? 1 : 0);
+  } else if (group == NX_ASYNC_GROUP_CLEAN_DAYS) {
+    Saved_chk1 = chk1 = NxPageReadBatch.values[0] != 0;
+    Saved_chk2 = chk2 = NxPageReadBatch.values[1] != 0;
+    Saved_chk3 = chk3 = NxPageReadBatch.values[2] != 0;
+    Saved_chk4 = chk4 = NxPageReadBatch.values[3] != 0;
+    Saved_chk5 = chk5 = NxPageReadBatch.values[4] != 0;
+    Saved_chk6 = chk6 = NxPageReadBatch.values[5] != 0;
+    Saved_chk7 = chk7 = NxPageReadBatch.values[6] != 0;
+    syncDaysSelectionFromClean();
+    saveValue<String>("DaysSelect", DaysSelect);
+  } else if (group == NX_ASYNC_GROUP_HEAT_SETPOINT) {
+    const int setpoint = static_cast<int>(NxPageReadBatch.values[0]);
+    if (setpoint >= 0 && setpoint < 31) {
+      Sider_heat1 = Sider_heat = setpoint;
+      saveValue<int>("Sider_heat", Sider_heat);
+    }
+  } else if (group == NX_ASYNC_GROUP_HEAT_CONTROL) {
+    Activation_Heat1 = Activation_Heat = NxPageReadBatch.values[0] != 0;
+    saveValue<int>("Activation_Heat", Activation_Heat ? 1 : 0);
+  } else if (group == NX_ASYNC_GROUP_WATER_CONTROLS) {
+    const bool nextLevelControl = NxPageReadBatch.values[0] != 0;
+    const bool nextDrain = NxPageReadBatch.values[1] != 0;
+    const bool nextTopping = NxPageReadBatch.values[2] != 0;
+    if (nextDrain) applyWaterControlRequest("Power_Drain", true);
+    else {
+      applyWaterControlRequest("Power_Drain", false);
+      applyWaterControlRequest("Activation_Water_Level", nextLevelControl);
+      applyWaterControlRequest("Power_Topping", nextTopping);
+    }
+  }
+
+  if (finalResponse) NxPageReadBatch.group = NX_ASYNC_GROUP_NONE;
+}
+
 inline void beginNextionAsyncNumberRead(const char* component, uint8_t target, uint8_t group = NX_ASYNC_GROUP_DISPENSERS) {
   if (NxAsyncNumberReadState.active || MySerial.available() > 0) return;
   NxAsyncNumberReadState.active = true;
@@ -343,6 +576,8 @@ inline bool processNextionAsyncNumberByte() {
           applyNextionDispensersControlAsyncValue(target, readValue);
         } else if (group == NX_ASYNC_GROUP_GMT_OFFSET) {
           applyNextionGmtOffsetAsyncValue(readValue);
+        } else if (group >= NX_ASYNC_GROUP_RTC_SNAPSHOT && group <= NX_ASYNC_GROUP_WATER_CONTROLS) {
+          applyNextionPageBatchAsyncValue(group, target, readValue);
         }
       }
     } else {
@@ -444,6 +679,26 @@ inline void pollNextionGmtOffsetAsync() {
   NxNextGmtOffsetPollAt = millis() + 500UL; // Два одинаковых чтения подряд подтвердят смену часового пояса.
 }
 
+inline void pollNextionPageReadBatchAsync() {
+  if (!nextionPageReadBatchPending() || NxAsyncNumberReadState.active || MySerial.available() > 0) return;
+  if (static_cast<long>(millis() - NxPageReadBatch.nextReadAt) < 0) return;
+  if (NxPageReadBatch.index >= NxPageReadBatch.count) {
+    NxPageReadBatch.group = NX_ASYNC_GROUP_NONE; // Последний ответ не пришел: освобождаем очередь после timeout state machine.
+    return;
+  }
+  const uint8_t target = NxPageReadBatch.index;
+  const char* component = nextionPageBatchComponent(NxPageReadBatch.group, target);
+  if (!component) {
+    NxPageReadBatch.group = NX_ASYNC_GROUP_NONE;
+    return;
+  }
+  beginNextionAsyncNumberRead(component, target, NxPageReadBatch.group);
+  if (NxAsyncNumberReadState.active) {
+    NxPageReadBatch.index++;
+    NxPageReadBatch.nextReadAt = millis() + 25UL;
+  }
+}
+
 // void ActivUARTInterrupt() {//Прерывание по Rx для получения данных от Nextion монитора - отключено потому что и так работает все хорошо.
 //   myNex.NextionListen(); // Обработка данных при прерывании
 // }
@@ -463,6 +718,7 @@ void setup_Nextion(){
   Nx_dim_id = NEXTION_DIM_ACTIVE; // Синхронизируем локальную переменную яркости с отправленной командой.
   NextionLastActivityMs = millis(); // Старт ESP считаем активностью, чтобы затемнение началось только через 5 минут.
   NextionScreenDimmed = false; // После старта экран не считается приглушенным.
+  requestNextionRtcSnapshotPoll(); // Первое чтение RTC запускаем пошагово сразу после старта, без серии blocking readNumber().
   //triggerRestartNextion = true; //Флаг чтения всех необходимых переменных из Nextion, после перезагрузки контроллера.
 
   //Прерываем по пину  RX порта для выполнения функции получения данных для монитора Nextion
@@ -573,7 +829,7 @@ void read_lamp_sw0_sw1_sw2(){
     applyLampControlMode(requestedLampMode); // Nextion использует ту же взаимоисключающую логику, что Web/MQTT/RS485.
 
   }
-void trigger4(){ read_lamp_sw0_sw1_sw2();}
+void trigger4(){ requestNextionPageReadBatch(NX_ASYNC_GROUP_LAMP_CONTROLS); }
 
 
 // //printh 23 02 54 02  - "set_lamp" Присвоить n0 / n1 время включенния подсветки
@@ -593,7 +849,7 @@ void read_lamp_n0_n1(){
     Saved_Lamp_timeON1 = minutes;
     // jee.var("Lamp_timeON1", Lamp_timeON1);
 }
-void trigger2(){read_lamp_n0_n1();}
+void trigger2(){ requestNextionPageReadBatch(NX_ASYNC_GROUP_LAMP_ON); }
 
 // //printh 23 02 54 03 - "set_lamp" Присвоить n2 / n3 время отключения подсветки
 // void read_lamp_n2_n3(){
@@ -609,7 +865,7 @@ void read_lamp_n2_n3(){
     Saved_Lamp_timeOFF1 = minutes;
     // jee.var("Lamp_timeOFF1", Lamp_timeOFF1);
 }
-void trigger3(){read_lamp_n2_n3();}
+void trigger3(){ requestNextionPageReadBatch(NX_ASYNC_GROUP_LAMP_OFF); }
 
 // /////////////////////////************* page set_RGB  **************/////////////////////////////
 // ////////////////////////************* page set_RGB  **************//////////////////////////////
@@ -631,7 +887,7 @@ void read_RGB_n0_n1(){
     Saved_timeON_WS2815 = minutes;
     // jee.var("timeON_WS2815", timeON_WS2815);
 }
-void trigger5(){read_RGB_n0_n1();}
+void trigger5(){ requestNextionPageReadBatch(NX_ASYNC_GROUP_RGB_ON); }
 
 // //printh 23 02 54 06 - Присвоить n2 / n3 время отключения RGB ленты
 // void read_RGB_n2_n3(){
@@ -647,7 +903,7 @@ void read_RGB_n2_n3(){
     Saved_timeOFF_WS2815 = minutes;
     // jee.var("timeOFF_WS2815", timeOFF_WS2815);
 }
-void trigger6(){read_RGB_n2_n3();}
+void trigger6(){ requestNextionPageReadBatch(NX_ASYNC_GROUP_RGB_OFF); }
 
 // //printh 23 02 54 07 - "set-RGB" Присвоить все кнопки подсветки RGB ленты
 // void read_RGB_sw0_sw2_sw3(){
@@ -692,7 +948,7 @@ void read_RGB_sw0_sw2_sw3(){
 // }
 // void trigger7(){read_RGB_sw0_sw2_sw3();}
 }
-void trigger7(){read_RGB_sw0_sw2_sw3();}
+void trigger7(){ requestNextionPageReadBatch(NX_ASYNC_GROUP_RGB_CONTROLS); }
 
 // /////////////////////////************* page set_filtr **************/////////////////////////////
 // ////////////////////////************* page set_filtr **************//////////////////////////////
@@ -724,7 +980,7 @@ void read_filtr_n0_n1(){
     ui.setTimerMinutes("FiltrTimer1", minutes, ui.timer("FiltrTimer1").off);
     Saved_Filtr_timeON1 = minutes;
 }
-void trigger8(){read_filtr_n0_n1();}
+void trigger8(){ requestNextionPageReadBatch(NX_ASYNC_GROUP_FILTR1_ON); }
 
 
 // //printh 23 02 54 0A - "set-filtr" Присвоить n4 / n5 время вкл. по таймеру №2
@@ -742,7 +998,7 @@ void read_filtr_n2_n3(){
     ui.setTimerMinutes("FiltrTimer1", ui.timer("FiltrTimer1").on, minutes);
     Saved_Filtr_timeOFF1 = minutes;
 }
-void trigger9(){read_filtr_n2_n3();}
+void trigger9(){ requestNextionPageReadBatch(NX_ASYNC_GROUP_FILTR1_OFF); }
 
 // //printh 23 02 54 0B - "set-filtr" Присвоить n6 / n7 время откл. по таймеру №2
 // void read_filtr_n6_n7(){
@@ -759,7 +1015,7 @@ void read_filtr_n4_n5(){
     ui.setTimerMinutes("FiltrTimer2", minutes, ui.timer("FiltrTimer2").off);
     Saved_Filtr_timeON2 = minutes;
 }
-void trigger10(){read_filtr_n4_n5();}
+void trigger10(){ requestNextionPageReadBatch(NX_ASYNC_GROUP_FILTR2_ON); }
 
 // //printh 23 02 54 0C - "set-filtr" Присвоить n8 / n9 время вкл. по таймеру №3
 // void read_filtr_n8_n9(){
@@ -784,7 +1040,7 @@ void read_filtr_n6_n7(){
     ui.setTimerMinutes("FiltrTimer2", ui.timer("FiltrTimer2").on, minutes);
     Saved_Filtr_timeOFF2 = minutes;
 }
-void trigger11(){read_filtr_n6_n7();}
+void trigger11(){ requestNextionPageReadBatch(NX_ASYNC_GROUP_FILTR2_OFF); }
 
 // //printh 23 02 54 0E - "set-filtr" Присвоить все кнопки SW0, SW1, SW2
 // void read_filtr_sw0_sw1_sw2(){
@@ -798,7 +1054,7 @@ void read_filtr_n8_n9(){
     ui.setTimerMinutes("FiltrTimer3", minutes, ui.timer("FiltrTimer3").off);
     Saved_Filtr_timeON3 = minutes;
 }
-void trigger12(){read_filtr_n8_n9();}
+void trigger12(){ requestNextionPageReadBatch(NX_ASYNC_GROUP_FILTR3_ON); }
 
 //     Saved_Filtr_Time2=Filtr_Time2 = myNex.readNumber("set_filtr.sw2.val");
 //     jee.var("Filtr_Time2", Filtr_Time2 ? "true" : "false"); 
@@ -810,7 +1066,7 @@ void read_filtr_n10_n11(){
     ui.setTimerMinutes("FiltrTimer3", ui.timer("FiltrTimer3").on, minutes);
     Saved_Filtr_timeOFF3 = minutes;
 }
-void trigger13(){read_filtr_n10_n11();}
+void trigger13(){ requestNextionPageReadBatch(NX_ASYNC_GROUP_FILTR3_OFF); }
 
 //     Saved_Filtr_Time3=Filtr_Time3 = myNex.readNumber("set_filtr.sw1.val");
 //     jee.var("Filtr_Time3", Filtr_Time3 ? "true" : "false"); 
@@ -843,7 +1099,7 @@ void read_Clean_n0_n1(){
     ui.setTimerMinutes("CleanTimer1", minutes, ui.timer("CleanTimer1").off);
     Saved_Clean_timeON1 = minutes;
 }
-void trigger15(){read_Clean_n0_n1();}
+void trigger15(){ requestNextionPageReadBatch(NX_ASYNC_GROUP_CLEAN_ON); }
 
 // //printh 23 02 54 10 - "Clean" считываем время таймера n2 / n3  отключения промывки
 // void read_Clean_n2_n3(){
@@ -860,7 +1116,7 @@ void read_Clean_n2_n3(){
     ui.setTimerMinutes("CleanTimer1", ui.timer("CleanTimer1").on, minutes);
     Saved_Clean_timeOFF1 = minutes;
 }
-void trigger16(){read_Clean_n2_n3();} 
+void trigger16(){ requestNextionPageReadBatch(NX_ASYNC_GROUP_CLEAN_OFF); }
 
 // //printh 23 02 54 11 - "Clean" считываем состояние кнопок промывки SW0, SW1
 // void read_Clean_sw0_sw1(){
@@ -902,7 +1158,7 @@ void read_Clean_sw0_sw1(){
     saveValue<int>("Clean_Time1", Clean_Time1 ? 1 : 0);
     saveValue<int>("Power_Clean", Power_Clean ? 1 : 0);
 }
-void trigger17(){read_Clean_sw0_sw1();} 
+void trigger17(){ requestNextionPageReadBatch(NX_ASYNC_GROUP_CLEAN_CONTROLS); }
 
 //printh 23 02 54 12 - "Clean" Считываем кнопки ПН,ВТ,СР,ЧТ,ПТ,СБ,ВС для таймера
 void read_Clean_chk(){
@@ -916,7 +1172,7 @@ void read_Clean_chk(){
    syncDaysSelectionFromClean();
    saveValue<String>("DaysSelect", DaysSelect);
 }
-void trigger18(){read_Clean_chk();} 
+void trigger18(){ requestNextionPageReadBatch(NX_ASYNC_GROUP_CLEAN_DAYS); }
 // /////////////////////////************* page heat  **************/////////////////////////////
 // ////////////////////////************* page heat **************//////////////////////////////
 // ///////////////////////************* page heat  **************///////////////////////////////
@@ -941,7 +1197,7 @@ void read_heat_h0(){
         saveValue<int>("Sider_heat", Sider_heat);
     }
 }
-void trigger19(){ read_heat_h0();}
+void trigger19(){ requestNextionPageReadBatch(NX_ASYNC_GROUP_HEAT_SETPOINT); }
 
 // //printh 23 02 54 14 -"heat" - свчитываем состояние кнопки SW0
 // void read_heat_sw0(){
@@ -954,7 +1210,7 @@ void read_heat_sw0(){
     Activation_Heat1 = Activation_Heat = myNex.readNumber("heat.sw0.val");
     saveValue<int>("Activation_Heat", Activation_Heat ? 1 : 0);
 }
-void trigger20(){read_heat_sw0();}
+void trigger20(){ requestNextionPageReadBatch(NX_ASYNC_GROUP_HEAT_CONTROL); }
 
 
 // //////////////////////////******** Дозаторы - Dispensers **********///////////////////////////
@@ -1057,7 +1313,7 @@ void read_Dispensers_PH_CL_limits(){
     normalizeChemicalLimits(); // Исправляем диапазоны после ввода с Nextion.
     persistChangedChemicalLimits(oldPHLower, oldPHUpper, oldCLLower, oldCLUpper); // Сохраняем только реально измененные поля.
 }
-void trigger26(){holdNextionDispensersWrites(4000); read_Dispensers_PH_CL_limits();}
+void trigger26(){ holdNextionDispensersWrites(4000); NxDispensersAsyncPollIndex = 0; }
 
 inline bool floatSettingChanged(float oldValue, float newValue) { // Проверяем изменение десятичной настройки с защитой от шума float.
     float delta = oldValue > newValue ? oldValue - newValue : newValue - oldValue; // Считаем модуль разницы без дополнительной math-библиотеки.
@@ -1120,9 +1376,9 @@ void read_set_topping_controls(){ // Читаем переключатели с�
     }
 }
 
-void trigger32(){read_set_topping_controls();} // Триггер Nextion для sw0 на странице set_topping.
-void trigger33(){read_set_topping_controls();} // Триггер Nextion для sw1 на странице set_topping.
-void trigger34(){read_set_topping_controls();} // Триггер Nextion для sw2 на странице set_topping.
+void trigger32(){ requestNextionPageReadBatch(NX_ASYNC_GROUP_WATER_CONTROLS); } // Триггер Nextion для sw0 на странице set_topping.
+void trigger33(){ requestNextionPageReadBatch(NX_ASYNC_GROUP_WATER_CONTROLS); } // Триггер Nextion для sw1 на странице set_topping.
+void trigger34(){ requestNextionPageReadBatch(NX_ASYNC_GROUP_WATER_CONTROLS); } // Триггер Nextion для sw2 на странице set_topping.
 
 
 

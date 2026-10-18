@@ -32,6 +32,7 @@ extern WiFiUDP ntpUDP;
 extern EasyNex myNex;
 extern int Saved_gmtOffset_correct;
 extern int gmtOffset_correct;
+void requestNextionRtcSnapshotPoll();
 
 // Переменные времени по умолчанию
 inline int npt_seconds, seconds;
@@ -51,6 +52,8 @@ inline time_t baseEpoch = 0;                    // Базовый epoch, от к
 inline unsigned long baseEpochMillis = 0;       // millis() в момент установки baseEpoch
 inline bool baseEpochReady = false;             // Флаг, что базовое время валидно
 inline time_t lastSavedEpoch = 0;               // Последний epoch, сохраненный в NVS
+inline time_t nextionRtcSnapshotEpoch = 0;      // Последний полностью принятый снимок RTC Nextion.
+inline unsigned long nextionRtcSnapshotAt = 0;  // Время приема снимка; позволяет сверять NTP без блокирующих get-команд.
 
 struct GmtOffsetSyncResult {
   bool valid = false; // true, если значение часового пояса было прочитано из Nextion.
@@ -324,6 +327,30 @@ void syncNextionRtcFromEpoch(time_t epoch) {
   myNex.writeStr("rtc6=" + String(dayOfWeekValue == 7 ? 0 : dayOfWeekValue));
 }
 
+inline bool applyNextionRtcSnapshot(const uint32_t values[7]) {
+  const int readSeconds = static_cast<int>(values[0]);
+  const int readMinutes = static_cast<int>(values[1]);
+  const int readHours = static_cast<int>(values[2]);
+  const int readDay = static_cast<int>(values[3]);
+  const int readMonth = static_cast<int>(values[4]);
+  const int readYear = static_cast<int>(values[5]);
+  const int rawDayOfWeek = static_cast<int>(values[6]);
+  const int readDayOfWeek = rawDayOfWeek == 0 ? 7 : rawDayOfWeek;
+  if (!isValidDateTime(readYear, readMonth, readDay, readHours, readMinutes, readSeconds) ||
+      !isValidDayOfWeek(readDayOfWeek)) return false;
+
+  const time_t epoch = buildEpoch(readYear, readMonth, readDay, readHours, readMinutes, readSeconds);
+  if (epoch <= 0) return false;
+  nextionRtcSnapshotEpoch = epoch;
+  nextionRtcSnapshotAt = millis();
+  DayOfWeek = readDayOfWeek;
+  const time_t currentEpoch = getCurrentEpoch();
+  if (!baseEpochReady || epochDeltaSeconds(epoch, currentEpoch) >= kNextionRtcSyncToleranceSeconds) {
+    setBaseEpoch(epoch);
+  }
+  return true;
+}
+
 
 int iii=1; //переменная для счета до отправки на Web -Обновляенм время на первой странице
 void getTimeFromRTC(int interval_TimeFromRTC) {
@@ -399,43 +426,17 @@ static unsigned long timerNtp;
 static unsigned long timerNextion;
 
 const unsigned long nowMs = millis();
-bool nextionAvailable = false;
-time_t nextionEpoch = 0;
+bool nextionAvailable = nextionRtcSnapshotEpoch > 0 && nextionRtcSnapshotAt > 0 &&
+                         static_cast<unsigned long>(nowMs - nextionRtcSnapshotAt) <=
+                           (kNextionRtcPollIntervalMs * 2UL);
+time_t nextionEpoch = nextionAvailable
+                        ? nextionRtcSnapshotEpoch + static_cast<time_t>((nowMs - nextionRtcSnapshotAt) / 1000UL)
+                        : 0;
 
 if (nowMs - timerNextion >= static_cast<unsigned long>(period_get_Nextion_Time)) {
   timerNextion = nowMs;
-
-  GmtOffsetSyncResult gmtOffsetSync = applyGmtOffsetFromNextion(false); // Сначала принимаем GMT из Nextion, но сдвиг времени решаем после чтения RTC.
-
-  int nextionSeconds = 0;
-  int nextionMinutes = 0;
-  int nextionHours = 0;
-  int nextionDay = 0;
-  int nextionMonth = 0;
-  int nextionYear = 0;
-  int nextionDayOfWeek = 0;
-
-  nextionAvailable = fetchNextionTime(nextionSeconds, nextionMinutes, nextionHours, nextionDay, nextionMonth, nextionYear, nextionDayOfWeek);
-  if (nextionAvailable) {
-    nextionEpoch = buildEpoch(nextionYear, nextionMonth, nextionDay, nextionHours, nextionMinutes, nextionSeconds);
-    if (nextionEpoch > 0) {
-      time_t currentEpoch = getCurrentEpoch();
-      const bool timezoneOnlyChange = gmtOffsetSync.changed && baseEpochReady &&
-                                      epochDeltaSeconds(nextionEpoch, currentEpoch) <= kNextionRtcSyncToleranceSeconds; // Если RTC Nextion не менялся, значит пользователь изменил только GMT.
-      if (timezoneOnlyChange) {
-        setBaseEpoch(currentEpoch + gmtOffsetSync.shiftSeconds); // Сдвигаем локальное время ESP на разницу часовых поясов.
-        syncNextionRtcFromEpoch(getCurrentEpoch()); // Возвращаем в Nextion уже пересчитанное локальное время.
-      } else if (!baseEpochReady || epochDeltaSeconds(nextionEpoch, currentEpoch) >= kNextionRtcSyncToleranceSeconds) {
-        setBaseEpoch(nextionEpoch); // Без свежего NTP Nextion остается источником времени для ESP.
-      }
-    }
-  } else {
-    if (gmtOffsetSync.changed && baseEpochReady) {
-      setBaseEpoch(getCurrentEpoch() + gmtOffsetSync.shiftSeconds); // Если прочитали только GMT, все равно сдвигаем локальное время ESP.
-    } else if (!baseEpochReady) {
-      loadBaseEpochFromStorage(); // Если нет ни Nextion, ни базы времени, используем последнее сохраненное значение.
-    }
-  }
+  requestNextionRtcSnapshotPoll(); // Семь полей RTC читаются по одному через неблокирующий UART state machine.
+  if (!baseEpochReady) loadBaseEpochFromStorage();
 }
 
 if (interval_NPT_Time + timerNtp > nowMs) return;
@@ -445,7 +446,6 @@ timerNtp = nowMs;
 // 2) Если Интернет доступен — берём NTP и синхронизируем всё
 if (checkInternetAvailability()) { //Если Интерент доступен
 
-    applyGmtOffsetFromNextion(false); // Перед NTP еще раз принимаем GMT из Nextion без сдвига: точное время сейчас задаст NTP.
     gmtOffset_correct = normalizeGmtOffset(gmtOffset_correct); // NTP использует уже синхронизированный GMT offset ESP/Nextion.
 
     // NTPClient timeClient(ntpUDP, ntpServer, 3600*gmtOffset_correct, daylightOffset); //Для корректировки часового пояса, если вдруг другой часовой установлен
@@ -480,20 +480,6 @@ if (checkInternetAvailability()) { //Если Интерент доступен
 
 if(isValidDateTime(npt_Year, npt_Month, npt_Day, npt_hours, npt_minutes, npt_seconds)) { period_get_NPT_Time = static_cast<int>(kNtpSyncIntervalMs); // Редкая синхронизация Nextion/ESP от Интернета.
       setBaseEpoch(epochTime);
-
-      if (!nextionAvailable) {
-        int rtcSeconds = 0;
-        int rtcMinutes = 0;
-        int rtcHours = 0;
-        int rtcDay = 0;
-        int rtcMonth = 0;
-        int rtcYear = 0;
-        int rtcDayOfWeek = 0;
-        nextionAvailable = fetchNextionTime(rtcSeconds, rtcMinutes, rtcHours, rtcDay, rtcMonth, rtcYear, rtcDayOfWeek);
-        if (nextionAvailable) {
-          nextionEpoch = buildEpoch(rtcYear, rtcMonth, rtcDay, rtcHours, rtcMinutes, rtcSeconds);
-        }
-      }
 
       bool shouldUpdateNextion = !nextionAvailable || epochDeltaSeconds(epochTime, nextionEpoch) > 3;
 

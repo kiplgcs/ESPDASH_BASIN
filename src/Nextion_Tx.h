@@ -84,6 +84,7 @@ inline void writeNextionLevelIndicators() {
 
 
 
+#if 0 // Legacy sender: it wrote to hidden pages and skipped several active pages. The page-aware sender below replaces it.
 void Nextion_Transmit (int interval) {
   static unsigned long timer;
   if (interval + timer > millis()) return; 
@@ -117,6 +118,418 @@ if (Saved_Lamp_autosvet != Lamp_autosvet && !triggerRestartNextion){Saved_Lamp_a
   myNex.writeStr("page set_lamp");
   myNex.writeNum("set_lamp.sw1.val", Lamp_autosvet ? 1 : 0); 
 }
+#endif
+#endif // End of the disabled legacy sender prefix.
+
+inline void writeNextionTimerFields(const char *hourOnComponent,
+                                    const char *minuteOnComponent,
+                                    const char *hourOffComponent,
+                                    const char *minuteOffComponent,
+                                    uint16_t onMinutes,
+                                    uint16_t offMinutes) {
+  const uint16_t normalizedOn = onMinutes % (24U * 60U);
+  const uint16_t normalizedOff = offMinutes % (24U * 60U);
+  myNex.writeNum(hourOnComponent, normalizedOn / 60U);
+  myNex.writeNum(minuteOnComponent, normalizedOn % 60U);
+  myNex.writeNum(hourOffComponent, normalizedOff / 60U);
+  myNex.writeNum(minuteOffComponent, normalizedOff % 60U);
+}
+
+inline String nextionCleanStatusText() {
+  String text = CommentClean;
+  text.replace(" ⏳ ", " | "); // The Nextion font has no hourglass glyph; avoid the visible question mark.
+  text.replace("⏳", "");
+  return nextionKoi8R(text);
+}
+
+struct NextionTimerPageCache {
+  bool valid = false;
+  bool power = false;
+  bool timerEnabled = false;
+  bool autoEnabled = false;
+  uint16_t on = 0;
+  uint16_t off = 0;
+};
+
+inline void syncNextionMainPage(bool force) {
+  struct MainPageCache {
+    bool valid = false;
+    bool lamp = false;
+    bool rgb = false;
+    bool heat = false;
+    bool topping = false;
+    bool filtration = false;
+    bool clean = false;
+    bool h2o2 = false;
+    bool aco = false;
+    String h2o2Text;
+    String acoText;
+    String chlorineText;
+    String phText;
+    String poolTemperature;
+    String heaterTemperature;
+  };
+  static MainPageCache cache;
+
+  const bool relayFresh = rs485RelayDataFresh();
+  const bool lampActive = relayFresh ? ReadRelayArray[0] : Lamp;
+  const bool rgbActive = relayFresh ? ReadRelayArray[1] : Pow_WS2815;
+  const bool heatActive = basinHeatingActive();
+  const bool toppingActive = basinToppingActive();
+  const bool filtrationActive = basinFiltrationActive();
+  const bool cleanActive = CleanSequenceActive || Power_Clean || (relayFresh && ReadRelayArray[3]);
+  const bool h2o2Active = Power_H2O2 || ManualPulse_H2O2_Active || (relayFresh && ReadRelayArray[5]);
+  const bool acoActive = Power_ACO || ManualPulse_ACO_Active || (relayFresh && ReadRelayArray[6]);
+  const String h2o2Text = Info_H2O2;
+  const String acoText = Info_ACO;
+  const String chlorineText = "Cl: " + String(ppmCl);
+  const String phText = "PH: " + String(PH);
+  const String poolTemperature = formatTemperatureString(DS1, DS1Available);
+  const String heaterTemperature = formatTemperatureString(DS2, DS2Available);
+
+  force = force || !cache.valid;
+  if (force || cache.lamp != lampActive) {
+    myNex.writeNum("page0.b0.pic", lampActive ? 2 : 1);
+    cache.lamp = lampActive;
+  }
+  if (force || cache.rgb != rgbActive) {
+    myNex.writeNum("page0.b12.pic", rgbActive ? 2 : 1);
+    cache.rgb = rgbActive;
+  }
+  if (force || cache.heat != heatActive) {
+    myNex.writeNum("page0.b4.pic", heatActive ? 10 : 9);
+    cache.heat = heatActive;
+  }
+  if (force || cache.topping != toppingActive) {
+    myNex.writeNum("page0.b3.pic", toppingActive ? 8 : 7);
+    cache.topping = toppingActive;
+  }
+  if (force || cache.filtration != filtrationActive) {
+    myNex.writeNum("page0.b1.pic", filtrationActive ? 4 : 3);
+    cache.filtration = filtrationActive;
+  }
+  if (force || cache.clean != cleanActive) {
+    myNex.writeNum("page0.b2.pic", cleanActive ? 6 : 5);
+    cache.clean = cleanActive;
+  }
+  if (force || cache.h2o2 != h2o2Active) {
+    myNex.writeNum("page0.b5.pic", h2o2Active ? 12 : 11);
+    cache.h2o2 = h2o2Active;
+  }
+  if (force || cache.h2o2Text != h2o2Text) {
+    myNex.writeStr("page0.b5.txt", h2o2Text);
+    cache.h2o2Text = h2o2Text;
+  }
+  if (force || cache.aco != acoActive) {
+    myNex.writeNum("page0.b6.pic", acoActive ? 12 : 11);
+    cache.aco = acoActive;
+  }
+  if (force || cache.acoText != acoText) {
+    myNex.writeStr("page0.b6.txt", acoText);
+    cache.acoText = acoText;
+  }
+  if (force || cache.chlorineText != chlorineText) {
+    myNex.writeStr("page0.b7.txt", chlorineText);
+    cache.chlorineText = chlorineText;
+  }
+  if (force || cache.phText != phText) {
+    myNex.writeStr("page0.b8.txt", phText);
+    cache.phText = phText;
+  }
+  if (force || cache.poolTemperature != poolTemperature) {
+    myNex.writeStr("page0.t0.txt", poolTemperature);
+    myNex.writeStr("page0.t2.txt", poolTemperature); // Some HMI revisions use t2 as the pool-temperature duplicate.
+    cache.poolTemperature = poolTemperature;
+  }
+  if (force || cache.heaterTemperature != heaterTemperature) {
+    myNex.writeStr("page0.t1.txt", heaterTemperature);
+    cache.heaterTemperature = heaterTemperature;
+  }
+  cache.valid = true;
+}
+
+inline void syncNextionLampPage(bool force) {
+  static NextionTimerPageCache cache;
+  UITimerEntry &timer = ui.timer("LampTimer");
+  force = force || !cache.valid;
+  if (force || cache.power != Lamp) myNex.writeNum("set_lamp.sw3.val", Lamp ? 1 : 0);
+  if (force || cache.timerEnabled != Power_Time1) myNex.writeNum("set_lamp.sw0.val", Power_Time1 ? 1 : 0);
+  if (force || cache.autoEnabled != Lamp_autosvet) myNex.writeNum("set_lamp.sw1.val", Lamp_autosvet ? 1 : 0);
+  if (force || cache.on != timer.on || cache.off != timer.off) {
+    writeNextionTimerFields("set_lamp.n0.val", "set_lamp.n1.val", "set_lamp.n2.val", "set_lamp.n3.val", timer.on, timer.off);
+  }
+  cache.power = Lamp;
+  cache.timerEnabled = Power_Time1;
+  cache.autoEnabled = Lamp_autosvet;
+  cache.on = timer.on;
+  cache.off = timer.off;
+  cache.valid = true;
+}
+
+inline void syncNextionRgbPage(bool force) {
+  static NextionTimerPageCache cache;
+  UITimerEntry &timer = ui.timer("RgbTimer");
+  force = force || !cache.valid;
+  if (force || cache.power != Pow_WS2815) myNex.writeNum("set_RGB.sw3.val", Pow_WS2815 ? 1 : 0);
+  if (force || cache.timerEnabled != WS2815_Time1) myNex.writeNum("set_RGB.sw0.val", WS2815_Time1 ? 1 : 0);
+  if (force || cache.autoEnabled != Pow_WS2815_autosvet) myNex.writeNum("set_RGB.sw2.val", Pow_WS2815_autosvet ? 1 : 0);
+  if (force || cache.on != timer.on || cache.off != timer.off) {
+    writeNextionTimerFields("set_RGB.n0.val", "set_RGB.n1.val", "set_RGB.n2.val", "set_RGB.n3.val", timer.on, timer.off);
+  }
+  cache.power = Pow_WS2815;
+  cache.timerEnabled = WS2815_Time1;
+  cache.autoEnabled = Pow_WS2815_autosvet;
+  cache.on = timer.on;
+  cache.off = timer.off;
+  cache.valid = true;
+}
+
+inline void syncNextionFiltrationPage(bool force) {
+  struct FiltrationPageCache {
+    bool valid = false;
+    bool power = false;
+    bool enabled1 = false;
+    bool enabled2 = false;
+    bool enabled3 = false;
+    uint16_t on1 = 0, off1 = 0, on2 = 0, off2 = 0, on3 = 0, off3 = 0;
+  };
+  static FiltrationPageCache cache;
+  if (force) cache.valid = false;
+  if (nextionFiltrWriteHoldActive()) return;
+  UITimerEntry &timer1 = ui.timer("FiltrTimer1");
+  UITimerEntry &timer2 = ui.timer("FiltrTimer2");
+  UITimerEntry &timer3 = ui.timer("FiltrTimer3");
+  const bool power = basinFiltrationActive();
+  force = force || !cache.valid;
+  if (force || cache.power != power) myNex.writeNum("set_filtr.sw3.val", power ? 1 : 0);
+  if (force || cache.enabled1 != Filtr_Time1) myNex.writeNum("set_filtr.sw0.val", Filtr_Time1 ? 1 : 0);
+  if (force || cache.enabled2 != Filtr_Time2) myNex.writeNum("set_filtr.sw2.val", Filtr_Time2 ? 1 : 0);
+  if (force || cache.enabled3 != Filtr_Time3) myNex.writeNum("set_filtr.sw1.val", Filtr_Time3 ? 1 : 0);
+  if (force || cache.on1 != timer1.on || cache.off1 != timer1.off) {
+    writeNextionTimerFields("set_filtr.n0.val", "set_filtr.n1.val", "set_filtr.n2.val", "set_filtr.n3.val", timer1.on, timer1.off);
+  }
+  if (force || cache.on2 != timer2.on || cache.off2 != timer2.off) {
+    writeNextionTimerFields("set_filtr.n4.val", "set_filtr.n5.val", "set_filtr.n6.val", "set_filtr.n7.val", timer2.on, timer2.off);
+  }
+  if (force || cache.on3 != timer3.on || cache.off3 != timer3.off) {
+    writeNextionTimerFields("set_filtr.n8.val", "set_filtr.n9.val", "set_filtr.n10.val", "set_filtr.n11.val", timer3.on, timer3.off);
+  }
+  cache.power = power;
+  cache.enabled1 = Filtr_Time1;
+  cache.enabled2 = Filtr_Time2;
+  cache.enabled3 = Filtr_Time3;
+  cache.on1 = timer1.on; cache.off1 = timer1.off;
+  cache.on2 = timer2.on; cache.off2 = timer2.off;
+  cache.on3 = timer3.on; cache.off3 = timer3.off;
+  cache.valid = true;
+}
+
+inline void syncNextionCleanPage(bool force) {
+  struct CleanPageCache {
+    bool valid = false;
+    bool power = false;
+    bool timerEnabled = false;
+    uint16_t on = 0, off = 0;
+    bool days[7] = {false, false, false, false, false, false, false};
+    String status;
+  };
+  static CleanPageCache cache;
+  UITimerEntry &timer = ui.timer("CleanTimer1");
+  const bool days[7] = {chk1, chk2, chk3, chk4, chk5, chk6, chk7};
+  const String status = nextionCleanStatusText();
+  force = force || !cache.valid;
+  if (force || cache.power != Power_Clean) myNex.writeNum("Clean.sw1.val", Power_Clean ? 1 : 0);
+  if (force || cache.timerEnabled != Clean_Time1) myNex.writeNum("Clean.sw0.val", Clean_Time1 ? 1 : 0);
+  if (force || cache.on != timer.on || cache.off != timer.off) {
+    writeNextionTimerFields("Clean.n0.val", "Clean.n1.val", "Clean.n2.val", "Clean.n3.val", timer.on, timer.off);
+  }
+  for (uint8_t day = 0; day < 7; ++day) {
+    if (force || cache.days[day] != days[day]) {
+      myNex.writeNum("Clean.bt" + String(day) + ".val", days[day] ? 1 : 0);
+      cache.days[day] = days[day];
+    }
+  }
+  if (force || cache.status != status) {
+    myNex.writeStr("Clean.t3.txt", status);
+    cache.status = status;
+  }
+  cache.power = Power_Clean;
+  cache.timerEnabled = Clean_Time1;
+  cache.on = timer.on;
+  cache.off = timer.off;
+  cache.valid = true;
+}
+
+inline void syncNextionHeatPage(bool force) {
+  struct HeatPageCache {
+    bool valid = false;
+    bool enabled = false;
+    int setpoint = 0;
+    String poolTemperature;
+    String heaterTemperature;
+  };
+  static HeatPageCache cache;
+  const String poolTemperature = formatTemperatureString(DS1, DS1Available);
+  const String heaterTemperature = formatTemperatureString(DS2, DS2Available);
+  force = force || !cache.valid;
+  if (force || cache.enabled != Activation_Heat) myNex.writeNum("heat.sw0.val", Activation_Heat ? 1 : 0);
+  if (force || cache.setpoint != Sider_heat) {
+    myNex.writeNum("heat.h0.val", Sider_heat);
+    myNex.writeNum("heat.n0.val", Sider_heat);
+  }
+  if (force || cache.poolTemperature != poolTemperature) {
+    myNex.writeStr("heat.t1.txt", poolTemperature);
+    myNex.writeStr("heat.t2.txt", poolTemperature);
+    cache.poolTemperature = poolTemperature;
+  }
+  if (force || cache.heaterTemperature != heaterTemperature) {
+    myNex.writeStr("heat.t0.txt", heaterTemperature);
+    cache.heaterTemperature = heaterTemperature;
+  }
+  cache.enabled = Activation_Heat;
+  cache.setpoint = Sider_heat;
+  cache.valid = true;
+}
+
+inline void syncNextionWaterPage(bool force) {
+  struct WaterPageCache {
+    bool valid = false;
+    bool automatic = false;
+    bool drain = false;
+    bool topping = false;
+    bool upper = false;
+    bool lower = false;
+    bool pit = false;
+    String status;
+  };
+  static WaterPageCache cache;
+  const String status = waterLevelNextionText();
+  force = force || !cache.valid;
+  if (force || cache.automatic != Activation_Water_Level) myNex.writeNum("set_topping.sw0.val", Activation_Water_Level ? 1 : 0);
+  if (force || cache.drain != Power_Drain) myNex.writeNum("set_topping.sw1.val", Power_Drain ? 1 : 0);
+  if (force || cache.topping != Power_Topping) myNex.writeNum("set_topping.sw2.val", Power_Topping ? 1 : 0);
+  if (force || cache.upper != WaterLevelSensorUpper || cache.lower != WaterLevelSensorLower || cache.pit != DrainPitFullConfirmed) {
+    writeNextionLevelIndicators();
+  }
+  if (force || cache.status != status) myNex.writeStr("set_topping.t0.txt", nextionKoi8R(status));
+  cache.automatic = Activation_Water_Level;
+  cache.drain = Power_Drain;
+  cache.topping = Power_Topping;
+  cache.upper = WaterLevelSensorUpper;
+  cache.lower = WaterLevelSensorLower;
+  cache.pit = DrainPitFullConfirmed;
+  cache.status = status;
+  cache.valid = true;
+}
+
+inline void syncNextionRtcPage(bool force) {
+  static bool valid = false;
+  static int savedOffset = 0;
+  if (force || !valid || savedOffset != gmtOffset_correct) {
+    myNex.writeNum("pageRTC.n5.val", gmtOffset_correct);
+    savedOffset = gmtOffset_correct;
+    valid = true;
+  }
+}
+
+inline void syncNextionServicePage(bool force) {
+  static String savedText;
+  static unsigned long lastRefreshAt = 0;
+  if (!force && millis() - lastRefreshAt < 1000UL) return;
+  const String text = serviceNextionText();
+  if (force || savedText != text) {
+    myNex.writeStr("Service.t0.txt", text);
+    savedText = text;
+  }
+  lastRefreshAt = millis();
+}
+
+inline void syncNextionDispensersPage(bool force) {
+  struct DispensersPageCache {
+    bool valid = false;
+    String phText;
+    String chlorineText;
+    bool phControl = false;
+    bool chlorineControl = false;
+    int acoMode = 0;
+    int chlorineMode = 0;
+    int phLowerWhole = 0, phLowerTenth = 0, phUpperWhole = 0, phUpperTenth = 0;
+    int clLowerWhole = 0, clLowerTenth = 0, clUpperWhole = 0, clUpperTenth = 0;
+  };
+  static DispensersPageCache cache;
+  const String phText = "PH: " + String(PH);
+  const String chlorineText = "Cl: " + String(ppmCl);
+  if (force) cache.valid = false;
+  if (force || cache.phText != phText) myNex.writeStr("Dispensers.t0.txt", phText);
+  if (force || cache.chlorineText != chlorineText) myNex.writeStr("Dispensers.t1.txt", chlorineText);
+  cache.phText = phText;
+  cache.chlorineText = chlorineText;
+
+  if (nextionDispensersWriteHoldActive()) return;
+  force = force || !cache.valid;
+  normalizeChemicalLimits();
+  const int acoMode = nextionDosingComboIndexFromMode(ACO_Work);
+  const int chlorineMode = nextionDosingComboIndexFromMode(H2O2_Work);
+  const int phLowerWhole = nextionTenthsWhole(PH_Lower);
+  const int phLowerTenth = nextionTenthsDigit(PH_Lower);
+  const int phUpperWhole = nextionTenthsWhole(PH_Upper);
+  const int phUpperTenth = nextionTenthsDigit(PH_Upper);
+  const int clLowerWhole = nextionTenthsWhole(CL_Lower);
+  const int clLowerTenth = nextionTenthsDigit(CL_Lower);
+  const int clUpperWhole = nextionTenthsWhole(CL_Upper);
+  const int clUpperTenth = nextionTenthsDigit(CL_Upper);
+  if (force || cache.phControl != PH_Control_ACO) myNex.writeNum("Dispensers.sw0.val", PH_Control_ACO ? 1 : 0);
+  if (force || cache.acoMode != acoMode) myNex.writeNum("Dispensers.cb0.val", acoMode);
+  if (force || cache.chlorineControl != NaOCl_H2O2_Control) myNex.writeNum("Dispensers.sw2.val", NaOCl_H2O2_Control ? 1 : 0);
+  if (force || cache.chlorineMode != chlorineMode) myNex.writeNum("Dispensers.cb1.val", chlorineMode);
+  if (force || cache.phLowerWhole != phLowerWhole) myNex.writeNum("Dispensers.n0.val", phLowerWhole);
+  if (force || cache.phLowerTenth != phLowerTenth) myNex.writeNum("Dispensers.n1.val", phLowerTenth);
+  if (force || cache.phUpperWhole != phUpperWhole) myNex.writeNum("Dispensers.n2.val", phUpperWhole);
+  if (force || cache.phUpperTenth != phUpperTenth) myNex.writeNum("Dispensers.n3.val", phUpperTenth);
+  if (force || cache.clLowerWhole != clLowerWhole) myNex.writeNum("Dispensers.n6.val", clLowerWhole);
+  if (force || cache.clLowerTenth != clLowerTenth) myNex.writeNum("Dispensers.n7.val", clLowerTenth);
+  if (force || cache.clUpperWhole != clUpperWhole) myNex.writeNum("Dispensers.n4.val", clUpperWhole);
+  if (force || cache.clUpperTenth != clUpperTenth) myNex.writeNum("Dispensers.n5.val", clUpperTenth);
+  cache.phControl = PH_Control_ACO;
+  cache.chlorineControl = NaOCl_H2O2_Control;
+  cache.acoMode = acoMode;
+  cache.chlorineMode = chlorineMode;
+  cache.phLowerWhole = phLowerWhole; cache.phLowerTenth = phLowerTenth;
+  cache.phUpperWhole = phUpperWhole; cache.phUpperTenth = phUpperTenth;
+  cache.clLowerWhole = clLowerWhole; cache.clLowerTenth = clLowerTenth;
+  cache.clUpperWhole = clUpperWhole; cache.clUpperTenth = clUpperTenth;
+  cache.valid = true;
+}
+
+void Nextion_Transmit(int interval) {
+  static unsigned long lastTransmitAt = 0;
+  static int lastPage = -1;
+  const unsigned long now = millis();
+  if (now - lastTransmitAt < static_cast<unsigned long>(interval)) return;
+  if (nextionAsyncReadActive() || nextionPageReadBatchPending() || MySerial.available() > 0) return; // Never mix writes into an active request/response exchange.
+  lastTransmitAt = now;
+
+  if (myNex.currentPageId >= 0 && myNex.currentPageId < 50) Nx_page_id = myNex.currentPageId;
+  const bool force = Nx_page_id != lastPage;
+  lastPage = Nx_page_id;
+
+  switch (Nx_page_id) {
+    case 0: syncNextionMainPage(force); break;
+    case 1: syncNextionLampPage(force); break;
+    case 2: syncNextionRgbPage(force); break;
+    case 3: syncNextionFiltrationPage(force); break;
+    case 4: syncNextionCleanPage(force); break;
+    case 5: syncNextionHeatPage(force); break;
+    case 6: syncNextionWaterPage(force); break;
+    case 7: syncNextionRtcPage(force); break;
+    case 8: syncNextionServicePage(force); break;
+    case 9: syncNextionDispensersPage(force); break;
+    default: break;
+  }
+}
+
+#if 0 // Remaining body of the legacy sender; retained only as migration history.
+#if 0 // Balances the original legacy subsection's #endif below.
 
 if (Saved_Power_Time1 != Power_Time1 && !triggerRestartNextion){ Saved_Power_Time1 = Power_Time1;
   myNex.writeStr("dim=50");  
@@ -824,3 +1237,4 @@ if (Nx_page_id == 9 && !triggerRestartNextion) SavedNxDispensersPageId = 9; // �
 
 
 }
+#endif // End of the remaining disabled legacy sender body.

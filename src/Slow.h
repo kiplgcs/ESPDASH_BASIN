@@ -24,6 +24,10 @@ if (myNex.currentPageId >= 0 && myNex.currentPageId < 50) {
 const bool nextionDimmedMode = (Nx_dim_id <= NEXTION_DIM_SLEEP_THRESHOLD); // В спящем режиме HMI оператор не работает с экраном.
 period_slow_Time = nextionDimmedMode ? NEXTION_SYNC_DIMMED_MS : NEXTION_SYNC_ACTIVE_MS; // Меняем частоту обновления без блокирующего чтения dim.
 
+// Nextion_Transmit() owns all HMI writes. The historical sender below remains as
+// reference only; returning here prevents duplicate and hidden-page UART traffic.
+return;
+
 #if 0
 // Старый блок оставлен только для истории: частое чтение dp/dim с Nextion блокирует основной цикл ESP32.
 Nx_page_id = myNex.readNumber("dp"); //Текущий номер страницы открыты на Nextion

@@ -199,10 +199,7 @@ void setup() {
 
   setup_ADS1115_PH_CL2(); //Настраиваем  АЦП модуль ADS1115 16-бит
 
-  setup_Nextion(); //Настраиваем Nextion монитор
-
-  applyGmtOffsetFromNextion(false); // При старте подхватываем часовой пояс из Nextion без сдвига еще не считанного RTC.
-  readNextionTime(); // При старте сразу пробуем взять время с RTC Nextion
+  setup_Nextion(); // Настраиваем Nextion; чтение RTC ставится в неблокирующую очередь.
 
   setupDs18Bindings(); // Загружаем и применяем связанные настройки DS18B20.
 
@@ -299,6 +296,7 @@ void loop() {
     acoServiceLoop(); // Обработка ручного импульса ACO по состоянию
   h2o2ServiceLoop(); // Обработка ручного импульса H2O2 по состоянию
   serviceNextionSerial(32); // Сначала разгружаем UART Nextion, чтобы пользовательские события не ждали NTP/датчики.
+  pollNextionPageReadBatchAsync(); // Читаем одно поле события/RTC за проход, не блокируя loop ожиданием ответа.
   pollNextionDispensersControlsAsync(); // Приоритетно принимаем изменения с экрана дозаторов.
   pollNextionGmtOffsetAsync(); // Приоритетно принимаем подтвержденный GMT с Nextion.
   // Обновление времени через NTP/Nextion/память
@@ -318,8 +316,9 @@ loop_CL2(calibrationFast ? 300 : 2100); // Обработка логики хл�
 
 /**************************** *********************************************************************/
   serviceNextionSerial(32);
+  pollNextionPageReadBatchAsync();
   if (!nextionAsyncReadActive()) {
-    Nextion_Transmit(500); // Отправка в Nextion по очереди
+    Nextion_Transmit(100); // Change-only sync: fill a newly opened page promptly without background UART traffic.
   }
   pollNextionDispensersControlsAsync();
   pollNextionDispensersSettingsAsync();
