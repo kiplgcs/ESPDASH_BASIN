@@ -831,6 +831,9 @@ public:
     }
 
     void load() override{ // загружает сохранённое значение select
+        // The lighting controller restores validated intent before building UI.
+        // Loading a legacy String here must never overwrite that intent.
+        if(id == "SetYardLight" || id == "SetFenceLight") return;
         if constexpr (std::is_same<T, bool>::value){ // специальная обработка для bool
             storage = loadValue<int>(id.c_str(), storage ? 1 : 0) != 0; // читает bool как 0/1 из хранилища
         } else {
@@ -839,15 +842,24 @@ public:
         notify(); // уведомляет callback о восстановленном значении
     }
     void save() const override{ // сохраняет текущее выбранное значение
+        if(id == "SetYardLight" || id == "SetFenceLight") return;
         if constexpr (std::is_same<T, bool>::value){ // bool сохраняется как int
             saveValue<int>(id.c_str(), storage ? 1 : 0); // запись bool в виде 0/1
         } else {
             saveValue<T>(id.c_str(), storage); // запись значения без преобразований
         }
     }
-    String valueString() const override{ return resolveUiValueOverride(id, toString(storage)); } // select с возможной кастомной строкой
+    String valueString() const override{
+        if(id == "SetYardLight") return String(lighting_restart::name(lighting_restart::mode(0)));
+        if(id == "SetFenceLight") return String(lighting_restart::name(lighting_restart::mode(1)));
+        return resolveUiValueOverride(id, toString(storage));
+    }
 
     void setFromString(const String &value) override{ // применяется значение, выбранное пользователем в UI
+        if(id == "SetYardLight" || id == "SetFenceLight") {
+            if(callback) callback(fromString(value));
+            return;
+        }
         storage = fromString(value); // преобразует строку в тип T
         notify(); // вызывает callback при изменении значения
     }
@@ -993,6 +1005,10 @@ inline void onSetUlLightChange(const String &value){ // обработчик и�
 
 inline void onSetYardLightChange(const String &value){ // обработчик изменения режима освещения во дворе
     applyYardLightControlMode(value);
+}
+
+inline void onSetFenceLightChange(const String &value){ // обработчик изменения режима освещения забора
+    applyFenceLightControlMode(value);
 }
 
 inline void onLedColorModeChange(const String &value){ // обработчик выбора режима цвета LED

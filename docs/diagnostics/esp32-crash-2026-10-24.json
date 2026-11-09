@@ -1,0 +1,57 @@
+{
+  "observed_date_moscow": "2026-10-24",
+  "device": "192.168.0.90",
+  "sources": ["GET /diagnostics/crash", "retained basin/diagnostics/last_crash"],
+  "crash": {
+    "enabled": true,
+    "build": "Oct 23 2026 20:12:45",
+    "sketch_md5": "e975100abc08f3d393ad610ba4046842",
+    "reset_reason_code": 4,
+    "crash_available": true,
+    "crash_sketch_md5": "e975100abc08f3d393ad610ba4046842",
+    "core": 1,
+    "exception": 4,
+    "pc": "0x00000000",
+    "sp": "0x3fcec260",
+    "return_address": "0x82058c3c",
+    "exception_cause": 20,
+    "fault_address": "0x00000000",
+    "last_stages": [3, 7],
+    "last_uptime_ms": [3600638, 3600638],
+    "raw_stack_words": [
+      "0x00000000", "0x00000000", "0x00ff0000", "0xff000000",
+      "0x82049081", "0x3fcec2a0", "0x00000020", "0x3fc9c8c8",
+      "0x00000000", "0x3fc9ca7d", "0x3fc9ca7c", "0x3fc9c970",
+      "0x8205d298", "0x3fcec2c0", "0x3fc9c494", "0x00000000",
+      "0x00000001", "0x3fc96648", "0x00000001", "0x00000001",
+      "0x00000000", "0x3fcec350", "0x3fca1f74", "0x00000000",
+      "0x00000000", "0x00000000", "0x3fcec684", "0x00000000",
+      "0x82059eb8", "0x3fcec310", "0x3fca1dec", "0x3fc9c4dc",
+      "0x00000000", "0x00000000", "0x400556d5", "0x00000000",
+      "0x00000000", "0x00000000", "0x3fc9ca7c", "0x3fc9c970",
+      "0x8205d2a1", "0x3fcec330", "0x8771ed45", "0x8771ed45",
+      "0x8771ed45", "0x3fc9c53c", "0x00000000", "0x00000000",
+      "0x00000000", "0x00000000", "0x3fca1f74", "0x8771ed45",
+      "0x3fca2284", "0x3fc9665c", "0x00000000", "0x3c0f596b",
+      "0x00000000", "0x3fcec370", "0x00000000", "0x00000000",
+      "0x00000000", "0x00000000", "0x00000000", "0x00000000"
+    ],
+    "stack_note": "Raw stack candidates, not an unwound backtrace. Decode with matching firmware.elf."
+  },
+  "lighting_after_reset": {
+    "uptime_sec": 1018,
+    "reset_reason": "Panic",
+    "rtc_sequence": 80,
+    "time_fresh_this_boot": true,
+    "lights": [
+      {"relay": "R8", "mode": "off", "desired_output": 0, "command_sequence": 9,
+       "boot_source": "rtc_last_intent", "readback_seen": true, "nvs_mode": "on",
+       "persistence": "preferences_put_failed"},
+      {"relay": "R4", "mode": "off", "desired_output": 0, "command_sequence": 1,
+       "boot_source": "rtc_last_intent", "readback_seen": true, "nvs_mode": "off",
+       "persistence": "succeeded"}
+    ]
+  },
+  "matching_elf": ".pio/releases/r8-restart-20261023/firmware.elf",
+  "matching_binary_sha256": "742d93c68ad23403a5b24500a8635c3f91f4fe1f35ccdaf3e7ea0db25f9209e5"
+}

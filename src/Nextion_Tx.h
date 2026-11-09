@@ -177,7 +177,7 @@ inline void syncNextionMainPage(bool force) {
   const bool heatActive = basinHeatingActive();
   const bool toppingActive = basinToppingActive();
   const bool filtrationActive = basinFiltrationActive();
-  const bool cleanActive = CleanSequenceActive || Power_Clean || (relayFresh && ReadRelayArray[3]);
+  const bool cleanActive = CleanSequenceActive || Power_Clean; // R4 управляет освещением забора и не является статусом промывки.
   const bool h2o2Active = Power_H2O2 || ManualPulse_H2O2_Active || (relayFresh && ReadRelayArray[5]);
   const bool acoActive = Power_ACO || ManualPulse_ACO_Active || (relayFresh && ReadRelayArray[6]);
   const String h2o2Text = Info_H2O2;

@@ -16,6 +16,11 @@
 #ifndef trigger_h
 #include "trigger.h"
 #endif
+#include "SafeNextionDispatch.h"
+
+void EasyNex::invokeOptionalTrigger(void (*handler)(), uint8_t id) {
+  if(!safe_nextion::invokeIfPresent(handler)) rejectCommand(2, id);
+}
 
 void EasyNex::callTriggerFunction(){
   
@@ -25,207 +30,207 @@ void EasyNex::callTriggerFunction(){
   switch(_tempRead){
     
     case 0x00:
-      trigger0();
+      invokeOptionalTrigger(trigger0, _tempRead);
       break;    
     
     case 0x01:
-      trigger1();
+      invokeOptionalTrigger(trigger1, _tempRead);
       break;
 
     case 0x02:
-      trigger2();
+      invokeOptionalTrigger(trigger2, _tempRead);
       break;
            
     case 0x03:
-      trigger3();
+      invokeOptionalTrigger(trigger3, _tempRead);
       break;
                  
     case 0x04:
-      trigger4();
+      invokeOptionalTrigger(trigger4, _tempRead);
       break;    
                  
     case 0x05:
-      trigger5();
+      invokeOptionalTrigger(trigger5, _tempRead);
       break;   
     
     case 0x06:
-      trigger6();
+      invokeOptionalTrigger(trigger6, _tempRead);
       break;
 
     case 0x07:
-      trigger7();
+      invokeOptionalTrigger(trigger7, _tempRead);
       break;
            
     case 0x08:
-      trigger8();
+      invokeOptionalTrigger(trigger8, _tempRead);
       break;
                  
     case 0x09:
-      trigger9();
+      invokeOptionalTrigger(trigger9, _tempRead);
       break;    
                  
     case 0x0A:
-      trigger10();
+      invokeOptionalTrigger(trigger10, _tempRead);
       break;
     
     case 0x0B:
-      trigger11();
+      invokeOptionalTrigger(trigger11, _tempRead);
       break;
 
     case 0x0C:
-      trigger12();
+      invokeOptionalTrigger(trigger12, _tempRead);
       break;
            
     case 0x0D:
-      trigger13();
+      invokeOptionalTrigger(trigger13, _tempRead);
       break;
                  
     case 0x0E:
-      trigger14();
+      invokeOptionalTrigger(trigger14, _tempRead);
       break;    
                  
     case 0x0F:
-      trigger15();
+      invokeOptionalTrigger(trigger15, _tempRead);
       break;   
     
     case 0x10:
-      trigger16();
+      invokeOptionalTrigger(trigger16, _tempRead);
       break;
 
     case 0x11:
-      trigger17();
+      invokeOptionalTrigger(trigger17, _tempRead);
       break;
            
     case 0x12:
-      trigger18();
+      invokeOptionalTrigger(trigger18, _tempRead);
       break;
                  
     case 0x13:
-      trigger19();
+      invokeOptionalTrigger(trigger19, _tempRead);
       break;    
                  
     case 0x14:
-      trigger20();
+      invokeOptionalTrigger(trigger20, _tempRead);
       break; 
 
     case 0x15:
-      trigger21();
+      invokeOptionalTrigger(trigger21, _tempRead);
       break;
 
     case 0x16:
-      trigger22();
+      invokeOptionalTrigger(trigger22, _tempRead);
       break;
            
     case 0x17:
-      trigger23();
+      invokeOptionalTrigger(trigger23, _tempRead);
       break;
                  
     case 0x18:
-      trigger24();
+      invokeOptionalTrigger(trigger24, _tempRead);
       break;    
                  
     case 0x19:
-      trigger25();
+      invokeOptionalTrigger(trigger25, _tempRead);
       break;   
     
     case 0x1A:
-      trigger26();
+      invokeOptionalTrigger(trigger26, _tempRead);
       break;
 
     case 0x1B:
-      trigger27();
+      invokeOptionalTrigger(trigger27, _tempRead);
       break;
            
     case 0x1C:
-      trigger28();
+      invokeOptionalTrigger(trigger28, _tempRead);
       break;
                  
     case 0x1D:
-      trigger29();
+      invokeOptionalTrigger(trigger29, _tempRead);
       break;    
                  
     case 0x1E:
-      trigger30();
+      invokeOptionalTrigger(trigger30, _tempRead);
       break;
     
     case 0x1F:
-      trigger31();
+      invokeOptionalTrigger(trigger31, _tempRead);
       break;
 
     case 0x20:
-      trigger32();
+      invokeOptionalTrigger(trigger32, _tempRead);
       break;
            
     case 0x21:
-      trigger33();
+      invokeOptionalTrigger(trigger33, _tempRead);
       break;
                  
     case 0x22:
-      trigger34();
+      invokeOptionalTrigger(trigger34, _tempRead);
       break;    
                  
     case 0x23:
-      trigger35();
+      invokeOptionalTrigger(trigger35, _tempRead);
       break;   
     
     case 0x24:
-      trigger36();
+      invokeOptionalTrigger(trigger36, _tempRead);
       break;
 
     case 0x25:
-      trigger37();
+      invokeOptionalTrigger(trigger37, _tempRead);
       break;
            
     case 0x26:
-      trigger38();
+      invokeOptionalTrigger(trigger38, _tempRead);
       break;
                  
     case 0x27:
-      trigger39();
+      invokeOptionalTrigger(trigger39, _tempRead);
       break;    
                  
     case 0x28:
-      trigger40();
+      invokeOptionalTrigger(trigger40, _tempRead);
       break; 
     
     case 0x29:
-      trigger41();
+      invokeOptionalTrigger(trigger41, _tempRead);
       break;
 
     case 0x2A:
-      trigger42();
+      invokeOptionalTrigger(trigger42, _tempRead);
       break;
            
     case 0x2B:
-      trigger43();
+      invokeOptionalTrigger(trigger43, _tempRead);
       break;
                  
     case 0x2C:
-      trigger44();
+      invokeOptionalTrigger(trigger44, _tempRead);
       break;    
                  
     case 0x2D:
-      trigger45();
+      invokeOptionalTrigger(trigger45, _tempRead);
       break;   
     
     case 0x2E:
-      trigger46();
+      invokeOptionalTrigger(trigger46, _tempRead);
       break;
 
     case 0x2F:
-      trigger47();
+      invokeOptionalTrigger(trigger47, _tempRead);
       break;
            
     case 0x30:
-      trigger48();
+      invokeOptionalTrigger(trigger48, _tempRead);
       break;
                  
     case 0x31:
-      trigger49();
+      invokeOptionalTrigger(trigger49, _tempRead);
       break;    
                  
     case 0x32:
-      trigger50();
+      invokeOptionalTrigger(trigger50, _tempRead);
       break;
   }
 }

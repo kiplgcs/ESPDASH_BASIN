@@ -174,6 +174,8 @@ inline void interface(){ // Декларатиынве функции интер
         UI_DISPLAY("UlLightAutoState", UlLightAutoState, "🚏 Состояние уличного освещения");
         UI_DUAL_RANGE_KEYS("YardLightThresholdRange", YardLightOffThreshold, YardLightOnThreshold, "YardLightOffThreshold", "YardLightOnThreshold", 0, 100, 1, "🏡 Двор: включить / выключить, %");
         UI_DISPLAY("YardLightAutoState", YardLightAutoState, "🏡 Состояние освещения во дворе");
+        UI_DUAL_RANGE_KEYS("FenceLightThresholdRange", FenceLightOffThreshold, FenceLightOnThreshold, "FenceLightOffThreshold", "FenceLightOnThreshold", 0, 100, 1, "🧱 Забор: включить / выключить, %");
+        UI_DISPLAY("FenceLightAutoState", FenceLightAutoState, "🧱 Состояние освещения забора");
         UI_DUAL_RANGE_KEYS("RgbLightThresholdRange", RgbLightOffThreshold, RgbLightOnThreshold, "RgbLightOffThreshold", "RgbLightOnThreshold", 0, 100, 1, "🌈 RGB: включить / выключить, %");
         UI_DISPLAY("RgbLightAutoState", RgbLightAutoState, "🌈 Состояние RGB");
         UI_DISPLAY("LightSensorDiagnosticInfo", LightSensorDiagnosticInfo, "🧪 Подробная диагностика ADC");
@@ -412,6 +414,16 @@ UI_COLOR("LEDColor", LEDColor, "🎨 Цвет подсветки");
                                              {"timer", "Включение по таймеру"}}), "🏡 Режим освещения во дворе", onSetYardLightChange);
     UI_DISPLAY("YardLightAutoState", YardLightAutoState, "🏡 Состояние освещения во дворе");
         UI_TIMER("YardLightTimer", "⏲️ Таймер освещения во дворе", YardLightTimerON, YardLightTimerOFF, noopTimerCallback);
+
+    // Освещение забора
+    UI_BUTTON_DEFAULT("Pow_Fence_light", Pow_Fence_light, "gray", "🧱 Включить / Отключить: освещение забора", 0);
+    UI_SELECT_CB("SetFenceLight", SetFenceLight, (std::initializer_list<UIOption>{{"off", "Освещение забора отключено постоянно"},
+                                               {"on", "Освещение забора включено постоянно"},
+                                               {"auto", "Включение по датчику освещенности (по порогам)"},
+                                               {"auto_timer_off", "Включение по датчику, отключение по таймеру"},
+                                               {"timer", "Включение по таймеру"}}), "🧱 Режим освещения забора", onSetFenceLightChange);
+    UI_DISPLAY("FenceLightAutoState", FenceLightAutoState, "🧱 Состояние освещения забора");
+        UI_TIMER("FenceLightTimer", "⏲️ Таймер освещения забора", FenceLightTimerON, FenceLightTimerOFF, noopTimerCallback);
 
     // Настройка времени
     UI_PAGE();

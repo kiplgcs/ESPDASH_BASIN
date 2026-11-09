@@ -109,6 +109,15 @@ class EasyNex {
     int lastCurrentPageId;
     byte cmdGroup;
     byte cmdLength;
+
+    // Temporary read-only evidence; compiled out with remote crash diagnostics.
+#if REMOTE_CRASH_DIAGNOSTICS
+    uint32_t rejectedCommandCount = 0;
+    uint32_t lastRejectedLength = 0;
+    uint32_t lastRejectedGroup = 0;
+    uint32_t lastRejectedPayload = 0;
+    uint32_t lastRejectedReason = 0; // 1: invalid length, 2: missing optional hook
+#endif
     
     
     //--------------------------------------- 
@@ -118,6 +127,18 @@ class EasyNex {
     HardwareSerial* _serial;
 		void readCommand(void);
     void callTriggerFunction(void);
+    void rejectCommand(uint8_t reason, int payload = -1) {
+#if REMOTE_CRASH_DIAGNOSTICS
+      ++rejectedCommandCount;
+      lastRejectedLength = _len;
+      lastRejectedGroup = _cmd1;
+      lastRejectedPayload = static_cast<uint32_t>(payload);
+      lastRejectedReason = reason;
+#else
+      (void)reason; (void)payload;
+#endif
+    }
+    void invokeOptionalTrigger(void (*handler)(), uint8_t id);
     
       //----------------------------------------------
      // for function writeNum() (write to numeric attribute)

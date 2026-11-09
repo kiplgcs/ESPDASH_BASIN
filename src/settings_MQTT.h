@@ -26,6 +26,8 @@ inline unsigned long mqttLastPublish = 0; // время последней пу�
 inline const char* mqttAvailabilityTopic = "home/esp32/availability"; // топик доступности устройства
 inline std::map<String, String> mqttLastPublishedPayloads; // Последние отправленные payload по topic, чтобы не слать одно и то же.
 inline bool mqttForcePublishAllStates = true; // После старта/переподключения один раз отправляем полный снимок.
+inline unsigned long mqttLastLightingPoll = 0;
+inline unsigned long mqttLastLightingHeartbeat = 0;
 
 inline String mqttNormalizeBaseTopic(String topic){
   topic.trim();
@@ -156,6 +158,7 @@ extern bool Power_Clean; // промывка фильтра
 extern bool Clean_Time1; // таймер промывки
 extern bool Pow_Ul_light; // ручное освещение
 extern bool Pow_Yard_light; // освещение во дворе
+extern bool Pow_Fence_light; // освещение забора
 extern bool Ul_light_Time; // таймер уличного освещения
 extern bool UlLight_autosvet; // уличное освещение по датчику
 extern bool UlLight_sensorTimerOff; // улица: датчик включает, таймер отключает
@@ -201,6 +204,8 @@ extern int UlLightTimerON; // таймер уличного освещения O
 extern int UlLightTimerOFF; // таймер уличного освещения OFF
 extern int YardLightTimerON; // таймер освещения во дворе ON
 extern int YardLightTimerOFF; // таймер освещения во дворе OFF
+extern int FenceLightTimerON; // таймер освещения забора ON
+extern int FenceLightTimerOFF; // таймер освещения забора OFF
 extern int Sider_heat; // уставка нагрева
 extern bool RoomTemper; // контроль температуры в помещении
 extern float RoomTempOn; // граница включения отопления
@@ -210,6 +215,7 @@ extern String SetLamp; // режим лампы
 extern String SetRGB; // режим RGB
 extern String SetUlLight; // режим уличного освещения
 extern String SetYardLight; // режим освещения во дворе
+extern String SetFenceLight; // режим освещения забора
 extern bool Lamp; // состояние лампы
 extern bool Lamp_autosvet; // авто-режим лампы
 extern bool Power_Time1; // режим таймера лампы
@@ -237,11 +243,14 @@ extern int UlLightOffThreshold; // порог включения улицы в �
 extern int UlLightOnThreshold; // порог выключения улицы при свете
 extern int YardLightOffThreshold; // порог включения двора в темноте
 extern int YardLightOnThreshold; // порог выключения двора при свете
+extern int FenceLightOffThreshold; // порог включения забора в темноте
+extern int FenceLightOnThreshold; // порог выключения забора при свете
 extern String LightSensorLiveInfo; // диагностическая строка датчика освещенности
 extern String LampLightAutoState; // состояние автоматики лампы
 extern String RgbLightAutoState; // состояние автоматики RGB
 extern String UlLightAutoState; // состояние автоматики улицы
 extern String YardLightAutoState; // состояние автоматики освещения во дворе
+extern String FenceLightAutoState; // состояние автоматики освещения забора
 extern String PoolWaterLevelStageInfo; // этап автоматики уровня бассейна
 extern String DrainPitStageInfo; // этап автоматики слива
 extern int ToppingWorkMinutes; // время работы долива
@@ -367,6 +376,7 @@ inline void publishMqttStateString(const char* topic, const String &value); // f
 inline void publishMqttStateBool(const char* topic, bool value); // forward declaration
 inline void publishMqttStateFloat(const char* topic, float value); // forward declaration
 inline void publishMqttStateInt(const char* topic, int value); // forward declaration
+inline void publishMqttLightingStates(bool force);
 
 inline bool mqttParseBooleanPayload(String payload, bool &value){ // принимает только явные MQTT boolean, не превращая мусор в OFF
   payload.trim();
@@ -415,6 +425,8 @@ inline void mqttBeginHomeAssistantReplay(bool cleanupLegacy){ // discovery, за
   (void)cleanupLegacy; // Устаревшие retained config очищаются один раз за boot; reconnect не повторяет лишний burst.
   mqttForcePublishAllStates = true;
   mqttLastPublish = 0;
+  mqttLastLightingPoll = 0;
+  mqttLastLightingHeartbeat = 0;
 #if 1 // MQTT Discovery включен
   mqttDiscoveryStage = DISCOVERY_NONE;
   mqttDiscoveryIndex = 0;
@@ -450,6 +462,8 @@ inline void mqttPublishLightThresholds(){ // нормализация одной
   publishMqttStateInt("home/esp32/UlLightOnThreshold", UlLightOnThreshold);
   publishMqttStateInt("home/esp32/YardLightOffThreshold", YardLightOffThreshold);
   publishMqttStateInt("home/esp32/YardLightOnThreshold", YardLightOnThreshold);
+  publishMqttStateInt("home/esp32/FenceLightOffThreshold", FenceLightOffThreshold);
+  publishMqttStateInt("home/esp32/FenceLightOnThreshold", FenceLightOnThreshold);
 }
 
 inline bool mqttPayloadIsOn(String payload){ // проверка включения
@@ -490,6 +504,10 @@ inline void mqttApplyUlLightMode(const String &rawMode){
 
 inline void mqttApplyYardLightMode(const String &rawMode){
   applyYardLightControlMode(rawMode);
+}
+
+inline void mqttApplyFenceLightMode(const String &rawMode){
+  applyFenceLightControlMode(rawMode);
 }
 
 inline String mqttLedAutoplayState(){
@@ -571,7 +589,7 @@ inline void handleMqttCommandMessage(char* topic, byte* payload, unsigned int le
     if(!mqttParseBooleanPayload(message, requestedState)) return;
     Power_Clean = requestedState; // обновление состояния
     saveValue<int>("Power_Clean", Power_Clean ? 1 : 0); // сохранение
-    publishMqttStateBool("home/esp32/Power_Clean", Power_Clean || CleanSequenceActive); // Реле 4 является свободным каналом, а не статусом промывки.
+    publishMqttStateBool("home/esp32/Power_Clean", Power_Clean || CleanSequenceActive); // Статус промывки логический: занятое светом забора R4 здесь не используется.
     return;
   }
 
@@ -835,6 +853,20 @@ inline void handleMqttCommandMessage(char* topic, byte* payload, unsigned int le
     return;
   }
 
+  if(topicStr == "home/esp32/FenceLightTimer_ON/set"){
+    if(mqttApplyTimerField("FenceLightTimer_ON", message)){
+      publishMqttStateString("home/esp32/FenceLightTimer_ON", formatMinutesToTime(mqttTimerOnMinutes("FenceLightTimer")));
+    }
+    return;
+  }
+
+  if(topicStr == "home/esp32/FenceLightTimer_OFF/set"){
+    if(mqttApplyTimerField("FenceLightTimer_OFF", message)){
+      publishMqttStateString("home/esp32/FenceLightTimer_OFF", formatMinutesToTime(mqttTimerOffMinutes("FenceLightTimer")));
+    }
+    return;
+  }
+
   if(topicStr == "home/esp32/Pow_Ul_light/set"){
     bool requestedState = false;
     if(!mqttParseBooleanPayload(message, requestedState)) return;
@@ -849,10 +881,15 @@ inline void handleMqttCommandMessage(char* topic, byte* payload, unsigned int le
     bool requestedState = false;
     if(!mqttParseBooleanPayload(message, requestedState)) return;
     mqttApplyYardLightMode(requestedState ? "on" : "off");
-    const bool yardLightActual = rs485RelayDataFresh() ? ReadRelayArray[7] : Pow_Yard_light;
-    publishMqttStateBool("home/esp32/Pow_Yard_light", yardLightActual);
-    publishMqttStateBool("home/esp32/YardLightActual", yardLightActual);
-    publishMqttStateString("home/esp32/SetYardLight", SetYardLight);
+    publishMqttLightingStates(true);
+    return;
+  }
+
+  if(topicStr == "home/esp32/Pow_Fence_light/set"){
+    bool requestedState = false;
+    if(!mqttParseBooleanPayload(message, requestedState)) return;
+    mqttApplyFenceLightMode(requestedState ? "on" : "off");
+    publishMqttLightingStates(true);
     return;
   }
 
@@ -928,10 +965,15 @@ inline void handleMqttCommandMessage(char* topic, byte* payload, unsigned int le
   if(topicStr == "home/esp32/SetYardLight/set"){
     if(mqttIsAllowedMode(message)){
       mqttApplyYardLightMode(message);
-      publishMqttStateString("home/esp32/SetYardLight", SetYardLight);
-      const bool yardLightActual = rs485RelayDataFresh() ? ReadRelayArray[7] : Pow_Yard_light;
-      publishMqttStateBool("home/esp32/Pow_Yard_light", yardLightActual);
-      publishMqttStateBool("home/esp32/YardLightActual", yardLightActual);
+      publishMqttLightingStates(true);
+    }
+    return;
+  }
+
+  if(topicStr == "home/esp32/SetFenceLight/set"){
+    if(mqttIsAllowedMode(message)){
+      mqttApplyFenceLightMode(message);
+      publishMqttLightingStates(true);
     }
     return;
   }
@@ -951,7 +993,8 @@ inline void handleMqttCommandMessage(char* topic, byte* payload, unsigned int le
   if(topicStr == "home/esp32/LampLightOffThreshold/set" || topicStr == "home/esp32/LampLightOnThreshold/set" ||
      topicStr == "home/esp32/RgbLightOffThreshold/set" || topicStr == "home/esp32/RgbLightOnThreshold/set" ||
      topicStr == "home/esp32/UlLightOffThreshold/set" || topicStr == "home/esp32/UlLightOnThreshold/set" ||
-     topicStr == "home/esp32/YardLightOffThreshold/set" || topicStr == "home/esp32/YardLightOnThreshold/set"){
+     topicStr == "home/esp32/YardLightOffThreshold/set" || topicStr == "home/esp32/YardLightOnThreshold/set" ||
+     topicStr == "home/esp32/FenceLightOffThreshold/set" || topicStr == "home/esp32/FenceLightOnThreshold/set"){
     int parsed = 0;
     if(!mqttParseInteger(message, parsed)) return;
     (void)parsed;
@@ -1177,7 +1220,11 @@ inline MqttDiscoveryGroup mqttDiscoveryGroupForEntityId(const char* id){
      entityId == "YardLightActual" || entityId == "SetYardLight" ||
      entityId == "YardLightTimer_ON" || entityId == "YardLightTimer_OFF" ||
      entityId == "YardLightAutoState" || entityId == "YardLightOffThreshold" ||
-     entityId == "YardLightOnThreshold") return DISCOVERY_GROUP_OUTDOOR_LIGHTING;
+     entityId == "YardLightOnThreshold" || entityId == "Pow_Fence_light" ||
+     entityId == "FenceLightActual" || entityId == "SetFenceLight" ||
+     entityId == "FenceLightTimer_ON" || entityId == "FenceLightTimer_OFF" ||
+     entityId == "FenceLightAutoState" || entityId == "FenceLightOffThreshold" ||
+     entityId == "FenceLightOnThreshold") return DISCOVERY_GROUP_OUTDOOR_LIGHTING;
 
   if(entityId == "CurrentTime" || entityId == "ClockSelect") return DISCOVERY_GROUP_TIME;
 
@@ -1248,6 +1295,25 @@ inline void publishDiscoveryDeviceBlockGrouped(JsonDocument &doc,
   if(group != DISCOVERY_GROUP_OVERVIEW) device["via_device"] = rootDeviceId;
 }
 
+inline void addLightingReadbackAvailability(JsonDocument &doc, const char *entityId){
+  const String id(entityId);
+  if(id != "Pow_Yard_light" && id != "YardLightActual" &&
+     id != "Pow_Fence_light" && id != "FenceLightActual") return;
+  doc.remove("availability_topic");
+  doc.remove("payload_available");
+  doc.remove("payload_not_available");
+  doc["availability_mode"] = "all";
+  JsonArray availability = doc["availability"].to<JsonArray>();
+  JsonObject deviceAvailability = availability.add<JsonObject>();
+  deviceAvailability["topic"] = mqttAvailabilityTopicString();
+  deviceAvailability["payload_available"] = "online";
+  deviceAvailability["payload_not_available"] = "offline";
+  JsonObject relayAvailability = availability.add<JsonObject>();
+  relayAvailability["topic"] = mqttTopicFromLegacy("home/esp32/Rs485RelayDataValid");
+  relayAvailability["payload_available"] = "1";
+  relayAvailability["payload_not_available"] = "0";
+}
+
 inline MqttDiscoveryPublishResult publishMqttDiscoveryEntity(const MqttDiscoveryEntity &entity,
                                        const String &deviceId,
                                        const String &deviceName,
@@ -1274,6 +1340,7 @@ inline MqttDiscoveryPublishResult publishMqttDiscoveryEntity(const MqttDiscovery
   if(entity.minValue) doc["min"] = atof(entity.minValue); // min (number entities)
   if(entity.maxValue) doc["max"] = atof(entity.maxValue); // max (number entities)
   if(entity.stepValue) doc["step"] = atof(entity.stepValue); // step (number entities)
+  addLightingReadbackAvailability(doc, entity.id);
 
     publishDiscoveryDeviceBlockGrouped(doc, deviceId, deviceName, mqttDiscoveryGroupForEntityId(entity.id));
 
@@ -1394,11 +1461,13 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
     {"binary_sensor", "RgbActual", "RGB Actual State", "home/esp32/RgbActual", nullptr, "power", nullptr, nullptr, nullptr, "1", "0"},
     {"binary_sensor", "OutdoorLightActual", "Outdoor Light Actual State", "home/esp32/OutdoorLightActual", nullptr, "power", nullptr, nullptr, nullptr, "1", "0"},
     {"binary_sensor", "YardLightActual", "Courtyard Light Actual State", "home/esp32/YardLightActual", nullptr, "power", nullptr, nullptr, nullptr, "1", "0"},
+    {"binary_sensor", "FenceLightActual", "Fence Light Actual State", "home/esp32/FenceLightActual", nullptr, "power", nullptr, nullptr, nullptr, "1", "0"},
     {"sensor", "LightSensorLiveInfo", "Outdoor Light Sensor Status", "home/esp32/LightSensorLiveInfo", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"sensor", "LampLightAutoState", "Pool Lamp Automation", "home/esp32/LampLightAutoState", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"sensor", "RgbLightAutoState", "RGB Automation", "home/esp32/RgbLightAutoState", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"sensor", "UlLightAutoState", "Outdoor Light Automation", "home/esp32/UlLightAutoState", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"sensor", "YardLightAutoState", "Courtyard Light Automation", "home/esp32/YardLightAutoState", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"sensor", "FenceLightAutoState", "Fence Light Automation", "home/esp32/FenceLightAutoState", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"binary_sensor", "Power_H2O2", "NaOCl Pump State", "home/esp32/Power_H2O2", nullptr, "power", nullptr, nullptr, nullptr, "1", "0"},
     {"binary_sensor", "Power_ACO", "ACO Pump State", "home/esp32/Power_ACO", nullptr, "power", nullptr, nullptr, nullptr, "1", "0"},
     {"binary_sensor", "Power_Heat", "Heating State", "home/esp32/Power_Heat", nullptr, "power", nullptr, nullptr, nullptr, "1", "0"},
@@ -1463,6 +1532,9 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
     {"switch", "Pow_Yard_light", "🏡 Освещение во дворе (ручной)", "home/esp32/Pow_Yard_light", "home/esp32/Pow_Yard_light/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"text", "YardLightTimer_ON", "🟢 Время вкл. двора по таймеру", "home/esp32/YardLightTimer_ON", "home/esp32/YardLightTimer_ON/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
     {"text", "YardLightTimer_OFF", "🔴 Время откл. двора по таймеру", "home/esp32/YardLightTimer_OFF", "home/esp32/YardLightTimer_OFF/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"switch", "Pow_Fence_light", "🏘️ Освещение забора (ручной)", "home/esp32/Pow_Fence_light", "home/esp32/Pow_Fence_light/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
+    {"text", "FenceLightTimer_ON", "🟢 Время вкл. забора по таймеру", "home/esp32/FenceLightTimer_ON", "home/esp32/FenceLightTimer_ON/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
+    {"text", "FenceLightTimer_OFF", "🔴 Время откл. забора по таймеру", "home/esp32/FenceLightTimer_OFF", "home/esp32/FenceLightTimer_OFF/set", nullptr, nullptr, nullptr, nullptr, nullptr, nullptr},
      {"switch", "PH_Control_ACO", "🧪 Контроль pH (ACO)", "home/esp32/PH_Control_ACO", "home/esp32/PH_Control_ACO/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"switch", "NaOCl_H2O2_Control", "🧪 Контроль хлора (NaOCl)", "home/esp32/NaOCl_H2O2_Control", "home/esp32/NaOCl_H2O2_Control/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
     {"switch", "RoomTemper", "Контроль температуры в помещении", "home/esp32/RoomTemper", "home/esp32/RoomTemper/set", nullptr, nullptr, nullptr, nullptr, "1", "0"},
@@ -1475,6 +1547,8 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
     {"number", "UlLightOnThreshold", "Outdoor Bright OFF Threshold", "home/esp32/UlLightOnThreshold", "home/esp32/UlLightOnThreshold/set", nullptr, "%", nullptr, nullptr, nullptr, nullptr, nullptr, "0", "100", "1"},
     {"number", "YardLightOffThreshold", "Courtyard Dark ON Threshold", "home/esp32/YardLightOffThreshold", "home/esp32/YardLightOffThreshold/set", nullptr, "%", nullptr, nullptr, nullptr, nullptr, nullptr, "0", "100", "1"},
     {"number", "YardLightOnThreshold", "Courtyard Bright OFF Threshold", "home/esp32/YardLightOnThreshold", "home/esp32/YardLightOnThreshold/set", nullptr, "%", nullptr, nullptr, nullptr, nullptr, nullptr, "0", "100", "1"},
+    {"number", "FenceLightOffThreshold", "Fence Dark ON Threshold", "home/esp32/FenceLightOffThreshold", "home/esp32/FenceLightOffThreshold/set", nullptr, "%", nullptr, nullptr, nullptr, nullptr, nullptr, "0", "100", "1"},
+    {"number", "FenceLightOnThreshold", "Fence Bright OFF Threshold", "home/esp32/FenceLightOnThreshold", "home/esp32/FenceLightOnThreshold/set", nullptr, "%", nullptr, nullptr, nullptr, nullptr, nullptr, "0", "100", "1"},
     {"number", "PH_Lower", "pH Lower Limit", "home/esp32/PH_Lower", "home/esp32/PH_Lower/set", nullptr, "pH", nullptr, nullptr, nullptr, nullptr, nullptr, "6", "9", "0.1"},
     {"number", "PH_Upper", "pH Upper Limit", "home/esp32/PH_Upper", "home/esp32/PH_Upper/set", nullptr, "pH", nullptr, nullptr, nullptr, nullptr, nullptr, "6", "9", "0.1"},
     {"number", "CL_Lower", "Free Chlorine Lower Limit", "home/esp32/CL_Lower", "home/esp32/CL_Lower/set", nullptr, "mg/L", nullptr, nullptr, nullptr, nullptr, nullptr, "0.2", "2.5", "0.1"},
@@ -1506,7 +1580,7 @@ inline void publishHomeAssistantDiscovery(){ // публикация MQTT Discov
   static const char* const ledColorOrderOptions[] = {"GRB", "RGB", "GBR", "RBG", "BRG", "BGR"};
   static const char* const dosingOptions[] = {"1", "2", "14", "15", "16", "3", "4", "5", "6", "8", "9", "10", "11", "12", "13", "7"};
   const size_t baseCount = sizeof(baseEntities) / sizeof(baseEntities[0]); // количество base сущностей
-  const size_t selectCount = 10;
+  const size_t selectCount = 11;
   const size_t rs485EntityCount = 32; // Только безопасное отображение: 16 readback + 16 дискретных входов.
   const size_t totalCount = baseCount + selectCount + rs485EntityCount;
 
@@ -1530,16 +1604,18 @@ if(mqttDiscoveryStage == DISCOVERY_MAIN_ENTITIES){
         } else if(mqttDiscoveryIndex == baseCount + 3){
           result = publishMqttDiscoverySelect("SetYardLight", "🏡 Режим освещения во дворе", "home/esp32/SetYardLight", "home/esp32/SetYardLight/set", selectOptions, 5, deviceId, deviceName, true, true);
       } else if(mqttDiscoveryIndex == baseCount + 4){
-         result = publishMqttDiscoverySelect("LedColorMode", "🎨 Режим цвета", "home/esp32/LedColorMode", "home/esp32/LedColorMode/set", ledColorModeOptions, 2, deviceId, deviceName, true, true);
+          result = publishMqttDiscoverySelect("SetFenceLight", "🏘️ Режим освещения забора", "home/esp32/SetFenceLight", "home/esp32/SetFenceLight/set", selectOptions, 5, deviceId, deviceName, true, true);
       } else if(mqttDiscoveryIndex == baseCount + 5){
-          result = publishMqttDiscoverySelect("LedPattern", "✨ Режим подсветки", "home/esp32/LedPattern", "home/esp32/LedPattern/set", ledPatternOptions, 24, deviceId, deviceName, true, true);
+         result = publishMqttDiscoverySelect("LedColorMode", "🎨 Режим цвета", "home/esp32/LedColorMode", "home/esp32/LedColorMode/set", ledColorModeOptions, 2, deviceId, deviceName, true, true);
       } else if(mqttDiscoveryIndex == baseCount + 6){
-         result = publishMqttDiscoverySelect("LedAutoplay", "🔁 Автосмена", "home/esp32/LedAutoplay", "home/esp32/LedAutoplay/set", ledAutoplayOptions, 2, deviceId, deviceName, true, true);
+          result = publishMqttDiscoverySelect("LedPattern", "✨ Режим подсветки", "home/esp32/LedPattern", "home/esp32/LedPattern/set", ledPatternOptions, 24, deviceId, deviceName, true, true);
       } else if(mqttDiscoveryIndex == baseCount + 7){
-          result = publishMqttDiscoverySelect("LedColorOrder", "🎚️ Порядок цветов ленты", "home/esp32/LedColorOrder", "home/esp32/LedColorOrder/set", ledColorOrderOptions, 6, deviceId, deviceName, true, true);
+         result = publishMqttDiscoverySelect("LedAutoplay", "🔁 Автосмена", "home/esp32/LedAutoplay", "home/esp32/LedAutoplay/set", ledAutoplayOptions, 2, deviceId, deviceName, true, true);
       } else if(mqttDiscoveryIndex == baseCount + 8){
-          result = publishMqttDiscoverySelect("ACO_Work", "⏳ Период дозирования ACO", "home/esp32/ACO_Work", "home/esp32/ACO_Work/set", dosingOptions, 16, deviceId, deviceName, true, true);
+          result = publishMqttDiscoverySelect("LedColorOrder", "🎚️ Порядок цветов ленты", "home/esp32/LedColorOrder", "home/esp32/LedColorOrder/set", ledColorOrderOptions, 6, deviceId, deviceName, true, true);
       } else if(mqttDiscoveryIndex == baseCount + 9){
+          result = publishMqttDiscoverySelect("ACO_Work", "⏳ Период дозирования ACO", "home/esp32/ACO_Work", "home/esp32/ACO_Work/set", dosingOptions, 16, deviceId, deviceName, true, true);
+      } else if(mqttDiscoveryIndex == baseCount + 10){
          result = publishMqttDiscoverySelect("H2O2_Work", "⏳ Период дозирования NaOCl", "home/esp32/H2O2_Work", "home/esp32/H2O2_Work/set", dosingOptions, 16, deviceId, deviceName, true, true);
       } else {
         const size_t dynamicIndex = mqttDiscoveryIndex - baseCount - selectCount;
@@ -1608,12 +1684,23 @@ if(mqttDiscoveryStage == DISCOVERY_MAIN_ENTITIES){
 }
 #endif
 
-inline bool publishMqttPayloadIfChanged(const char* topic, const String &payload){ // Отправляем MQTT state только при изменении или полном sync.
+inline bool mqttIsLightingFeedbackTopic(const String &topic){
+  const String legacy = mqttLegacyTopicFromConfigured(topic);
+  return legacy.startsWith("home/esp32/YardLight") ||
+         legacy.startsWith("home/esp32/FenceLight") ||
+         legacy == "home/esp32/Pow_Yard_light" || legacy == "home/esp32/Pow_Fence_light" ||
+         legacy == "home/esp32/SetYardLight" || legacy == "home/esp32/SetFenceLight" ||
+         legacy == "home/esp32/Rs485RelayDataValid";
+}
+
+inline bool publishMqttPayloadIfChanged(const char* topic, const String &payload, bool force = false){ // Отправляем MQTT state только при изменении или полном sync.
   if(!mqttClient.connected()) return false;
   String topicKey = mqttTopicFromLegacy(String(topic));
   auto it = mqttLastPublishedPayloads.find(topicKey);
-  if(!mqttForcePublishAllStates && it != mqttLastPublishedPayloads.end() && it->second == payload) return false;
-  bool published = mqttClient.publish(topicKey.c_str(), payload.c_str());
+  if(!force && !mqttForcePublishAllStates && it != mqttLastPublishedPayloads.end() && it->second == payload) return false;
+  // Retain хранит только обратную связь. Команды /set здесь не публикуются.
+  const bool retained = mqttIsLightingFeedbackTopic(topicKey) && !topicKey.endsWith("/set");
+  bool published = mqttClient.publish(topicKey.c_str(), payload.c_str(), retained);
   if(published) mqttLastPublishedPayloads[topicKey] = payload;
   return published;
 }
@@ -1640,6 +1727,21 @@ inline void publishMqttStateInt(const char* topic, int value){ // публика
   publishMqttPayloadIfChanged(topic, payload); // публикация значения только при изменении
 }
 
+
+inline void publishMqttLightingStates(bool force){
+  const bool fresh = rs485RelayDataFresh();
+  const String yardActual = fresh ? String(ReadRelayArray[7] ? "1" : "0") : String("unknown");
+  const String fenceActual = fresh ? String(ReadRelayArray[3] ? "1" : "0") : String("unknown");
+  publishMqttPayloadIfChanged("home/esp32/Rs485RelayDataValid", fresh ? String("1") : String("0"), force);
+  publishMqttPayloadIfChanged("home/esp32/Pow_Yard_light", yardActual, force);
+  publishMqttPayloadIfChanged("home/esp32/YardLightActual", yardActual, force);
+  publishMqttPayloadIfChanged("home/esp32/SetYardLight", lighting_restart::name(lighting_restart::mode(0)), force);
+  publishMqttPayloadIfChanged("home/esp32/YardLightAutoState", uiValueForId("YardLightAutoState"), force);
+  publishMqttPayloadIfChanged("home/esp32/Pow_Fence_light", fenceActual, force);
+  publishMqttPayloadIfChanged("home/esp32/FenceLightActual", fenceActual, force);
+  publishMqttPayloadIfChanged("home/esp32/SetFenceLight", lighting_restart::name(lighting_restart::mode(1)), force);
+  publishMqttPayloadIfChanged("home/esp32/FenceLightAutoState", uiValueForId("FenceLightAutoState"), force);
+}
 
 inline void persistMqttSettings(){ // сохранение настроек MQTT
   mqttApplyBaseTopic(mqttBaseTopic);
@@ -1810,6 +1912,13 @@ if(!resolveMqttHost()) return; // хост не резолвится
       mqttReconnectBlockedUntil = 0; // Снимаем MQTT backoff после успешного подключения.
       mqttLastConnectState = MQTT_CONNECTED; // Фиксируем успешное состояние клиента.
       publishMqttAvailability("online", true); // публикация доступности
+#if REMOTE_CRASH_DIAGNOSTICS
+      if(remote_crash::hasRecord()) {
+        const String diagnosticTopic = mqttTopicFromLegacy("home/esp32/diagnostics/last_crash");
+        const String diagnosticPayload = remote_crash::json();
+        mqttClient.publish(diagnosticTopic.c_str(), diagnosticPayload.c_str(), true);
+      }
+#endif
       mqttBeginHomeAssistantReplay(true); // при reconnect сначала обновляем discovery, затем полный state snapshot
 #if 1
       publishHomeAssistantDiscovery(); // попытка публикации сразу после подключения
@@ -1891,6 +2000,16 @@ inline void handleMqttLoop(){ // основной цикл MQTT
 
   mqttClient.loop(); // обработка MQTT
 
+  // Свет не ждёт завершения Discovery/общего длинного интервала телеметрии.
+  // Изменения подтверждаются readback раз в секунду, retained heartbeat — раз в 30 секунд.
+  const unsigned long lightingNow = millis();
+  if(mqttClient.connected() && (mqttLastLightingPoll == 0 || lightingNow - mqttLastLightingPoll >= 1000UL)){
+    mqttLastLightingPoll = lightingNow;
+    const bool heartbeat = mqttLastLightingHeartbeat == 0 || lightingNow - mqttLastLightingHeartbeat >= 30000UL;
+    publishMqttLightingStates(heartbeat);
+    if(heartbeat) mqttLastLightingHeartbeat = lightingNow;
+  }
+
   #if 1 // MQTT Discovery включен
     if(mqttDiscoveryPending) publishHomeAssistantDiscovery(); // публикация после первого loop
   #endif
@@ -1925,13 +2044,16 @@ inline void handleMqttLoop(){ // основной цикл MQTT
       publishMqttStateBool("home/esp32/LampActual", Lamp || (rs485RelayFresh && ReadRelayArray[0]));
       publishMqttStateBool("home/esp32/RgbActual", Pow_WS2815 || (rs485RelayFresh && ReadRelayArray[1]));
       publishMqttStateBool("home/esp32/OutdoorLightActual", Pow_Ul_light || (rs485RelayFresh && ReadRelayArray[15]));
-      const bool yardLightActual = rs485RelayFresh ? ReadRelayArray[7] : Pow_Yard_light;
-      publishMqttStateBool("home/esp32/YardLightActual", yardLightActual);
+      const String yardLightActual = rs485RelayFresh ? String(ReadRelayArray[7] ? "1" : "0") : String("unknown");
+      publishMqttStateString("home/esp32/YardLightActual", yardLightActual);
+      const String fenceLightActual = rs485RelayFresh ? String(ReadRelayArray[3] ? "1" : "0") : String("unknown");
+      publishMqttStateString("home/esp32/FenceLightActual", fenceLightActual);
       publishMqttStateString("home/esp32/LightSensorLiveInfo", uiValueForId("LightSensorLiveInfo"));
       publishMqttStateString("home/esp32/LampLightAutoState", uiValueForId("LampLightAutoState"));
       publishMqttStateString("home/esp32/RgbLightAutoState", uiValueForId("RgbLightAutoState"));
       publishMqttStateString("home/esp32/UlLightAutoState", uiValueForId("UlLightAutoState"));
       publishMqttStateString("home/esp32/YardLightAutoState", uiValueForId("YardLightAutoState"));
+      publishMqttStateString("home/esp32/FenceLightAutoState", uiValueForId("FenceLightAutoState"));
 
       publishMqttStateBool("home/esp32/Rs485Enabled", Rs485Enabled);
       publishMqttStateInt("home/esp32/Rs485BaudRate", Rs485ActiveBaudRate);
@@ -2030,13 +2152,17 @@ inline void handleMqttLoop(){ // основной цикл MQTT
       publishMqttStateBool("home/esp32/Pow_Ul_light", Pow_Ul_light || (rs485RelayFresh && ReadRelayArray[15]));
       publishMqttStateString("home/esp32/YardLightTimer_ON", formatMinutesToTime(mqttTimerOnMinutes("YardLightTimer")));
       publishMqttStateString("home/esp32/YardLightTimer_OFF", formatMinutesToTime(mqttTimerOffMinutes("YardLightTimer")));
-      publishMqttStateBool("home/esp32/Pow_Yard_light", yardLightActual);
+      publishMqttStateString("home/esp32/Pow_Yard_light", yardLightActual);
+      publishMqttStateString("home/esp32/FenceLightTimer_ON", formatMinutesToTime(mqttTimerOnMinutes("FenceLightTimer")));
+      publishMqttStateString("home/esp32/FenceLightTimer_OFF", formatMinutesToTime(mqttTimerOffMinutes("FenceLightTimer")));
+      publishMqttStateString("home/esp32/Pow_Fence_light", fenceLightActual);
       publishMqttStateBool("home/esp32/Activation_Heat", Activation_Heat);
 
       publishMqttStateString("home/esp32/SetLamp", SetLamp);
       publishMqttStateString("home/esp32/SetRGB", SetRGB);
       publishMqttStateString("home/esp32/SetUlLight", SetUlLight);
-      publishMqttStateString("home/esp32/SetYardLight", SetYardLight);
+      publishMqttStateString("home/esp32/SetYardLight", lighting_restart::name(lighting_restart::mode(0)));
+      publishMqttStateString("home/esp32/SetFenceLight", lighting_restart::name(lighting_restart::mode(1)));
       publishMqttStateString("home/esp32/CurrentTime", CurrentTime);
       publishMqttStateInt("home/esp32/ClockSelect", gmtOffset_correct);
       mqttForcePublishAllStates = false; // Полный снимок отправлен, дальше state-публикации идут только при изменении.

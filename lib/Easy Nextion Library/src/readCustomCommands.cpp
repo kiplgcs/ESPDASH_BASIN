@@ -12,12 +12,18 @@
 #ifndef trigger_h
 #include "trigger.h"
 #endif
+#include "SafeNextionDispatch.h"
 // This was a part of the NextionListen(), but we seperated it, 
 // in order to make easier the modifications for it, especially in the case of a custom protocol
 // Now, we only have two command groups: the "Trigger" and "Page"
 
 void EasyNex::readCommand(){
 
+  if(!safe_nextion::validCommandLength(_cmd1, _len)) {
+    rejectCommand(1, _serial->peek());
+    for(unsigned i = 1; i < _len && _serial->available(); ++i) _serial->read();
+    return;
+  }
 				
   switch(_cmd1){
     case 'P': /*or <case 0x50:>  If 'P' matches, we have the command group "Page". 
@@ -66,7 +72,12 @@ void EasyNex::readCommand(){
     default:
       cmdGroup = _cmd1;  // stored in the public variable cmdGroup for later use in the main code
       cmdLength = _len;  // stored in the public variable cmdLength for later use in the main code
-      easyNexReadCustomCommand();
+      if(!safe_nextion::invokeIfPresent(easyNexReadCustomCommand)) {
+        rejectCommand(2, _serial->peek());
+        // The declared frame is complete. Discard only its unhandled payload,
+        // leaving a following valid frame available to NextionListen().
+        for(unsigned i = 1; i < _len && _serial->available(); ++i) _serial->read();
+      }
                     
       break;
                

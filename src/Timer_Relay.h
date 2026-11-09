@@ -570,6 +570,7 @@ inline void updateLightingControlOutputs(bool timeAvailable, int currentHour, in
   UITimerEntry &rgbTimer = ui.timer("RgbTimer");
   UITimerEntry &ulLightTimer = ui.timer("UlLightTimer");
   UITimerEntry &yardLightTimer = ui.timer("YardLightTimer");
+  UITimerEntry &fenceLightTimer = ui.timer("FenceLightTimer");
   const auto timerWindow = [&](const UITimerEntry &entry){
     return timeAvailable && checkTimeInInterval(currentHour, currentMinute, entry.on, entry.off);
   };
@@ -599,11 +600,25 @@ inline void updateLightingControlOutputs(bool timeAvailable, int currentHour, in
   else if (UlLight_autosvet) Pow_Ul_light = applyLightAutoHysteresis(Pow_Ul_light, UlLightOffThreshold, UlLightOnThreshold);
   else if (Ul_light_Time) Pow_Ul_light = timerWindow(ulLightTimer);
 
-  if (SetYardLight == "off") Pow_Yard_light = false;
-  else if (SetYardLight == "on") Pow_Yard_light = true;
-  else if (SetYardLight == "auto") Pow_Yard_light = applyLightAutoHysteresis(Pow_Yard_light, YardLightOffThreshold, YardLightOnThreshold);
-  else if (SetYardLight == "timer") Pow_Yard_light = timerWindow(yardLightTimer);
-  else if (SetYardLight == "auto_timer_off") Pow_Yard_light = applyLightSensorOnTimerOff(Pow_Yard_light, YardLightOffThreshold, timerWindow(yardLightTimer));
+  // New channels use one locked enum state, not String concurrently mutated by
+  // async_tcp / MQTT on the other core. Read actual relays before the first write.
+  if(rs485RelayDataFresh()) {
+    lighting_restart::observe(0, ReadRelayArray[7]);
+    lighting_restart::observe(1, ReadRelayArray[3]);
+  }
+  const bool sensorReady = Lumen_Ul_LastSampleAt != 0;
+  for(unsigned channel = 0; channel < 2; ++channel) {
+    const auto state = lighting_restart::snapshot(channel);
+    const bool isYard = channel == 0;
+    const bool desired = lighting_restart::evaluate(lighting_restart::Mode(state.mode), state.output,
+        lighting_restart::ready(channel), timeAvailable && baseEpochFreshThisBoot,
+        timerWindow(isYard ? yardLightTimer : fenceLightTimer), sensorReady, Lumen_Ul,
+        isYard ? YardLightOffThreshold : FenceLightOffThreshold,
+        isYard ? YardLightOnThreshold : FenceLightOnThreshold);
+    const bool output = lighting_restart::update(channel, state, desired);
+    if(isYard) Pow_Yard_light = output;
+    else Pow_Fence_light = output;
+  }
 }
 
 void TimerControlRelay(int interval) {
@@ -1181,8 +1196,8 @@ if (AktualReadInput) {
   queueRelayWriteIfNeeded(0, Lamp, relayWritesThisPass); // Реле 1: лампа бассейна.
   queueRelayWriteIfNeeded(1, Pow_WS2815, relayWritesThisPass); // Реле 2: питание RGB-ленты WS2815.
   queueRelayWriteIfNeeded(2, Rs485ManualRelayState[2], relayWritesThisPass); // Реле 3: свободное ручное реле RS485.
-  queueRelayWriteIfNeeded(3, Rs485ManualRelayState[3], relayWritesThisPass); // Реле 4: свободное ручное реле RS485.
-  queueRelayWriteIfNeeded(7, Pow_Yard_light, relayWritesThisPass); // Реле 8: освещение во дворе.
+  if(lighting_restart::ready(1)) queueRelayWriteIfNeeded(3, Pow_Fence_light, relayWritesThisPass);
+  if(lighting_restart::ready(0)) queueRelayWriteIfNeeded(7, Pow_Yard_light, relayWritesThisPass);
   queueRelayWriteIfNeeded(8, Power_Filtr, relayWritesThisPass); // Реле 9: насос фильтрации и слив воды.
 
   const bool heatFiltrationFlowAllowed = FiltrationTimerActive && (Power_Filtr || ReadRelayArray[8]); // Нагрев разрешен только при работе насоса по таймеру фильтрации.

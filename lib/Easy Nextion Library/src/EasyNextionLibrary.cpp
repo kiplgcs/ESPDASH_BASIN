@@ -315,6 +315,11 @@ void EasyNex::NextionListen(){
     }
     if(_start_char == '#'){            // And when we find the character #
       _len = _serial->read();          //  read and store the value of the second byte
+      if(_len == 0) {
+        _cmd1 = 0xff;
+        rejectCommand(1);
+        return; // No command group exists in a zero-length frame.
+      }
                                        // <len> is the lenght (number of bytes following) 
       _tmr1 = millis();
       _cmdFound = true;

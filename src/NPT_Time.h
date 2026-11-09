@@ -51,6 +51,7 @@ inline const char *kLastEpochKey = "lastEpoch"; // Ключ в NVS для хра
 inline time_t baseEpoch = 0;                    // Базовый epoch, от которого ведем отсчет
 inline unsigned long baseEpochMillis = 0;       // millis() в момент установки baseEpoch
 inline bool baseEpochReady = false;             // Флаг, что базовое время валидно
+inline bool baseEpochFreshThisBoot = false;     // NVS epoch is not proof of the current time after reboot.
 inline time_t lastSavedEpoch = 0;               // Последний epoch, сохраненный в NVS
 inline time_t nextionRtcSnapshotEpoch = 0;      // Последний полностью принятый снимок RTC Nextion.
 inline unsigned long nextionRtcSnapshotAt = 0;  // Время приема снимка; позволяет сверять NTP без блокирующих get-команд.
@@ -152,11 +153,12 @@ void syncComponentsFromEpoch(time_t epoch) {
 }
 // Устанавливаем базовое время: фиксируем epoch, стартовую метку millis и сохраняем в NVS
 // Сохраняем не чаще раза в минуту, чтобы не изнашивать память
-void setBaseEpoch(time_t epoch) {
+void setBaseEpoch(time_t epoch, bool fresh = true) {
   if (epoch <= 0) return;
   baseEpoch = epoch;
   baseEpochMillis = millis();
   baseEpochReady = true;
+  if(fresh) baseEpochFreshThisBoot = true;
   syncComponentsFromEpoch(epoch);
   if (lastSavedEpoch == 0 || epoch > lastSavedEpoch + 60 || epoch + 60 < lastSavedEpoch) {
     saveValue<int>(kLastEpochKey, static_cast<int>(epoch));
@@ -167,7 +169,7 @@ void setBaseEpoch(time_t epoch) {
 bool loadBaseEpochFromStorage() {
   int storedEpoch = loadValue<int>(kLastEpochKey, 0);
   if (storedEpoch > 0) {
-    setBaseEpoch(static_cast<time_t>(storedEpoch));
+    setBaseEpoch(static_cast<time_t>(storedEpoch), false);
     return true;
   }
   return false;
@@ -192,7 +194,7 @@ void applyGmtOffsetValue(int offset, bool shiftCurrentTime) {
   }
 
   if (shiftCurrentTime && shiftSeconds != 0 && baseEpochReady) {
-    setBaseEpoch(getCurrentEpoch() + shiftSeconds); // При смене GMT сдвигаем локальное время без ожидания NTP.
+    setBaseEpoch(getCurrentEpoch() + shiftSeconds, baseEpochFreshThisBoot); // GMT adjustment is not a new time source.
   }
 }
 

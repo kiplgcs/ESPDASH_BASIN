@@ -289,7 +289,7 @@ const bool onDispensersPage = (Nx_page_id == 9); // Страница дозат�
 const bool lampRelayState = ReadRelayArray[0];
 const bool rgbRelayState = ReadRelayArray[1];
 const bool filtrRelayState = Power_Filtr || ReadRelayArray[8];
-const bool cleanRelayState = ReadRelayArray[3];
+const bool cleanRelayState = CleanSequenceActive || Power_Clean; // R4 выделено освещению забора; статус промывки берём из её логики.
 const bool heatRelayState = ReadRelayArray[4];
 const bool h2o2RelayState = ReadRelayArray[5];
 const bool acoRelayState = ReadRelayArray[6];

@@ -6,7 +6,7 @@
   bool AktualReadRelay = false; // Флаг актульных данных после прочтенния после перезагрузки или передаче данных.
   bool AktualReadInput = false; // Флаг актульных данных после прочтенния после перезагрузки или передаче данных.
   String InStr = ""; //Строка полученных данных из Modbus RTU
-  char CharArray[16]; // Текстовый массив Char
+  char CharArray[18]; // 16 HEX-символов + перевод строки + завершающий NUL.
   constexpr bool kModbusDebugSerial = false; // Отладочный вывод Modbus держим выключенным, чтобы Serial не тормозил RS485 и Wi-Fi.
 
 
@@ -44,7 +44,7 @@ void handleData(ModbusMessage msg, uint32_t token)
   
 
     memset(InArray, '\0', 8); // 8 байт не в HEX представлении, очистить массив перед записью данных 
-    memset(CharArray, '\0', 16); //  16 символов так как дабавляем нули для HEX представления
+    memset(CharArray, '\0', sizeof(CharArray));
 
     int Index=0;
   for (auto& byte : msg) {
@@ -52,13 +52,18 @@ void handleData(ModbusMessage msg, uint32_t token)
   }
 
     //Временная функция для видуального отображения в Serial.print:
-    sprintf(CharArray, "%02X%02X%02X%02X%02X%02X%02X%02X\n", InArray[0], InArray[1], InArray[2], InArray[3], InArray[4], InArray[5], InArray[6], InArray[7]);   
+    snprintf(CharArray, sizeof(CharArray), "%02X%02X%02X%02X%02X%02X%02X%02X\n", InArray[0], InArray[1], InArray[2], InArray[3], InArray[4], InArray[5], InArray[6], InArray[7]);
     if (kModbusDebugSerial) {
       Serial.print("Token: "); Serial.println(token);
       Serial.println(CharArray);
     }
 
   
+    // Короткий/неподходящий пакет не должен становиться «свежим» readback.
+    if ((token == 40050 || token == 40060) &&
+        (msg.size() != 5 || msg.getServerID() != Rs485ActiveSlaveId ||
+         msg.getFunctionCode() != 0x03 || InArray[2] != 2)) return;
+
     //Периодически читаем для обратной сосояния входов и реле и записываем в массивы
     if(token ==40050){
     // Конвертируем InArray[3] и InArray[4] в логическое представление и объединяем в один массив

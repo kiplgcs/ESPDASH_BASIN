@@ -38,6 +38,8 @@ Adafruit_ADS1115 ads2; // Второй ADS1115 - Хлор
 
 #include "PH_CL2.h"
 #include "light_sensor.h"
+#include "../tests/lighting_restart_static_tests.h"
+#include "../tests/nextion_dispatch_static_tests.h"
 
 #include <Slow.h> //Периодически выполняем  - для обратной связи с устройствами
 
@@ -48,7 +50,11 @@ TaskHandle_t webMqttTaskHandle = nullptr; // Сохраняем дескрипт
 
 void webMqttTask(void * /*parameter*/) { // Определяем задачу FreeRTOS, которая будет крутить только WiFi+WEB+MQTT.
   for (;;) { // Запускаем бесконечный цикл, потому что задача должна работать весь аптайм контроллера.
+    remote_crash::checkpoint(1);
     wifiModuleLoop(); // Выполняем обслуживание WiFi и WEB-интерфейса в сетевом контуре ядра 0.
+    remote_crash::checkpoint(2);
+    lighting_restart::servicePersistence();
+    remote_crash::checkpoint(3);
     handleMqttLoop(); // Выполняем обслуживание MQTT в том же сетевом контуре ядра 0.
     serviceDeferredWebRestart(); // Перезапускаемся вне async_tcp callback и только после flush очереди настроек.
     vTaskDelay(pdMS_TO_TICKS(2)); // Делаем короткую паузу, чтобы отдать CPU другим задачам FreeRTOS.
@@ -87,6 +93,7 @@ inline void clearDosingEventsAfterGraphSample(const String &series, bool pointAd
 /* ---------- Setup ---------- */
 void setup() {
   Serial.begin(115200);
+  remote_crash::begin();
 
   delay(100);
   Serial.println("\n[BOOT] ESPDASH starting...");
@@ -169,8 +176,8 @@ void setup() {
   // Загрузка и применение MQTT параметров
   Serial.println("[BOOT] Loading MQTT settings...");
   loadMqttSettings();
-  Serial.println("[BOOT] Applying MQTT state...");
-  applyMqttState();
+  // Connect only after validated lighting intent and RS485 have been initialized.
+  lighting_restart::begin();
 
   // Одноразовая миграция старой пары логин+пароль на доступ только по паролю.
   // Пустой старый логин означал отключенную защиту, поэтому такой забытый пароль не должен заблокировать Web после обновления.
@@ -204,6 +211,7 @@ void setup() {
   setupDs18Bindings(); // Загружаем и применяем связанные настройки DS18B20.
 
   interface(); // Первичная сборка UI нужна для загрузки/сохранения связанных значений из EEPROM
+  lighting_restart::bootUiLoading = false;
   dashInterfaceInitialized = true; // Критический фикс: запрещаем повторный вызов interface() в dash.begin(), иначе вкладки/элементы дублируются
   normalizeChemicalLimits(); // Исправляем сохраненные пределы pH/CL после загрузки из NVS.
   persistChemicalLimits(); // Сохраняем исправленные пределы, чтобы после следующей перезагрузки не вернулся мусор.
@@ -231,6 +239,8 @@ void setup() {
 
 
   setup_Modbus();
+  Serial.println("[BOOT] Applying MQTT after state restoration...");
+  applyMqttState();
 
   xTaskCreatePinnedToCore(webMqttTask, "WebMqttCoreTask", 8192, nullptr, 2, &webMqttTaskHandle, kWebMqttCore); // Создаем и прикрепляем задачу WiFi+WEB+MQTT именно к ядру 0.
   Serial.printf("[BOOT] CORE MAP -> WiFi+WEB+MQTT: %d | Main logic(loop): %d\n", kWebMqttCore, kMainLogicCore); // Печатаем явную карту ядер, чтобы одним взглядом видеть распределение.
@@ -289,6 +299,7 @@ void loop() {
   } // Закрываем одноразовый блок диагностики ядра основной логики.
 
   loop_WS2815(); // Обслуживаем RGB в начале цикла, чтобы лента не ждала тяжелые блоки UI/Nextion/SPIFFS.
+  remote_crash::checkpoint(4);
   updateLumenSensor(250); // GPIO3 измеряется независимо от медленной синхронизации Nextion и Web-клиентов.
 
   handleDs18ScanButton(); // Обрабатываем кнопку поиска датчиков DS18B20.
@@ -296,6 +307,7 @@ void loop() {
     acoServiceLoop(); // Обработка ручного импульса ACO по состоянию
   h2o2ServiceLoop(); // Обработка ручного импульса H2O2 по состоянию
   serviceNextionSerial(32); // Сначала разгружаем UART Nextion, чтобы пользовательские события не ждали NTP/датчики.
+  remote_crash::checkpoint(5);
   pollNextionPageReadBatchAsync(); // Читаем одно поле события/RTC за проход, не блокируя loop ожиданием ответа.
   pollNextionDispensersControlsAsync(); // Приоритетно принимаем изменения с экрана дозаторов.
   pollNextionGmtOffsetAsync(); // Приоритетно принимаем подтвержденный GMT с Nextion.
@@ -304,12 +316,14 @@ void loop() {
     NPT_Time(period_get_NPT_Time);
   }
   CurrentTime = getCurrentDateTime();   // Получение текущего времени
+  remote_crash::checkpoint(6);
 
 TimerControlRelay(1000);  // Контроль дозаторов и таймеров раз в 1 секунду, чтобы импульс насоса не растягивался.
 updateCleanSequence(); // Обновление последовательности промывки
 updateManualPumpPulses(); // Для прверки перельстатических насосов - счет таймера - 1 сек
 enforceDosingHardLimit(); // Дополнительный предохранитель: насосы PH/CL не могут держаться включенными дольше 5 секунд.
 ControlModbusRelay(40); // RS485 проверяем в 2 раза реже, чтобы не забивать цикл и UART Nextion.
+remote_crash::checkpoint(7);
 const bool calibrationFast = calibrationFastModeActive(); // Во время открытой калибровки читаем ADS чаще для видимой динамики.
 loop_PH(calibrationFast ? 250 : 2000); // Обработка логики PH
 loop_CL2(calibrationFast ? 300 : 2100); // Обработка логики хлора
